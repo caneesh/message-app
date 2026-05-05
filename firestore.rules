@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Check if user is a member of the chat
+    function isChatMember(chatId) {
+      return request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+    }
+
+    // Helper: Validate message has only allowed fields
+    function hasOnlyAllowedFields() {
+      return request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt', 'senderPhone']);
+    }
+
+    // Helper: Validate message content
+    function isValidMessage() {
+      let data = request.resource.data;
+      return data.senderId == request.auth.uid
+          && data.text is string
+          && data.text.size() > 0
+          && data.text.size() <= 2000;
+    }
+
+    // Chat documents - read only for members, no create/update/delete from frontend
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && isChatMember(chatId);
+      allow create, update, delete: if false;
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && hasOnlyAllowedFields()
+                      && isValidMessage();
+        allow update, delete: if false;
+      }
+    }
+  }
+}
