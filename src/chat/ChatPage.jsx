@@ -187,15 +187,16 @@ function ChatPage() {
           >
             {darkMode ? '☀️' : '🌙'}
           </button>
-          {VAPID_KEY && notificationStatus !== 'granted' && (
+          {VAPID_KEY && (
             <button
-              className="notification-btn"
-              onClick={handleEnableNotifications}
+              className={`notification-btn ${notificationStatus === 'granted' ? 'enabled' : ''}`}
+              onClick={notificationStatus !== 'granted' ? handleEnableNotifications : undefined}
               disabled={notificationStatus === 'requesting'}
-              title="Enable notifications"
-              aria-label="Enable push notifications"
+              title={notificationStatus === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
+              aria-label={notificationStatus === 'granted' ? 'Notifications enabled' : 'Enable push notifications'}
+              style={{ cursor: notificationStatus === 'granted' ? 'default' : 'pointer' }}
             >
-              {notificationStatus === 'requesting' ? '...' : '🔔'}
+              {notificationStatus === 'requesting' ? '...' : notificationStatus === 'granted' ? '🔔' : '🔕'}
             </button>
           )}
           <button className="logout-btn" onClick={logout} aria-label="Log out">

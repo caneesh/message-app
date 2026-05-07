@@ -224,6 +224,11 @@ body {
   cursor: not-allowed;
 }
 
+.notification-btn.enabled {
+  background: rgba(40, 167, 69, 0.3);
+  border-color: #28a745;
+}
+
 /* Tabs */
 .chat-tabs {
   display: flex;
