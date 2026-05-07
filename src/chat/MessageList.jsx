@@ -25,7 +25,7 @@ function formatFileSize(bytes) {
 }
 
 function isImageType(contentType) {
-  return ['image/jpeg', 'image/png', 'image/webp'].includes(contentType)
+  return ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'].includes(contentType)
 }
 
 function MessageList({ currentUser, chatId, onReply }) {

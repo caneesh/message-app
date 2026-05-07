@@ -42,7 +42,7 @@ service cloud.firestore {
           && data.file.storagePath is string
           && data.file.fileName is string
           && data.file.contentType is string
-          && data.file.contentType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/plain']
+          && data.file.contentType in ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif', 'application/pdf', 'text/plain']
           && data.file.size is number
           && data.file.size <= 5 * 1024 * 1024;
     }
