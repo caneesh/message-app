@@ -120,8 +120,7 @@ service cloud.firestore {
                       && isChatMember(chatId)
                       && isValidMessageEdit();
         allow delete: if isAuthenticated()
-                      && isChatMember(chatId)
-                      && resource.data.senderId == request.auth.uid;
+                      && isChatMember(chatId);
 
         // Reactions subcollection - doc ID must equal user's uid
         match /reactions/{reactionId} {

@@ -120,18 +120,6 @@ function Settings({ currentUser, chatId, onChatJoined }) {
   const handleDeleteAllMessages = async () => {
     if (!chatId) return
 
-    const confirmText = 'DELETE ALL'
-    const userInput = prompt(
-      `This will permanently delete ALL messages in this chat for both you and your partner.\n\nThis action cannot be undone.\n\nType "${confirmText}" to confirm:`
-    )
-
-    if (userInput !== confirmText) {
-      if (userInput !== null) {
-        alert('Deletion cancelled. Text did not match.')
-      }
-      return
-    }
-
     setDeletingAllMessages(true)
     setDeleteAllProgress('Fetching messages...')
 
