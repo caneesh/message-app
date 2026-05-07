@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { db, PRIVATE_CHAT_ID, VAPID_KEY, requestNotificationPermission } from '../firebase/firebaseConfig'
-import { collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import Reminders from './Reminders'
@@ -23,6 +23,9 @@ function ChatPage() {
   const [friendTyping, setFriendTyping] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [notificationStatus, setNotificationStatus] = useState('default')
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    return localStorage.getItem('notificationsEnabled') === 'true'
+  })
   const [activeTab, setActiveTab] = useState('chat')
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true'
@@ -81,14 +84,40 @@ function ChatPage() {
           lastSeenAt: serverTimestamp(),
         })
         localStorage.setItem('currentDeviceId', deviceId)
+        localStorage.setItem('notificationsEnabled', 'true')
 
         setNotificationStatus('granted')
+        setNotificationsEnabled(true)
       } else {
         setNotificationStatus('denied')
       }
     } catch (err) {
       console.error('Notification setup error:', err)
       setNotificationStatus('error')
+    }
+  }
+
+  const handleDisableNotifications = async () => {
+    const deviceId = localStorage.getItem('currentDeviceId')
+    if (!deviceId || !currentUser) return
+
+    try {
+      // Delete FCM token to stop receiving notifications
+      const tokenRef = doc(db, 'users', currentUser.uid, 'fcmTokens', deviceId)
+      await deleteDoc(tokenRef)
+
+      localStorage.setItem('notificationsEnabled', 'false')
+      setNotificationsEnabled(false)
+    } catch (err) {
+      console.error('Error disabling notifications:', err)
+    }
+  }
+
+  const handleToggleNotifications = () => {
+    if (notificationsEnabled) {
+      handleDisableNotifications()
+    } else {
+      handleEnableNotifications()
     }
   }
 
@@ -189,14 +218,13 @@ function ChatPage() {
           </button>
           {VAPID_KEY && (
             <button
-              className={`notification-btn ${notificationStatus === 'granted' ? 'enabled' : ''}`}
-              onClick={notificationStatus !== 'granted' ? handleEnableNotifications : undefined}
+              className={`notification-btn ${notificationsEnabled ? 'enabled' : ''}`}
+              onClick={handleToggleNotifications}
               disabled={notificationStatus === 'requesting'}
-              title={notificationStatus === 'granted' ? 'Notifications enabled' : 'Enable notifications'}
-              aria-label={notificationStatus === 'granted' ? 'Notifications enabled' : 'Enable push notifications'}
-              style={{ cursor: notificationStatus === 'granted' ? 'default' : 'pointer' }}
+              title={notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
+              aria-label={notificationsEnabled ? 'Disable push notifications' : 'Enable push notifications'}
             >
-              {notificationStatus === 'requesting' ? '...' : notificationStatus === 'granted' ? '🔔' : '🔕'}
+              {notificationStatus === 'requesting' ? '...' : notificationsEnabled ? '🔔' : '🔕'}
             </button>
           )}
           <button className="logout-btn" onClick={logout} aria-label="Log out">
