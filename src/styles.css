@@ -164,10 +164,35 @@ body {
   border-bottom-left-radius: 4px;
 }
 
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
 .message-sender {
   font-size: 11px;
   opacity: 0.7;
-  margin-bottom: 4px;
+}
+
+.delete-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.5;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.delete-btn:hover {
+  opacity: 1;
+}
+
+.delete-btn:disabled {
+  cursor: not-allowed;
 }
 
 .message-text {

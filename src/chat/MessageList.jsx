@@ -5,12 +5,15 @@ import {
   query,
   orderBy,
   onSnapshot,
+  doc,
+  deleteDoc,
 } from 'firebase/firestore'
 
 function MessageList({ currentUser, chatId }) {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -58,6 +61,24 @@ function MessageList({ currentUser, chatId }) {
     }
   }
 
+  const handleDelete = async (messageId) => {
+    if (!window.confirm('Delete this message?')) return
+
+    setDeletingId(messageId)
+    try {
+      await deleteDoc(doc(db, 'chats', chatId, 'messages', messageId))
+    } catch (err) {
+      console.error('Delete error:', err)
+      if (err.code === 'permission-denied') {
+        alert('You do not have permission to delete this message.')
+      } else {
+        alert('Failed to delete message. Please try again.')
+      }
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   if (loading) {
     return <div className="message-list loading">Loading messages...</div>
   }
@@ -71,16 +92,31 @@ function MessageList({ currentUser, chatId }) {
       {messages.length === 0 ? (
         <div className="no-messages">No messages yet. Say hello!</div>
       ) : (
-        messages.map((message) => (
-          <div
-            key={message.id}
-            className={`message ${message.senderId === currentUser.uid ? 'own' : 'other'}`}
-          >
-            <div className="message-sender">{message.senderPhone}</div>
-            <div className="message-text">{message.text}</div>
-            <div className="message-time">{formatTime(message.createdAt)}</div>
-          </div>
-        ))
+        messages.map((message) => {
+          const isOwn = message.senderId === currentUser.uid
+          return (
+            <div
+              key={message.id}
+              className={`message ${isOwn ? 'own' : 'other'}`}
+            >
+              <div className="message-header">
+                <span className="message-sender">{message.senderPhone}</span>
+                {isOwn && (
+                  <button
+                    className="delete-btn"
+                    onClick={() => handleDelete(message.id)}
+                    disabled={deletingId === message.id}
+                    title="Delete message"
+                  >
+                    {deletingId === message.id ? '...' : '×'}
+                  </button>
+                )}
+              </div>
+              <div className="message-text">{message.text}</div>
+              <div className="message-time">{formatTime(message.createdAt)}</div>
+            </div>
+          )
+        })
       )}
       <div ref={messagesEndRef} />
     </div>
