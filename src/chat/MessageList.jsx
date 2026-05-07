@@ -7,10 +7,17 @@ import {
   onSnapshot,
   doc,
   deleteDoc,
+  setDoc,
+  updateDoc,
+  getDoc,
+  serverTimestamp,
+  limitToLast,
 } from 'firebase/firestore'
 import { ref, deleteObject } from 'firebase/storage'
 
 const PREVIEW_MAX_LENGTH = 80
+const MESSAGE_LIMIT = 100
+const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
 function truncateText(text, maxLength = PREVIEW_MAX_LENGTH) {
   if (!text) return ''
@@ -28,11 +35,18 @@ function isImageType(contentType) {
   return ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'].includes(contentType)
 }
 
-function MessageList({ currentUser, chatId, onReply }) {
+function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [messages, setMessages] = useState([])
+  const [reactions, setReactions] = useState({})
+  const [pinnedMessages, setPinnedMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [showReactionPicker, setShowReactionPicker] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editText, setEditText] = useState('')
+  const [friendLastReadAt, setFriendLastReadAt] = useState(null)
+  const [showPinnedPanel, setShowPinnedPanel] = useState(false)
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -40,7 +54,7 @@ function MessageList({ currentUser, chatId, onReply }) {
     setError(null)
 
     const messagesRef = collection(db, 'chats', chatId, 'messages')
-    const q = query(messagesRef, orderBy('createdAt', 'asc'))
+    const q = query(messagesRef, orderBy('createdAt', 'asc'), limitToLast(MESSAGE_LIMIT))
 
     const unsubscribe = onSnapshot(
       q,
@@ -51,6 +65,11 @@ function MessageList({ currentUser, chatId, onReply }) {
         }))
         setMessages(messageList)
         setLoading(false)
+
+        // Subscribe to reactions for each message
+        messageList.forEach((msg) => {
+          subscribeToReactions(msg.id)
+        })
       },
       (err) => {
         console.error('Firestore error:', err)
@@ -66,9 +85,81 @@ function MessageList({ currentUser, chatId, onReply }) {
     return unsubscribe
   }, [chatId])
 
+  const reactionUnsubscribes = useRef({})
+
+  const subscribeToReactions = (messageId) => {
+    if (reactionUnsubscribes.current[messageId]) return
+
+    const reactionsRef = collection(db, 'chats', chatId, 'messages', messageId, 'reactions')
+    const unsubscribe = onSnapshot(reactionsRef, (snapshot) => {
+      const reactionList = snapshot.docs.map((doc) => doc.data())
+      setReactions((prev) => ({ ...prev, [messageId]: reactionList }))
+    })
+
+    reactionUnsubscribes.current[messageId] = unsubscribe
+  }
+
+  useEffect(() => {
+    return () => {
+      Object.values(reactionUnsubscribes.current).forEach((unsub) => unsub())
+    }
+  }, [])
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Subscribe to chat document for lastReadAt
+  useEffect(() => {
+    const chatRef = doc(db, 'chats', chatId)
+    const unsubscribe = onSnapshot(chatRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data()
+        const lastReadAt = data.lastReadAt || {}
+        // Find friend's lastReadAt (the other user)
+        const friendUid = Object.keys(lastReadAt).find((uid) => uid !== currentUser.uid)
+        if (friendUid && lastReadAt[friendUid]) {
+          setFriendLastReadAt(lastReadAt[friendUid])
+        }
+      }
+    })
+    return unsubscribe
+  }, [chatId, currentUser.uid])
+
+  // Update own lastReadAt when viewing chat
+  useEffect(() => {
+    const updateLastReadAt = async () => {
+      try {
+        const chatRef = doc(db, 'chats', chatId)
+        const chatSnap = await getDoc(chatRef)
+        if (chatSnap.exists()) {
+          const currentLastReadAt = chatSnap.data().lastReadAt || {}
+          await updateDoc(chatRef, {
+            lastReadAt: {
+              ...currentLastReadAt,
+              [currentUser.uid]: serverTimestamp(),
+            },
+          })
+        }
+      } catch (err) {
+        console.error('Error updating lastReadAt:', err)
+      }
+    }
+    updateLastReadAt()
+  }, [chatId, currentUser.uid, messages])
+
+  // Subscribe to pinned messages
+  useEffect(() => {
+    const pinnedRef = collection(db, 'chats', chatId, 'pinnedMessages')
+    const unsubscribe = onSnapshot(pinnedRef, (snapshot) => {
+      const pinned = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      setPinnedMessages(pinned)
+    })
+    return unsubscribe
+  }, [chatId])
 
   const formatTime = (timestamp) => {
     if (!timestamp) return ''
@@ -85,10 +176,8 @@ function MessageList({ currentUser, chatId, onReply }) {
 
     setDeletingId(message.id)
     try {
-      // Delete from Firestore first
       await deleteDoc(doc(db, 'chats', chatId, 'messages', message.id))
 
-      // If it's a file message, also delete from Storage
       if (message.type === 'file' && message.file?.storagePath) {
         try {
           const storageRef = ref(storage, message.file.storagePath)
@@ -120,6 +209,118 @@ function MessageList({ currentUser, chatId, onReply }) {
     })
   }
 
+  const handleEdit = (message) => {
+    setEditingId(message.id)
+    setEditText(message.text)
+  }
+
+  const handleEditCancel = () => {
+    setEditingId(null)
+    setEditText('')
+  }
+
+  const handleEditSubmit = async (message) => {
+    const trimmedText = editText.trim()
+    if (!trimmedText || trimmedText.length > 2000) return
+
+    try {
+      const messageRef = doc(db, 'chats', chatId, 'messages', message.id)
+      await updateDoc(messageRef, {
+        text: trimmedText,
+        edited: true,
+        editedAt: serverTimestamp(),
+      })
+      setEditingId(null)
+      setEditText('')
+    } catch (err) {
+      console.error('Edit error:', err)
+      if (err.code === 'permission-denied') {
+        alert('You do not have permission to edit this message.')
+      } else {
+        alert('Failed to edit message. Please try again.')
+      }
+    }
+  }
+
+  const isMessagePinned = (messageId) => {
+    return pinnedMessages.some((p) => p.messageId === messageId)
+  }
+
+  const handlePin = async (message) => {
+    const pinnedRef = doc(db, 'chats', chatId, 'pinnedMessages', message.id)
+    const isPinned = isMessagePinned(message.id)
+
+    try {
+      if (isPinned) {
+        await deleteDoc(pinnedRef)
+      } else {
+        const textPreview = message.type === 'file' && message.file
+          ? `📎 ${message.file.fileName}`
+          : truncateText(message.text)
+        await setDoc(pinnedRef, {
+          messageId: message.id,
+          pinnedBy: currentUser.uid,
+          pinnedAt: serverTimestamp(),
+          textPreview,
+          senderId: message.senderId,
+          type: message.type,
+        })
+      }
+    } catch (err) {
+      console.error('Pin error:', err)
+    }
+  }
+
+  const handleReaction = async (messageId, emoji) => {
+    setShowReactionPicker(null)
+    const reactionRef = doc(db, 'chats', chatId, 'messages', messageId, 'reactions', currentUser.uid)
+
+    const currentReactions = reactions[messageId] || []
+    const myReaction = currentReactions.find((r) => r.uid === currentUser.uid)
+
+    try {
+      if (myReaction?.emoji === emoji) {
+        // Remove reaction if same emoji
+        await deleteDoc(reactionRef)
+      } else {
+        // Add or update reaction
+        await setDoc(reactionRef, {
+          uid: currentUser.uid,
+          emoji,
+          createdAt: serverTimestamp(),
+        })
+      }
+    } catch (err) {
+      console.error('Reaction error:', err)
+    }
+  }
+
+  const renderReactions = (messageId) => {
+    const messageReactions = reactions[messageId] || []
+    if (messageReactions.length === 0) return null
+
+    // Group reactions by emoji
+    const grouped = {}
+    messageReactions.forEach((r) => {
+      if (!grouped[r.emoji]) grouped[r.emoji] = []
+      grouped[r.emoji].push(r.uid)
+    })
+
+    return (
+      <div className="reactions-display">
+        {Object.entries(grouped).map(([emoji, uids]) => (
+          <span
+            key={emoji}
+            className={`reaction-chip ${uids.includes(currentUser.uid) ? 'own' : ''}`}
+            onClick={() => handleReaction(messageId, emoji)}
+          >
+            {emoji} {uids.length > 1 && uids.length}
+          </span>
+        ))}
+      </div>
+    )
+  }
+
   const renderFileContent = (file) => {
     if (!file || !file.url) {
       return <div className="file-loading">Loading file...</div>
@@ -146,6 +347,20 @@ function MessageList({ currentUser, chatId, onReply }) {
     )
   }
 
+  // Filter messages by search query
+  const filteredMessages = searchQuery.trim()
+    ? messages.filter((msg) => {
+        const query = searchQuery.toLowerCase()
+        if (msg.type === 'text' && msg.text) {
+          return msg.text.toLowerCase().includes(query)
+        }
+        if (msg.type === 'file' && msg.file?.fileName) {
+          return msg.file.fileName.toLowerCase().includes(query)
+        }
+        return false
+      })
+    : messages
+
   if (loading) {
     return <div className="message-list loading">Loading messages...</div>
   }
@@ -156,10 +371,39 @@ function MessageList({ currentUser, chatId, onReply }) {
 
   return (
     <div className="message-list">
+      {pinnedMessages.length > 0 && (
+        <div className="pinned-panel">
+          <button
+            className="pinned-toggle"
+            onClick={() => setShowPinnedPanel(!showPinnedPanel)}
+          >
+            📌 {pinnedMessages.length} pinned {pinnedMessages.length === 1 ? 'message' : 'messages'}
+            <span className="pinned-chevron">{showPinnedPanel ? '▲' : '▼'}</span>
+          </button>
+          {showPinnedPanel && (
+            <div className="pinned-list">
+              {pinnedMessages.map((pinned) => (
+                <div key={pinned.id} className="pinned-item">
+                  <span className="pinned-preview">{pinned.textPreview}</span>
+                  <button
+                    className="pinned-unpin"
+                    onClick={() => deleteDoc(doc(db, 'chats', chatId, 'pinnedMessages', pinned.id))}
+                    title="Unpin"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {messages.length === 0 ? (
         <div className="no-messages">No messages yet. Say hello!</div>
+      ) : filteredMessages.length === 0 ? (
+        <div className="no-messages">No matching messages</div>
       ) : (
-        messages.map((message) => {
+        filteredMessages.map((message) => {
           const isOwn = message.senderId === currentUser.uid
           const replyTo = message.replyTo
           const isReplyToOwn = replyTo?.senderId === currentUser.uid
@@ -182,12 +426,35 @@ function MessageList({ currentUser, chatId, onReply }) {
                 <span className="message-sender">{message.senderPhone}</span>
                 <div className="message-actions">
                   <button
+                    className="react-btn"
+                    onClick={() => setShowReactionPicker(showReactionPicker === message.id ? null : message.id)}
+                    title="React"
+                  >
+                    😊
+                  </button>
+                  <button
                     className="reply-btn"
                     onClick={() => handleReply(message)}
                     title="Reply"
                   >
                     ↩
                   </button>
+                  <button
+                    className="pin-btn"
+                    onClick={() => handlePin(message)}
+                    title={isMessagePinned(message.id) ? 'Unpin' : 'Pin'}
+                  >
+                    {isMessagePinned(message.id) ? '📌' : '📍'}
+                  </button>
+                  {isOwn && !isFileMessage && (
+                    <button
+                      className="edit-btn"
+                      onClick={() => handleEdit(message)}
+                      title="Edit message"
+                    >
+                      ✎
+                    </button>
+                  )}
                   {isOwn && (
                     <button
                       className="delete-btn"
@@ -200,12 +467,55 @@ function MessageList({ currentUser, chatId, onReply }) {
                   )}
                 </div>
               </div>
+              {showReactionPicker === message.id && (
+                <div className="reaction-picker">
+                  {ALLOWED_REACTIONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      className="reaction-option"
+                      onClick={() => handleReaction(message.id, emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
               {isFileMessage ? (
                 renderFileContent(message.file)
+              ) : editingId === message.id ? (
+                <div className="edit-container">
+                  <input
+                    type="text"
+                    className="edit-input"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleEditSubmit(message)
+                      if (e.key === 'Escape') handleEditCancel()
+                    }}
+                    maxLength={2000}
+                    autoFocus
+                  />
+                  <div className="edit-actions">
+                    <button className="edit-save-btn" onClick={() => handleEditSubmit(message)}>Save</button>
+                    <button className="edit-cancel-btn" onClick={handleEditCancel}>Cancel</button>
+                  </div>
+                </div>
               ) : (
-                <div className="message-text">{message.text}</div>
+                <>
+                  <div className="message-text">{message.text}</div>
+                  {message.edited && <span className="edited-label">edited</span>}
+                </>
               )}
-              <div className="message-time">{formatTime(message.createdAt)}</div>
+              {renderReactions(message.id)}
+              <div className="message-time">
+                {formatTime(message.createdAt)}
+                {isOwn && message.createdAt && friendLastReadAt && (
+                  friendLastReadAt.toMillis?.() >= message.createdAt.toMillis?.() && (
+                    <span className="read-indicator"> ✓✓</span>
+                  )
+                )}
+              </div>
             </div>
           )
         })

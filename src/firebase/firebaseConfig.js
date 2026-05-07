@@ -2,6 +2,8 @@ import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
+import { getMessaging, getToken, isSupported } from 'firebase/messaging'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -38,6 +40,47 @@ const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
+export const functions = getFunctions(app)
 
 // Export private chat ID for use in chat components
 export const PRIVATE_CHAT_ID = import.meta.env.VITE_PRIVATE_CHAT_ID
+
+// FCM setup (optional - requires VITE_FIREBASE_VAPID_KEY)
+export const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || null
+
+let messagingInstance = null
+
+export const getMessagingInstance = async () => {
+  if (!VAPID_KEY) return null
+  if (messagingInstance) return messagingInstance
+
+  const supported = await isSupported()
+  if (!supported) return null
+
+  messagingInstance = getMessaging(app)
+  return messagingInstance
+}
+
+export const requestNotificationPermission = async () => {
+  if (!VAPID_KEY) {
+    console.log('FCM VAPID key not configured')
+    return null
+  }
+
+  try {
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') {
+      console.log('Notification permission denied')
+      return null
+    }
+
+    const messaging = await getMessagingInstance()
+    if (!messaging) return null
+
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY })
+    return token
+  } catch (err) {
+    console.error('Error getting FCM token:', err)
+    return null
+  }
+}

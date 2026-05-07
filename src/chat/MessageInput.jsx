@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { db, storage } from '../firebase/firebaseConfig'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 
 const MAX_MESSAGE_LENGTH = 2000
@@ -20,12 +20,55 @@ function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
 }
 
+const TYPING_TIMEOUT = 2000
+
+const QUICK_ACTIONS = [
+  { key: 'call_me', text: '📞 Call me', priority: false },
+  { key: 'need_help', text: '🆘 I need help', priority: true },
+  { key: 'reached_safely', text: '✅ Reached safely', priority: false },
+  { key: 'running_late', text: '⏰ Running late', priority: false },
+  { key: 'on_the_way', text: '🚗 On the way', priority: false },
+  { key: 'busy_now', text: '🔇 Busy now', priority: false },
+]
+
 function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [uploadProgress, setUploadProgress] = useState(null)
+  const [showQuickActions, setShowQuickActions] = useState(false)
   const fileInputRef = useRef(null)
+  const typingTimeoutRef = useRef(null)
+  const isTypingRef = useRef(false)
+
+  const setTypingStatus = useCallback(async (isTyping) => {
+    try {
+      const typingRef = doc(db, 'chats', chatId, 'typing', currentUser.uid)
+      if (isTyping) {
+        await setDoc(typingRef, {
+          uid: currentUser.uid,
+          isTyping: true,
+          updatedAt: serverTimestamp(),
+        })
+      } else {
+        await deleteDoc(typingRef)
+      }
+    } catch (err) {
+      console.error('Error updating typing status:', err)
+    }
+  }, [chatId, currentUser.uid])
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+      if (isTypingRef.current) {
+        isTypingRef.current = false
+        setTypingStatus(false)
+      }
+    }
+  }, [setTypingStatus])
 
   const trimmedText = text.trim()
   const isOverLimit = trimmedText.length > MAX_MESSAGE_LENGTH
@@ -58,6 +101,10 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
       await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
       setText('')
       clearReply()
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+      setTypingStatus(false)
     } catch (err) {
       console.error('Failed to send message:', err)
       if (err.code === 'permission-denied') {
@@ -73,6 +120,48 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   const handleChange = (e) => {
     setText(e.target.value)
     if (error) setError('')
+
+    // Debounced typing status - only write to Firestore when status changes
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+    if (e.target.value.trim()) {
+      if (!isTypingRef.current) {
+        isTypingRef.current = true
+        setTypingStatus(true)
+      }
+      typingTimeoutRef.current = setTimeout(() => {
+        isTypingRef.current = false
+        setTypingStatus(false)
+      }, TYPING_TIMEOUT)
+    } else if (isTypingRef.current) {
+      isTypingRef.current = false
+      setTypingStatus(false)
+    }
+  }
+
+  const handleQuickAction = async (action) => {
+    if (sending) return
+    setShowQuickActions(false)
+    setSending(true)
+    setError('')
+
+    try {
+      const messageData = {
+        type: 'text',
+        text: action.text,
+        senderId: currentUser.uid,
+        senderPhone: currentUser.phoneNumber,
+        createdAt: serverTimestamp(),
+      }
+
+      await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+    } catch (err) {
+      console.error('Failed to send quick action:', err)
+      setError('Failed to send. Please try again.')
+    } finally {
+      setSending(false)
+    }
   }
 
   const handleFileSelect = async (e) => {
@@ -187,6 +276,20 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           <span className="upload-progress-text">Uploading... {uploadProgress}%</span>
         </div>
       )}
+      {showQuickActions && (
+        <div className="quick-actions">
+          {QUICK_ACTIONS.map((action) => (
+            <button
+              key={action.key}
+              className={`quick-action-btn ${action.priority ? 'priority' : ''}`}
+              onClick={() => handleQuickAction(action)}
+              disabled={sending}
+            >
+              {action.text}
+            </button>
+          ))}
+        </div>
+      )}
       {activeReplyTo && (
         <div className="reply-preview">
           <div className="reply-preview-content">
@@ -210,10 +313,22 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
         />
         <button
           type="button"
+          className="quick-toggle-btn"
+          onClick={() => setShowQuickActions(!showQuickActions)}
+          disabled={sending}
+          title="Quick actions"
+          aria-label="Quick actions"
+          aria-expanded={showQuickActions}
+        >
+          ⚡
+        </button>
+        <button
+          type="button"
           className="attach-btn"
           onClick={openFilePicker}
           disabled={sending}
           title="Attach file"
+          aria-label="Attach file"
         >
           📎
         </button>
@@ -223,8 +338,13 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           value={text}
           onChange={handleChange}
           disabled={sending}
+          aria-label="Message input"
         />
-        <button type="submit" disabled={sending || !trimmedText || isOverLimit}>
+        <button
+          type="submit"
+          disabled={sending || !trimmedText || isOverLimit}
+          aria-label={sending ? 'Sending message' : 'Send message'}
+        >
           {sending ? 'Sending...' : 'Send'}
         </button>
       </form>

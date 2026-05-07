@@ -1,11 +1,14 @@
 import { AuthProvider } from './auth/AuthContext'
 import AppLayout from './layout/AppLayout'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
   return (
-    <AuthProvider>
-      <AppLayout />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppLayout />
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

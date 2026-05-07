@@ -14,7 +14,26 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'edited', 'editedAt']);
+    }
+
+    // Helper: Validate message edit (only text/edited/editedAt can change)
+    function isValidMessageEdit() {
+      let existing = resource.data;
+      let incoming = request.resource.data;
+      return existing.senderId == request.auth.uid
+          && existing.type == 'text'
+          && incoming.senderId == existing.senderId
+          && incoming.senderPhone == existing.senderPhone
+          && incoming.type == existing.type
+          && incoming.createdAt == existing.createdAt
+          && (!('replyTo' in existing) || incoming.replyTo == existing.replyTo)
+          && (!('file' in existing) || incoming.file == existing.file)
+          && incoming.text is string
+          && incoming.text.size() > 0
+          && incoming.text.size() <= 2000
+          && incoming.edited == true
+          && 'editedAt' in incoming;
     }
 
     // Helper: Validate base message fields
@@ -60,10 +79,33 @@ service cloud.firestore {
       );
     }
 
-    // Chat documents - read only for members, no create/update/delete from frontend
+    // Helper: Validate lastReadAt update (only own uid field)
+    function isValidLastReadAtUpdate() {
+      let existing = resource.data;
+      let incoming = request.resource.data;
+      return incoming.members == existing.members
+          && incoming.diff(existing).affectedKeys().hasOnly(['lastReadAt'])
+          && incoming.lastReadAt.diff(existing.lastReadAt).affectedKeys().hasOnly([request.auth.uid]);
+    }
+
+    // Helper: Validate autoDelete update
+    function isValidAutoDeleteUpdate() {
+      let existing = resource.data;
+      let incoming = request.resource.data;
+      return incoming.members == existing.members
+          && incoming.diff(existing).affectedKeys().hasOnly(['autoDelete'])
+          && incoming.autoDelete.keys().hasOnly(['enabled', 'durationDays'])
+          && incoming.autoDelete.enabled is bool
+          && incoming.autoDelete.durationDays in [1, 7, 30];
+    }
+
+    // Chat documents - read only for members, limited update for lastReadAt and autoDelete
     match /chats/{chatId} {
       allow read: if isAuthenticated() && isChatMember(chatId);
-      allow create, update, delete: if false;
+      allow update: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && (isValidLastReadAtUpdate() || isValidAutoDeleteUpdate());
+      allow create, delete: if false;
 
       // Messages subcollection
       match /messages/{messageId} {
@@ -74,11 +116,271 @@ service cloud.firestore {
                       && isValidBaseMessage()
                       && (isValidTextMessage() || isValidFileMessage())
                       && isValidReplyTo();
-        allow update: if false;
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && isValidMessageEdit();
         allow delete: if isAuthenticated()
                       && isChatMember(chatId)
                       && resource.data.senderId == request.auth.uid;
+
+        // Reactions subcollection - doc ID must equal user's uid
+        match /reactions/{reactionId} {
+          allow read: if isAuthenticated() && isChatMember(chatId);
+          allow create, update: if isAuthenticated()
+                                && isChatMember(chatId)
+                                && reactionId == request.auth.uid
+                                && request.resource.data.keys().hasOnly(['uid', 'emoji', 'createdAt'])
+                                && request.resource.data.uid == request.auth.uid
+                                && request.resource.data.emoji in ['👍', '❤️', '😂', '😮', '😢', '🙏']
+                                && request.resource.data.emoji is string;
+          allow delete: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && reactionId == request.auth.uid;
+        }
       }
+
+      // Typing indicator subcollection - doc ID must equal user's uid
+      match /typing/{typingId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create, update: if isAuthenticated()
+                              && isChatMember(chatId)
+                              && typingId == request.auth.uid
+                              && request.resource.data.keys().hasOnly(['uid', 'isTyping', 'updatedAt'])
+                              && request.resource.data.uid == request.auth.uid
+                              && request.resource.data.isTyping is bool;
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && typingId == request.auth.uid;
+      }
+
+      // Pinned messages subcollection
+      match /pinnedMessages/{pinnedId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['messageId', 'pinnedBy', 'pinnedAt', 'textPreview', 'senderId', 'type'])
+                      && request.resource.data.pinnedBy == request.auth.uid
+                      && request.resource.data.messageId is string
+                      && request.resource.data.textPreview is string
+                      && request.resource.data.senderId is string
+                      && request.resource.data.type in ['text', 'file'];
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+      }
+
+      // Shared reminders subcollection
+      match /reminders/{reminderId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'notes', 'dueAt', 'completed', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 1000))
+                      && request.resource.data.completed is bool;
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'notes', 'dueAt', 'completed', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 1000))
+                      && request.resource.data.completed is bool;
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+      }
+
+      // Important dates subcollection
+      match /importantDates/{dateId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'date', 'notes', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200;
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'date', 'notes', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200;
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+      }
+
+      // Shared lists subcollection
+      match /lists/{listId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200;
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200;
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+
+        // List items subcollection
+        match /items/{itemId} {
+          allow read: if isAuthenticated() && isChatMember(chatId);
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && request.resource.data.keys().hasOnly(['text', 'completed', 'createdBy', 'createdAt', 'updatedAt'])
+                        && request.resource.data.createdBy == request.auth.uid
+                        && request.resource.data.text is string
+                        && request.resource.data.text.size() > 0
+                        && request.resource.data.text.size() <= 500
+                        && request.resource.data.completed is bool;
+          allow update: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && request.resource.data.keys().hasOnly(['text', 'completed', 'createdBy', 'createdAt', 'updatedAt'])
+                        && request.resource.data.text is string
+                        && request.resource.data.text.size() > 0
+                        && request.resource.data.text.size() <= 500
+                        && request.resource.data.completed is bool;
+          allow delete: if isAuthenticated() && isChatMember(chatId);
+        }
+      }
+
+      // Shared notes subcollection
+      match /notes/{noteId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'body', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && request.resource.data.body is string
+                      && request.resource.data.body.size() <= 10000;
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'body', 'createdBy', 'updatedBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.updatedBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && request.resource.data.body is string
+                      && request.resource.data.body.size() <= 10000;
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+      }
+
+      // Calendar events subcollection
+      match /events/{eventId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'startAt', 'endAt', 'notes', 'location', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 1000))
+                      && (!('location' in request.resource.data) || (request.resource.data.location is string && request.resource.data.location.size() <= 200));
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'startAt', 'endAt', 'notes', 'location', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 1000))
+                      && (!('location' in request.resource.data) || (request.resource.data.location is string && request.resource.data.location.size() <= 200));
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+      }
+
+      // Memories subcollection
+      match /memories/{memoryId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'description', 'date', 'createdBy', 'createdAt', 'updatedAt', 'coverFilePath', 'sourceMessageId'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && (!('description' in request.resource.data) || (request.resource.data.description is string && request.resource.data.description.size() <= 5000));
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'description', 'date', 'createdBy', 'createdAt', 'updatedAt', 'coverFilePath', 'sourceMessageId'])
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && (!('description' in request.resource.data) || (request.resource.data.description is string && request.resource.data.description.size() <= 5000));
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+      }
+
+      // Daily check-ins subcollection
+      match /checkIns/{checkInId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['userId', 'dateKey', 'mood', 'note', 'createdAt', 'updatedAt'])
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.mood in ['😊', '😐', '😟', '😴', '❤️']
+                      && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500));
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && resource.data.userId == request.auth.uid
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.mood in ['😊', '😐', '😟', '😴', '❤️']
+                      && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500));
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && resource.data.userId == request.auth.uid;
+      }
+    }
+
+    // Invites - read-only for authenticated users, writes managed by Cloud Functions
+    match /invites/{inviteCode} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    // User documents - users can only access their own data
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+
+      // FCM tokens subcollection
+      match /fcmTokens/{tokenId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
+
+      // Devices subcollection
+      match /devices/{deviceId} {
+        allow read, delete: if isAuthenticated() && request.auth.uid == userId;
+        allow create: if isAuthenticated()
+                      && request.auth.uid == userId
+                      && request.resource.data.keys().hasAll(['label', 'platform', 'createdAt', 'lastSeenAt'])
+                      && request.resource.data.label is string
+                      && request.resource.data.label.size() <= 100
+                      && request.resource.data.platform is string;
+        allow update: if isAuthenticated()
+                      && request.auth.uid == userId
+                      && request.resource.data.label is string
+                      && request.resource.data.label.size() <= 100;
+      }
+    }
+
+    // Account deletion requests - users can only create/read their own
+    match /accountDeletionRequests/{uid} {
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow create: if isAuthenticated()
+                    && request.auth.uid == uid
+                    && request.resource.data.uid == uid
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.keys().hasAll(['uid', 'requestedAt', 'status']);
+      allow update, delete: if false;
     }
   }
 }
