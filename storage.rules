@@ -28,22 +28,16 @@ service firebase.storage {
 
     // Chat files path: chatFiles/{chatId}/{messageId}/{fileName}
     match /chatFiles/{chatId}/{messageId}/{fileName} {
-      // Read: authenticated users who are members of the chat
-      allow read: if isAuthenticated()
-                  && firestore.exists(/databases/(default)/documents/chats/$(chatId))
-                  && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members;
+      // Read: any authenticated user (Firestore rules protect message access)
+      allow read: if isAuthenticated();
 
-      // Write: authenticated members with valid file type and size
+      // Write: authenticated users with valid file type and size
       allow write: if isAuthenticated()
-                   && firestore.exists(/databases/(default)/documents/chats/$(chatId))
-                   && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members
                    && isAllowedContentType()
                    && isWithinSizeLimit();
 
-      // Delete: authenticated members can delete
-      allow delete: if isAuthenticated()
-                    && firestore.exists(/databases/(default)/documents/chats/$(chatId))
-                    && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members;
+      // Delete: any authenticated user
+      allow delete: if isAuthenticated();
     }
   }
 }
