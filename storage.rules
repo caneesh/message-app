@@ -1,0 +1,46 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Allowed content types
+    function isAllowedContentType() {
+      return request.resource.contentType in [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'application/pdf',
+        'text/plain'
+      ];
+    }
+
+    // Helper: File size limit (5 MB)
+    function isWithinSizeLimit() {
+      return request.resource.size <= 5 * 1024 * 1024;
+    }
+
+    // Chat files path: chatFiles/{chatId}/{messageId}/{fileName}
+    match /chatFiles/{chatId}/{messageId}/{fileName} {
+      // Read: authenticated users who are members of the chat
+      allow read: if isAuthenticated()
+                  && firestore.exists(/databases/(default)/documents/chats/$(chatId))
+                  && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members;
+
+      // Write: authenticated members with valid file type and size
+      allow write: if isAuthenticated()
+                   && firestore.exists(/databases/(default)/documents/chats/$(chatId))
+                   && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members
+                   && isAllowedContentType()
+                   && isWithinSizeLimit();
+
+      // Delete: authenticated members can delete
+      allow delete: if isAuthenticated()
+                    && firestore.exists(/databases/(default)/documents/chats/$(chatId))
+                    && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members;
+    }
+  }
+}

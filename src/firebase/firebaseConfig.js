@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getStorage } from 'firebase/storage'
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -36,6 +37,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const storage = getStorage(app)
 
 // Export private chat ID for use in chat components
 export const PRIVATE_CHAT_ID = import.meta.env.VITE_PRIVATE_CHAT_ID

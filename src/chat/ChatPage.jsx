@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { PRIVATE_CHAT_ID } from '../firebase/firebaseConfig'
 import MessageList from './MessageList'
@@ -5,6 +6,7 @@ import MessageInput from './MessageInput'
 
 function ChatPage() {
   const { currentUser, logout } = useAuth()
+  const [activeReplyTo, setActiveReplyTo] = useState(null)
 
   if (!PRIVATE_CHAT_ID) {
     return (
@@ -17,6 +19,8 @@ function ChatPage() {
     )
   }
 
+  const clearReply = () => setActiveReplyTo(null)
+
   return (
     <div className="chat-container">
       <header className="chat-header">
@@ -25,8 +29,17 @@ function ChatPage() {
           Log out
         </button>
       </header>
-      <MessageList currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      <MessageInput currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      <MessageList
+        currentUser={currentUser}
+        chatId={PRIVATE_CHAT_ID}
+        onReply={setActiveReplyTo}
+      />
+      <MessageInput
+        currentUser={currentUser}
+        chatId={PRIVATE_CHAT_ID}
+        activeReplyTo={activeReplyTo}
+        clearReply={clearReply}
+      />
     </div>
   )
 }

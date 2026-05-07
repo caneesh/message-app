@@ -14,16 +14,50 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt', 'senderPhone']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file']);
     }
 
-    // Helper: Validate message content
-    function isValidMessage() {
+    // Helper: Validate base message fields
+    function isValidBaseMessage() {
       let data = request.resource.data;
       return data.senderId == request.auth.uid
+          && data.type in ['text', 'file']
           && data.text is string
-          && data.text.size() > 0
           && data.text.size() <= 2000;
+    }
+
+    // Helper: Validate text message
+    function isValidTextMessage() {
+      let data = request.resource.data;
+      return data.type == 'text' && data.text.size() > 0;
+    }
+
+    // Helper: Validate file message
+    function isValidFileMessage() {
+      let data = request.resource.data;
+      return data.type == 'file'
+          && 'file' in data
+          && data.file is map
+          && data.file.keys().hasOnly(['storagePath', 'fileName', 'contentType', 'size', 'url'])
+          && data.file.storagePath is string
+          && data.file.fileName is string
+          && data.file.contentType is string
+          && data.file.contentType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/plain']
+          && data.file.size is number
+          && data.file.size <= 5 * 1024 * 1024;
+    }
+
+    // Helper: Validate optional replyTo field
+    function isValidReplyTo() {
+      let data = request.resource.data;
+      return !('replyTo' in data) || (
+        data.replyTo is map
+        && data.replyTo.keys().hasOnly(['messageId', 'senderId', 'textPreview'])
+        && data.replyTo.messageId is string
+        && data.replyTo.senderId is string
+        && data.replyTo.textPreview is string
+        && data.replyTo.textPreview.size() <= 120
+      );
     }
 
     // Chat documents - read only for members, no create/update/delete from frontend
@@ -37,7 +71,9 @@ service cloud.firestore {
         allow create: if isAuthenticated()
                       && isChatMember(chatId)
                       && hasOnlyAllowedFields()
-                      && isValidMessage();
+                      && isValidBaseMessage()
+                      && (isValidTextMessage() || isValidFileMessage())
+                      && isValidReplyTo();
         allow update: if false;
         allow delete: if isAuthenticated()
                       && isChatMember(chatId)

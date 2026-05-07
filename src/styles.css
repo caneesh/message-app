@@ -10,7 +10,8 @@ html, body, #root {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, sans-serif;
+    Ubuntu, Cantarell, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
   background-color: #f5f5f5;
   color: #333;
   line-height: 1.5;
@@ -176,23 +177,64 @@ body {
   opacity: 0.7;
 }
 
+.message-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.reply-btn,
 .delete-btn {
   background: transparent;
   border: none;
   color: inherit;
   opacity: 0.5;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
 }
 
+.delete-btn {
+  font-size: 16px;
+}
+
+.reply-btn:hover,
 .delete-btn:hover {
   opacity: 1;
 }
 
 .delete-btn:disabled {
   cursor: not-allowed;
+}
+
+/* Reply Quote in Message */
+.reply-quote {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  border-left: 3px solid rgba(0, 0, 0, 0.2);
+}
+
+.message.own .reply-quote {
+  background: rgba(255, 255, 255, 0.15);
+  border-left-color: rgba(255, 255, 255, 0.4);
+}
+
+.reply-quote-label {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 2px;
+  opacity: 0.8;
+}
+
+.reply-quote-text {
+  opacity: 0.9;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-text {
@@ -295,4 +337,159 @@ body {
   font-size: 13px;
   text-align: center;
   border-top: 1px solid #ffcdd2;
+}
+
+/* Reply Preview */
+.reply-preview {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  border-left: 3px solid #007bff;
+  gap: 10px;
+}
+
+.reply-preview-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.reply-preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #007bff;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.reply-preview-text {
+  font-size: 13px;
+  color: #666;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-cancel-btn {
+  background: transparent;
+  border: none;
+  color: #999;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.reply-cancel-btn:hover {
+  color: #333;
+}
+
+/* Attach Button */
+.attach-btn {
+  padding: 12px;
+  background: transparent;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.attach-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Upload Progress */
+.upload-progress {
+  position: relative;
+  padding: 10px 16px;
+  background-color: #e3f2fd;
+  border-top: 1px solid #bbdefb;
+}
+
+.upload-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-color: #90caf9;
+  transition: width 0.2s ease;
+}
+
+.upload-progress-text {
+  position: relative;
+  font-size: 13px;
+  color: #1565c0;
+  font-weight: 500;
+}
+
+/* File Messages */
+.message.file-message {
+  padding: 10px;
+}
+
+.file-loading {
+  padding: 10px;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.file-image-link {
+  display: block;
+}
+
+.file-image {
+  max-width: 100%;
+  max-height: 250px;
+  border-radius: 8px;
+  display: block;
+}
+
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.message.own .file-card {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.file-icon {
+  font-size: 24px;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  display: block;
+  font-size: 11px;
+  opacity: 0.7;
 }
