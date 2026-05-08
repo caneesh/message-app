@@ -14,6 +14,9 @@ import CheckIn from './CheckIn'
 import Memories from './Memories'
 import Events from './Events'
 import Devices from './Devices'
+import Decisions from './Decisions'
+import Vault from './Vault'
+import Dashboard from './Dashboard'
 
 const STALE_TYPING_MS = 5000
 
@@ -234,6 +237,15 @@ function ChatPage() {
       </header>
       <nav className="chat-tabs" role="tablist" aria-label="Main navigation">
         <button
+          className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
+          role="tab"
+          aria-selected={activeTab === 'dashboard'}
+          aria-label="Dashboard"
+        >
+          🏠
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
           onClick={() => setActiveTab('chat')}
           role="tab"
@@ -274,6 +286,23 @@ function ChatPage() {
           Lists
         </button>
         <button
+          className={`tab-btn ${activeTab === 'decisions' ? 'active' : ''}`}
+          onClick={() => setActiveTab('decisions')}
+          role="tab"
+          aria-selected={activeTab === 'decisions'}
+        >
+          Decisions
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'vault' ? 'active' : ''}`}
+          onClick={() => setActiveTab('vault')}
+          role="tab"
+          aria-selected={activeTab === 'vault'}
+          aria-label="Vault"
+        >
+          🔐
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'checkin' ? 'active' : ''}`}
           onClick={() => setActiveTab('checkin')}
           role="tab"
@@ -310,7 +339,9 @@ function ChatPage() {
           ⚙️
         </button>
       </nav>
-      {activeTab === 'chat' ? (
+      {activeTab === 'dashboard' ? (
+        <Dashboard currentUser={currentUser} chatId={PRIVATE_CHAT_ID} onNavigate={setActiveTab} />
+      ) : activeTab === 'chat' ? (
         <>
           <MessageList
             currentUser={currentUser}
@@ -336,6 +367,10 @@ function ChatPage() {
         <Events currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'lists' ? (
         <Lists currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      ) : activeTab === 'decisions' ? (
+        <Decisions currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      ) : activeTab === 'vault' ? (
+        <Vault currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'checkin' ? (
         <CheckIn currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'memories' ? (

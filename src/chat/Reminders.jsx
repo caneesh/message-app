@@ -9,8 +9,15 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
   serverTimestamp,
 } from 'firebase/firestore'
+
+const PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'High' },
+]
 
 function Reminders({ currentUser, chatId }) {
   const [reminders, setReminders] = useState([])
@@ -19,8 +26,25 @@ function Reminders({ currentUser, chatId }) {
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
   const [dueAt, setDueAt] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
+  const [priority, setPriority] = useState('normal')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [chatMembers, setChatMembers] = useState([])
+
+  useEffect(() => {
+    const fetchChatMembers = async () => {
+      try {
+        const chatDoc = await getDoc(doc(db, 'chats', chatId))
+        if (chatDoc.exists()) {
+          setChatMembers(chatDoc.data().members || [])
+        }
+      } catch (err) {
+        console.error('Error fetching chat members:', err)
+      }
+    }
+    fetchChatMembers()
+  }, [chatId])
 
   useEffect(() => {
     const remindersRef = collection(db, 'chats', chatId, 'reminders')
@@ -37,6 +61,16 @@ function Reminders({ currentUser, chatId }) {
 
     return unsubscribe
   }, [chatId])
+
+  const resetForm = () => {
+    setTitle('')
+    setNotes('')
+    setDueAt('')
+    setAssignedTo('')
+    setPriority('normal')
+    setShowForm(false)
+    setError('')
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -58,19 +92,23 @@ function Reminders({ currentUser, chatId }) {
     setError('')
 
     try {
-      await addDoc(collection(db, 'chats', chatId, 'reminders'), {
+      const reminderData = {
         title: trimmedTitle,
         notes: notes.trim(),
         dueAt: dueAt ? new Date(dueAt) : null,
+        priority,
         completed: false,
         createdBy: currentUser.uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      })
-      setTitle('')
-      setNotes('')
-      setDueAt('')
-      setShowForm(false)
+      }
+
+      if (assignedTo) {
+        reminderData.assignedTo = assignedTo
+      }
+
+      await addDoc(collection(db, 'chats', chatId, 'reminders'), reminderData)
+      resetForm()
     } catch (err) {
       console.error('Error creating reminder:', err)
       setError('Failed to create reminder')
@@ -81,10 +119,20 @@ function Reminders({ currentUser, chatId }) {
 
   const toggleComplete = async (reminder) => {
     try {
-      await updateDoc(doc(db, 'chats', chatId, 'reminders', reminder.id), {
+      const updateData = {
         completed: !reminder.completed,
         updatedAt: serverTimestamp(),
-      })
+      }
+
+      if (!reminder.completed) {
+        updateData.completedBy = currentUser.uid
+        updateData.completedAt = serverTimestamp()
+      } else {
+        updateData.completedBy = null
+        updateData.completedAt = null
+      }
+
+      await updateDoc(doc(db, 'chats', chatId, 'reminders', reminder.id), updateData)
     } catch (err) {
       console.error('Error updating reminder:', err)
     }
@@ -109,6 +157,20 @@ function Reminders({ currentUser, chatId }) {
     }
   }
 
+  const getAssignmentLabel = (uid) => {
+    if (!uid) return null
+    if (uid === currentUser.uid) return 'Assigned to you'
+    return 'Assigned to friend'
+  }
+
+  const getPriorityClass = (p) => {
+    if (p === 'high') return 'priority-high'
+    if (p === 'low') return 'priority-low'
+    return ''
+  }
+
+  const friendUid = chatMembers.find((m) => m !== currentUser.uid)
+
   if (loading) {
     return <div className="reminders-container loading">Loading reminders...</div>
   }
@@ -119,7 +181,10 @@ function Reminders({ currentUser, chatId }) {
         <h2>Shared Reminders</h2>
         <button
           className="add-reminder-btn"
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            if (showForm) resetForm()
+            else setShowForm(true)
+          }}
         >
           {showForm ? 'Cancel' : '+ Add'}
         </button>
@@ -143,12 +208,34 @@ function Reminders({ currentUser, chatId }) {
             maxLength={1000}
             className="reminder-textarea"
           />
-          <input
-            type="date"
-            value={dueAt}
-            onChange={(e) => setDueAt(e.target.value)}
-            className="reminder-date"
-          />
+          <div className="reminder-row">
+            <input
+              type="date"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+              className="reminder-date"
+            />
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              className="reminder-select"
+            >
+              {PRIORITY_OPTIONS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <select
+            value={assignedTo}
+            onChange={(e) => setAssignedTo(e.target.value)}
+            className="reminder-select"
+          >
+            <option value="">Unassigned</option>
+            <option value={currentUser.uid}>Assign to me</option>
+            {friendUid && <option value={friendUid}>Assign to friend</option>}
+          </select>
           <button type="submit" disabled={saving} className="reminder-submit">
             {saving ? 'Saving...' : 'Save Reminder'}
           </button>
@@ -162,7 +249,7 @@ function Reminders({ currentUser, chatId }) {
           {reminders.map((reminder) => (
             <div
               key={reminder.id}
-              className={`reminder-item ${reminder.completed ? 'completed' : ''}`}
+              className={`reminder-item ${reminder.completed ? 'completed' : ''} ${getPriorityClass(reminder.priority)}`}
             >
               <button
                 className="reminder-checkbox"
@@ -171,12 +258,32 @@ function Reminders({ currentUser, chatId }) {
                 {reminder.completed ? '✓' : '○'}
               </button>
               <div className="reminder-content">
-                <div className="reminder-title">{reminder.title}</div>
+                <div className="reminder-title-row">
+                  <span className="reminder-title">{reminder.title}</span>
+                  {reminder.priority === 'high' && (
+                    <span className="priority-badge high">High</span>
+                  )}
+                  {reminder.priority === 'low' && (
+                    <span className="priority-badge low">Low</span>
+                  )}
+                </div>
                 {reminder.notes && (
                   <div className="reminder-notes">{reminder.notes}</div>
                 )}
-                {reminder.dueAt && (
-                  <div className="reminder-due">Due: {formatDate(reminder.dueAt)}</div>
+                <div className="reminder-meta">
+                  {reminder.dueAt && (
+                    <span className="reminder-due">Due: {formatDate(reminder.dueAt)}</span>
+                  )}
+                  {reminder.assignedTo && (
+                    <span className="reminder-assigned">
+                      {getAssignmentLabel(reminder.assignedTo)}
+                    </span>
+                  )}
+                </div>
+                {reminder.completed && reminder.completedBy && (
+                  <div className="reminder-completed-info">
+                    Completed by {reminder.completedBy === currentUser.uid ? 'you' : 'friend'}
+                  </div>
                 )}
               </div>
               <button
