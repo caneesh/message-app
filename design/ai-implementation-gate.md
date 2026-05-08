@@ -1,6 +1,6 @@
 # AI Features Implementation Approval Gate
 
-**Version**: 1.0
+**Version**: 2.0 (Revised)
 **Date**: 2026-05-08
 **Source**: AI Features Design Document v2.0
 **Status**: PENDING APPROVAL
@@ -71,14 +71,14 @@
   // AI Generation
   generatedBy: string,                // AI provider identifier
   generatedByFunction: string,        // Cloud Function name
-  suggestedPayload: object,           // AI-generated suggestion (type-specific)
+  suggestedPayload: object,           // AI-generated suggestion (IMMUTABLE)
   confidence: number,                 // 0.0 to 1.0
   
   // Timestamps
   createdAt: timestamp,
   expiresAt: timestamp,
   
-  // === MUTABLE FIELDS (user can update) ===
+  // === MUTABLE FIELDS (user can update via review) ===
   
   // Review status
   status: string,                     // enum: pending, accepted, rejected, dismissed, expired
@@ -87,8 +87,8 @@
   acceptedPayload: object | null,     // user-edited version (type-specific, bounded)
   
   // Review audit
-  reviewedBy: string | null,          // uid who acted
-  reviewedAt: timestamp | null,       // when user acted
+  reviewedBy: string | null,          // uid who acted - MUST equal auth.uid when status changes
+  reviewedAt: timestamp | null,       // when user acted - MUST be set when status changes
   dismissReason: string | null        // optional, max 200 chars
 }
 ```
@@ -106,11 +106,19 @@
 - `daily_summary`
 
 **Status enum values**:
-- `pending` - initial state, set by Cloud Function
-- `accepted` - user accepted suggestion
-- `rejected` - user explicitly rejected
-- `dismissed` - user dismissed without action
-- `expired` - set by backend cleanup only
+- `pending` - initial state, set by Cloud Function only
+- `accepted` - user accepted suggestion (client can set)
+- `rejected` - user explicitly rejected (client can set)
+- `dismissed` - user dismissed without action (client can set)
+- `expired` - set by backend cleanup only (client CANNOT set)
+
+**Client Update Rules**:
+- Client can only change status from `pending` to `accepted`, `rejected`, or `dismissed`
+- Client CANNOT set status to `pending` or `expired`
+- When status changes, `reviewedBy` MUST equal the authenticated user's uid
+- When status changes, `reviewedAt` MUST be a valid timestamp
+- `suggestedPayload` is IMMUTABLE - client cannot modify
+- Client CANNOT delete suggestions - must dismiss/reject instead
 
 **suggestedPayload by type**:
 
@@ -150,7 +158,7 @@ For `task_suggestion`:
   taskTitle: string,              // max 200 chars
   taskDescription: string,        // max 1000 chars
   dueDate: string | null,         // ISO date string or null
-  assignedTo: string | null       // uid or null
+  assignedTo: string | null       // MUST be null OR a uid in chat.members
 }
 ```
 
@@ -186,12 +194,13 @@ Rate limiting tracking per user.
 - `windowId` max length: 50 characters
 - `feature` must be valid feature name
 - `count` must be >= 0
+- **Updates MUST use Firestore transactions** to prevent race conditions
 
 ---
 
 ### 1.4 chats/{chatId}/aiRuns/{runId}
 
-Audit log for AI invocations (backend-only collection).
+Audit log for AI invocations (backend-only collection). **No raw message content stored.**
 
 ```javascript
 {
@@ -200,12 +209,11 @@ Audit log for AI invocations (backend-only collection).
   feature: string,
   functionName: string,
   
-  // Input (sanitized, no sensitive data)
+  // Token counts only (NO raw content)
   inputTokenCount: number,
-  inputPreview: string,           // max 100 chars, sanitized
-  
-  // Output
   outputTokenCount: number,
+  
+  // Result
   success: boolean,
   errorCode: string | null,
   
@@ -226,9 +234,11 @@ Audit log for AI invocations (backend-only collection).
 }
 ```
 
-**Constraints**:
+**Privacy Constraints**:
+- **NO `inputPreview` field** - do not store any message content
+- **NO raw text** in any field
+- Store only: token counts, metadata, timing, cost, references
 - Client cannot read or write this collection
-- Backend-only for audit and cost tracking
 
 ---
 
@@ -285,38 +295,83 @@ if (!settings.dataSharing?.allowMessageAnalysis) {
 }
 ```
 
-#### Rate Limit Check
+#### Rate Limit Check (With Transaction)
 
 ```javascript
 const now = new Date();
 const hourKey = `toneRepair_${now.toISOString().slice(0,13)}`;
 const usageRef = db.doc(`users/${request.auth.uid}/aiUsage/${hourKey}`);
-const usage = await usageRef.get();
-const count = usage.exists ? usage.data().count : 0;
 
-if (count >= 10) {
+// Use transaction to prevent race conditions
+const allowed = await db.runTransaction(async (transaction) => {
+  const usageDoc = await transaction.get(usageRef);
+  const currentCount = usageDoc.exists ? usageDoc.data().count : 0;
+  
+  if (currentCount >= 10) {
+    return false; // Rate limit exceeded
+  }
+  
+  // Increment count atomically
+  transaction.set(usageRef, {
+    windowId: hourKey,
+    feature: 'toneRepair',
+    count: currentCount + 1,
+    windowStart: usageDoc.exists ? usageDoc.data().windowStart : admin.firestore.FieldValue.serverTimestamp(),
+    windowEnd: new Date(now.getTime() + 3600000), // +1 hour
+    lastRequestAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  
+  return true;
+});
+
+if (!allowed) {
   throw new HttpsError('resource-exhausted', 'RATE_LIMIT_EXCEEDED');
 }
-
-// Increment after successful call
 ```
 
-#### Sensitive Data Check
+#### Sensitive Data Filtering
+
+**Three-point filtering required:**
 
 ```javascript
+// 1. BEFORE sending to AI - filter input
 function containsSensitiveData(text) {
   const patterns = [
-    /\b\d{3}-\d{2}-\d{4}\b/,           // SSN
+    /\b\d{3}-\d{2}-\d{4}\b/,           // SSN with dashes
+    /\b\d{9}\b/,                        // SSN without dashes
     /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/, // Credit card
-    /\b\d{9,12}\b/,                     // Bank account (basic)
+    /\b\d{13,19}\b/,                    // Credit card no separators
     /password\s*[:=]\s*\S+/i,           // Password pattern
+    /\bpin\s*[:=]\s*\d{4,}/i,           // PIN pattern
+    /\b[A-Z]{2}\d{6,9}\b/,              // Passport-like patterns
   ];
   return patterns.some(p => p.test(text));
 }
 
+// Check input before AI call
 if (containsSensitiveData(originalText)) {
   throw new HttpsError('invalid-argument', 'SENSITIVE_DATA_DETECTED');
 }
+
+// Also check context messages if provided
+for (const msg of contextMessages) {
+  if (containsSensitiveData(msg.text)) {
+    throw new HttpsError('invalid-argument', 'SENSITIVE_DATA_IN_CONTEXT');
+  }
+}
+
+// 2. AFTER receiving AI output - filter response
+const aiResponse = await callAI(prompt);
+if (containsSensitiveData(aiResponse.rewrittenText)) {
+  // AI somehow included sensitive data - reject
+  return { success: true, suggestionId: null, suggestion: null, reason: 'AI_OUTPUT_FILTERED' };
+}
+
+// 3. BEFORE writing aiSuggestion - final check
+const sanitizedPayload = {
+  ...aiResponse,
+  rewrittenText: sanitizeForStorage(aiResponse.rewrittenText)
+};
 ```
 
 #### Output JSON (Success)
@@ -355,6 +410,7 @@ if (containsSensitiveData(originalText)) {
 | `MESSAGE_ANALYSIS_NOT_ALLOWED` | 412 | dataSharing.allowMessageAnalysis is false |
 | `RATE_LIMIT_EXCEEDED` | 429 | Exceeded 10 requests/hour |
 | `SENSITIVE_DATA_DETECTED` | 400 | Input contains sensitive patterns |
+| `SENSITIVE_DATA_IN_CONTEXT` | 400 | Context messages contain sensitive data |
 | `INVALID_INPUT` | 400 | Missing/invalid required fields |
 | `TEXT_TOO_SHORT` | 400 | originalText < 10 chars |
 | `TEXT_TOO_LONG` | 400 | originalText > 2000 chars |
@@ -371,11 +427,9 @@ On success:
    - `acceptedPayload: null`
    - `reviewedBy: null`, `reviewedAt: null`, `dismissReason: null`
 
-2. Create/update `users/{uid}/aiUsage/{hourKey}` with:
-   - Increment `count`
-   - Update `lastRequestAt`
+2. Update `users/{uid}/aiUsage/{hourKey}` via transaction (done in rate limit check)
 
-3. Create `chats/{chatId}/aiRuns/{newId}` with audit data
+3. Create `chats/{chatId}/aiRuns/{newId}` with audit data (**no raw content**)
 
 ---
 
@@ -401,7 +455,17 @@ Same as aiToneRepair.
 
 #### Chat Membership Check
 
-Same as aiToneRepair.
+Same as aiToneRepair. **Store `members` array for later assignee validation.**
+
+```javascript
+const chatDoc = await db.doc(`chats/${chatId}`).get();
+if (!chatDoc.exists) throw new HttpsError('not-found', 'CHAT_NOT_FOUND');
+const members = chatDoc.data().members || [];
+if (!members.includes(request.auth.uid)) {
+  throw new HttpsError('permission-denied', 'NOT_CHAT_MEMBER');
+}
+// Keep members for assignee validation
+```
 
 #### AI Consent Checks
 
@@ -420,16 +484,34 @@ if (!settings.dataSharing?.allowMessageAnalysis) {
 }
 ```
 
-#### Rate Limit Check
+#### Rate Limit Check (With Transaction)
 
 ```javascript
 const now = new Date();
 const dayKey = `messageToTask_${now.toISOString().slice(0,10)}`;
 const usageRef = db.doc(`users/${request.auth.uid}/aiUsage/${dayKey}`);
-const usage = await usageRef.get();
-const count = usage.exists ? usage.data().count : 0;
 
-if (count >= 20) {
+const allowed = await db.runTransaction(async (transaction) => {
+  const usageDoc = await transaction.get(usageRef);
+  const currentCount = usageDoc.exists ? usageDoc.data().count : 0;
+  
+  if (currentCount >= 20) {
+    return false;
+  }
+  
+  transaction.set(usageRef, {
+    windowId: dayKey,
+    feature: 'messageToTask',
+    count: currentCount + 1,
+    windowStart: usageDoc.exists ? usageDoc.data().windowStart : admin.firestore.FieldValue.serverTimestamp(),
+    windowEnd: new Date(now.getTime() + 86400000), // +24 hours
+    lastRequestAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  
+  return true;
+});
+
+if (!allowed) {
   throw new HttpsError('resource-exhausted', 'RATE_LIMIT_EXCEEDED');
 }
 ```
@@ -451,9 +533,9 @@ if (messageText.length > 2000) {
 }
 ```
 
-#### Sensitive Data Check
+#### Sensitive Data Filtering
 
-Same as aiToneRepair, applied to message text.
+Same three-point filtering as aiToneRepair, applied to message text and context.
 
 #### Output JSON (Success)
 
@@ -467,7 +549,8 @@ Same as aiToneRepair, applied to message text.
     suggestedDueDate: string | null, // ISO date or null
     suggestedAssignee: string | null, // 'sender'|'recipient'|null
     confidence: number
-  }
+  },
+  chatMembers: string[]           // Return members for client-side assignee validation
 }
 ```
 
@@ -503,8 +586,90 @@ Same as aiToneRepair, applied to message text.
 
 On success:
 1. Create `chats/{chatId}/aiSuggestions/{newId}`
-2. Create/update `users/{uid}/aiUsage/{dayKey}`
-3. Create `chats/{chatId}/aiRuns/{newId}`
+2. Update `users/{uid}/aiUsage/{dayKey}` via transaction
+3. Create `chats/{chatId}/aiRuns/{newId}` (**no raw content**)
+
+---
+
+### 2.3 aiCreateReminderFromSuggestion
+
+**Function Name**: `aiCreateReminderFromSuggestion`
+**Trigger Type**: Callable (`onCall`)
+**Region**: us-central1 (or configured region)
+
+**Purpose**: Create reminder after user approves a task_suggestion. This ensures reminder creation goes through proper validation including assignedTo membership check.
+
+**Why a separate function**: Existing reminder security rules may not validate that `assignedTo` is a chat member. Rather than modify existing rules (risk of regression), this callable function handles AI-originated reminders with full validation.
+
+#### Input JSON
+
+```javascript
+{
+  chatId: string,
+  suggestionId: string,
+  acceptedPayload: {
+    taskTitle: string,            // max 200 chars
+    taskDescription: string,      // max 1000 chars
+    dueDate: string | null,       // ISO date or null
+    assignedTo: string | null     // uid or null
+  }
+}
+```
+
+#### Validation
+
+```javascript
+// 1. Verify suggestion exists and is pending
+const suggestionRef = db.doc(`chats/${chatId}/aiSuggestions/${suggestionId}`);
+const suggestion = await suggestionRef.get();
+if (!suggestion.exists) throw new HttpsError('not-found', 'SUGGESTION_NOT_FOUND');
+if (suggestion.data().status !== 'pending') throw new HttpsError('failed-precondition', 'SUGGESTION_ALREADY_PROCESSED');
+if (suggestion.data().type !== 'task_suggestion') throw new HttpsError('invalid-argument', 'WRONG_SUGGESTION_TYPE');
+
+// 2. Verify user is target
+if (suggestion.data().targetUserId !== request.auth.uid) {
+  throw new HttpsError('permission-denied', 'NOT_TARGET_USER');
+}
+
+// 3. Verify assignedTo is valid
+const chatDoc = await db.doc(`chats/${chatId}`).get();
+const members = chatDoc.data().members || [];
+if (acceptedPayload.assignedTo !== null && !members.includes(acceptedPayload.assignedTo)) {
+  throw new HttpsError('invalid-argument', 'ASSIGNEE_NOT_CHAT_MEMBER');
+}
+
+// 4. Validate field lengths
+if (acceptedPayload.taskTitle.length > 200) throw new HttpsError('invalid-argument', 'TITLE_TOO_LONG');
+if (acceptedPayload.taskDescription.length > 1000) throw new HttpsError('invalid-argument', 'DESCRIPTION_TOO_LONG');
+```
+
+#### Firestore Writes (Transaction)
+
+```javascript
+await db.runTransaction(async (transaction) => {
+  // 1. Create reminder
+  const reminderRef = db.collection(`chats/${chatId}/reminders`).doc();
+  transaction.set(reminderRef, {
+    title: acceptedPayload.taskTitle,
+    description: acceptedPayload.taskDescription,
+    dueDate: acceptedPayload.dueDate ? new Date(acceptedPayload.dueDate) : null,
+    assignedTo: acceptedPayload.assignedTo,
+    status: 'pending',
+    createdBy: request.auth.uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    sourceType: 'ai_suggestion',
+    sourceSuggestionId: suggestionId
+  });
+  
+  // 2. Update suggestion status
+  transaction.update(suggestionRef, {
+    status: 'accepted',
+    acceptedPayload: acceptedPayload,
+    reviewedBy: request.auth.uid,
+    reviewedAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+});
+```
 
 ---
 
@@ -549,16 +714,15 @@ service cloud.firestore {
       // Create: backend only (Cloud Functions)
       allow create: if false;
       
-      // Update: only review fields, only by target user
+      // Update: only review fields, only by target user, with proper validation
       allow update: if request.auth != null
         && isChatMember(chatId)
         && resource.data.targetUserId == request.auth.uid
-        && isValidAiSuggestionUpdate(request.resource.data, resource.data);
+        && isValidAiSuggestionUpdate(request.resource.data, resource.data, chatId);
       
-      // Delete: only by target user
-      allow delete: if request.auth != null
-        && isChatMember(chatId)
-        && resource.data.targetUserId == request.auth.uid;
+      // Delete: NOT allowed - users must dismiss/reject instead
+      // Backend cleanup will expire/delete old suggestions
+      allow delete: if false;
     }
     
     // ============================================
@@ -569,7 +733,7 @@ service cloud.firestore {
       // Read: only own usage (for UI display)
       allow read: if request.auth != null && request.auth.uid == userId;
       
-      // Write: backend only
+      // Write: backend only (via transaction)
       allow create, update, delete: if false;
     }
     
@@ -631,33 +795,47 @@ service cloud.firestore {
         && (dataSharing.allowMessageAnalysis == null || dataSharing.allowMessageAnalysis is bool);
     }
     
-    function isValidAiSuggestionUpdate(newData, existingData) {
-      // Only these fields can change
+    function isValidAiSuggestionUpdate(newData, existingData, chatId) {
+      // Define allowed mutable fields
       let allowedFields = ['status', 'acceptedPayload', 'reviewedBy', 'reviewedAt', 'dismissReason'];
       
       // Check that only allowed fields are being modified
       let changedFields = newData.diff(existingData).affectedKeys();
       
-      return changedFields.hasOnly(allowedFields)
-        // Status must be user-settable values only (not 'expired' or 'pending')
-        && (newData.status == existingData.status 
-            || newData.status in ['accepted', 'rejected', 'dismissed'])
-        // reviewedBy must be current user if being set
-        && (newData.reviewedBy == existingData.reviewedBy 
-            || newData.reviewedBy == request.auth.uid)
-        // reviewedAt must be current timestamp if being set
-        && (newData.reviewedAt == existingData.reviewedAt 
-            || newData.reviewedAt == request.time)
-        // dismissReason length check
-        && (newData.dismissReason == existingData.dismissReason 
-            || newData.dismissReason == null 
-            || (newData.dismissReason is string && newData.dismissReason.size() <= 200))
-        // acceptedPayload validation
-        && validateAcceptedPayload(newData.acceptedPayload, existingData.type);
+      // Basic field restriction check
+      let fieldsOk = changedFields.hasOnly(allowedFields);
+      
+      // Status change validation
+      let statusOk = (newData.status == existingData.status)
+        || (
+          // Can only change FROM pending
+          existingData.status == 'pending'
+          // Can only change TO these values (NOT 'expired' or 'pending')
+          && newData.status in ['accepted', 'rejected', 'dismissed']
+        );
+      
+      // If status is changing, reviewedBy and reviewedAt MUST be set properly
+      let statusChanging = newData.status != existingData.status;
+      let reviewFieldsOk = !statusChanging || (
+        // reviewedBy must equal current user
+        newData.reviewedBy == request.auth.uid
+        // reviewedAt must be a valid timestamp
+        && newData.reviewedAt is timestamp
+      );
+      
+      // dismissReason validation
+      let dismissReasonOk = (newData.dismissReason == existingData.dismissReason)
+        || newData.dismissReason == null
+        || (newData.dismissReason is string && newData.dismissReason.size() <= 200);
+      
+      // acceptedPayload validation
+      let payloadOk = validateAcceptedPayload(newData.acceptedPayload, existingData.type, chatId);
+      
+      return fieldsOk && statusOk && reviewFieldsOk && dismissReasonOk && payloadOk;
     }
     
-    function validateAcceptedPayload(payload, suggestionType) {
-      // null is always valid
+    function validateAcceptedPayload(payload, suggestionType, chatId) {
+      // null is always valid (rejecting or dismissing without edits)
       return payload == null
         // tone_repair accepted payload
         || (suggestionType == 'tone_repair' 
@@ -665,7 +843,7 @@ service cloud.firestore {
             && payload.keys().hasOnly(['finalText'])
             && payload.finalText is string
             && payload.finalText.size() <= 2000)
-        // task_suggestion accepted payload
+        // task_suggestion accepted payload - assignedTo must be chat member
         || (suggestionType == 'task_suggestion'
             && payload is map
             && payload.keys().hasOnly(['taskTitle', 'taskDescription', 'dueDate', 'assignedTo'])
@@ -674,7 +852,15 @@ service cloud.firestore {
             && payload.taskDescription is string
             && payload.taskDescription.size() <= 1000
             && (payload.dueDate == null || payload.dueDate is string)
-            && (payload.assignedTo == null || payload.assignedTo is string));
+            && validateAssignedTo(payload.assignedTo, chatId));
+    }
+    
+    function validateAssignedTo(assignedTo, chatId) {
+      // null is valid
+      return assignedTo == null
+        // OR must be a member of the chat
+        || (assignedTo is string 
+            && assignedTo in get(/databases/$(database)/documents/chats/$(chatId)).data.members);
     }
     
   }
@@ -765,7 +951,7 @@ service cloud.firestore {
 - Display suggestion preview based on type
 - Show confidence indicator (low/medium/high)
 - Show sparkle icon to indicate AI-generated
-- Quick accept/reject buttons
+- Quick accept/reject/dismiss buttons (NO delete)
 - "Edit" button opens review modal
 
 ---
@@ -785,6 +971,7 @@ service cloud.firestore {
     sourceTextPreview: string,
     confidence: number
   },
+  chatMembers: string[],          // For assignee validation
   onClose: () => void,
   onAccept: (suggestionId, acceptedPayload) => void,
   onReject: (suggestionId) => void,
@@ -795,7 +982,7 @@ service cloud.firestore {
 **State**:
 ```javascript
 {
-  editedPayload: object,          // user's edits
+  editedPayload: object,
   dismissReason: string,
   processing: boolean,
   validationErrors: { [field]: string }
@@ -811,6 +998,7 @@ service cloud.firestore {
 - Show original source text preview
 - Show AI suggestion with editable fields
 - Validate edited payload against type-specific constraints
+- **Validate assignedTo is in chatMembers**
 - Show confidence level
 - Accept (with edits), Reject, Dismiss buttons
 - Optional dismiss reason input
@@ -834,7 +1022,7 @@ service cloud.firestore {
 **State**:
 ```javascript
 {
-  isOpen: boolean,                // dropdown/menu open
+  isOpen: boolean,
   isLoading: boolean,
   suggestion: object | null,
   error: string | null,
@@ -853,7 +1041,7 @@ service cloud.firestore {
 - On selection, call `aiToneRepair` Cloud Function
 - Show loading spinner (1-3 seconds typical)
 - Show suggestion in inline preview or modal
-- Accept applies to draft, Cancel restores original
+- Accept applies to draft, Cancel dismisses suggestion
 - Handle rate limit errors gracefully
 
 ---
@@ -872,6 +1060,7 @@ service cloud.firestore {
     timestamp: timestamp
   },
   chatId: string,
+  chatMembers: string[],          // For assignee validation
   onTaskCreated: (reminder) => void,
   onClose: () => void
 }
@@ -903,8 +1092,9 @@ service cloud.firestore {
 - On trigger, call `aiMessageToTask` Cloud Function
 - Show loading state
 - Display editable form with AI suggestions pre-filled
+- **Assignee dropdown limited to chatMembers**
 - User can edit all fields
-- "Create Reminder" button creates reminder document
+- "Create Reminder" calls `aiCreateReminderFromSuggestion` Cloud Function
 - Show "AI suggested" badge on created reminder
 - Handle errors and rate limits gracefully
 
@@ -923,11 +1113,12 @@ RULES:
 2. Preserve the core message and intent
 3. Do not add new information or assumptions
 4. Do not give medical, legal, or financial advice
-5. Do not extract or mention sensitive data (passwords, SSNs, credit cards, account numbers)
-6. If the message is already appropriate or you cannot improve it, return no_suggestion
-7. Keep rewrites similar in length to the original (within 50%)
-8. Avoid blame, judgment, or taking sides
-9. Use warm, caring language appropriate for close relationships
+5. Do not extract or mention sensitive data (passwords, SSNs, credit cards, account numbers, PINs, government IDs)
+6. If the message contains sensitive data (passwords, SSNs, credit cards, bank accounts, government IDs), return no_suggestion immediately
+7. If the message is already appropriate or you cannot improve it, return no_suggestion
+8. Keep rewrites similar in length to the original (within 50%)
+9. Avoid blame, judgment, or taking sides
+10. Use warm, caring language appropriate for close relationships
 
 TONE GOALS:
 - softer: Remove harshness, add gentleness, use "I" statements
@@ -942,7 +1133,7 @@ OUTPUT FORMAT (JSON only):
   "confidence": 0.0 to 1.0
 }
 
-If you cannot provide a useful suggestion:
+If you cannot provide a useful suggestion OR if sensitive data is present:
 {
   "rewrittenText": null,
   "explanation": "reason",
@@ -963,6 +1154,8 @@ CONTEXT (recent messages, if available):
 
 PARTNER'S CURRENT MOOD (if known): {partnerMood}
 
+IMPORTANT: If the message contains any sensitive data (passwords, SSNs, credit cards, bank accounts, government IDs), return no_suggestion.
+
 Return JSON only.
 ```
 
@@ -979,12 +1172,13 @@ RULES:
 2. Only extract tasks that are clearly actionable
 3. Do not invent tasks not present in the message
 4. Do not give medical, legal, or financial advice
-5. Do not extract or include sensitive data (passwords, SSNs, credit cards, account numbers, medical details)
-6. If no clear task exists, return no_suggestion
-7. Task titles should be concise (under 100 characters)
-8. Descriptions should summarize the task context
-9. Only suggest due dates if explicitly mentioned or clearly implied
-10. Assignee is "sender" if they're committing to do something, "recipient" if asking the other person
+5. Do not extract or include sensitive data (passwords, SSNs, credit cards, account numbers, PINs, government IDs, medical details)
+6. If the message contains sensitive data, return no_suggestion immediately
+7. If no clear task exists, return no_suggestion
+8. Task titles should be concise (under 100 characters)
+9. Descriptions should summarize the task context without sensitive details
+10. Only suggest due dates if explicitly mentioned or clearly implied
+11. Assignee is "sender" if they're committing to do something, "recipient" if asking the other person
 
 OUTPUT FORMAT (JSON only):
 {
@@ -995,7 +1189,7 @@ OUTPUT FORMAT (JSON only):
   "confidence": 0.0 to 1.0
 }
 
-If no actionable task is detected:
+If no actionable task is detected OR if sensitive data is present:
 {
   "taskTitle": null,
   "taskDescription": null,
@@ -1019,6 +1213,8 @@ TODAY'S DATE: {today}
 
 CONTEXT (surrounding messages, if available):
 {contextMessages}
+
+IMPORTANT: If the message contains any sensitive data (passwords, SSNs, credit cards, bank accounts, government IDs), return no_suggestion.
 
 Return JSON only.
 ```
@@ -1077,7 +1273,7 @@ if (!aiAvailable) return null;
 ### 6.3 Stop Cloud Functions
 
 **Option A: Disable in Firebase Console**
-1. Go to Firebase Console → Functions
+1. Go to Firebase Console -> Functions
 2. Click on each AI function
 3. Click "Disable" or delete
 
@@ -1109,26 +1305,28 @@ firebase deploy --only functions
 - No existing functionality depends on AI
 - AI components lazy-loaded, not in critical path
 
-### 6.5 Delete aiSuggestions Safely
+### 6.5 Expire/Delete aiSuggestions Safely
 
-**Step 1: Notify Users** (if applicable)
+**Note**: Client cannot delete suggestions. Backend cleanup handles expiration.
+
+**Step 1: Mark as expired via backend**
 ```javascript
-// Optional: mark suggestions as expired first
+// Backend cleanup function
 const batch = db.batch();
 suggestions.forEach(doc => {
   batch.update(doc.ref, { 
-    status: 'expired',
-    expiredReason: 'feature_disabled'
+    status: 'expired'
   });
 });
 await batch.commit();
 ```
 
-**Step 2: Delete in Batches**
+**Step 2: Delete in Batches (backend only)**
 ```javascript
 async function deleteAiSuggestions(chatId) {
   const suggestions = await db
     .collection(`chats/${chatId}/aiSuggestions`)
+    .where('status', '==', 'expired')
     .limit(500)
     .get();
   
@@ -1138,18 +1336,10 @@ async function deleteAiSuggestions(chatId) {
   suggestions.docs.forEach(doc => batch.delete(doc.ref));
   await batch.commit();
   
-  // Recurse for more
   if (suggestions.size === 500) {
     await deleteAiSuggestions(chatId);
   }
 }
-```
-
-**Step 3: Delete aiUsage and aiRuns** (optional, for complete cleanup)
-```javascript
-// Similar batch delete pattern for:
-// - users/{uid}/aiUsage/*
-// - chats/{chatId}/aiRuns/*
 ```
 
 ---
@@ -1163,6 +1353,7 @@ async function deleteAiSuggestions(chatId) {
 **Test Files**:
 - `test/ai/toneRepair.test.js`
 - `test/ai/messageToTask.test.js`
+- `test/ai/createReminderFromSuggestion.test.js`
 - `test/ai/sensitiveDataFilter.test.js`
 - `test/ai/rateLimiter.test.js`
 
@@ -1185,6 +1376,7 @@ describe('aiToneRepair', () => {
   test('returns no_suggestion when AI cannot improve');
   test('creates aiSuggestion document on success');
   test('creates aiRun document on success');
+  test('aiRun contains no raw message content');
   test('increments aiUsage count on success');
 });
 ```
@@ -1204,6 +1396,23 @@ describe('aiMessageToTask', () => {
   test('returns no_suggestion when no task detected');
   test('extracts due date when mentioned');
   test('identifies assignee correctly');
+  test('returns chatMembers in response');
+});
+```
+
+**Create Reminder Unit Tests**:
+```javascript
+describe('aiCreateReminderFromSuggestion', () => {
+  test('rejects non-existent suggestion');
+  test('rejects already processed suggestion');
+  test('rejects wrong suggestion type');
+  test('rejects non-target user');
+  test('rejects assignedTo not in chat members');
+  test('rejects title too long');
+  test('rejects description too long');
+  test('creates reminder with correct fields');
+  test('updates suggestion status to accepted');
+  test('sets reviewedBy and reviewedAt');
 });
 ```
 
@@ -1217,9 +1426,22 @@ describe('sensitiveDataFilter', () => {
   test('detects credit card with dashes');
   test('detects password: patterns');
   test('detects password= patterns');
+  test('detects PIN patterns');
   test('does not false positive on phone numbers');
   test('does not false positive on dates');
   test('does not false positive on zip codes');
+  test('filters AI output containing sensitive data');
+});
+```
+
+**Rate Limiter Tests**:
+```javascript
+describe('rateLimiter', () => {
+  test('allows requests under limit');
+  test('blocks requests over limit');
+  test('uses transaction to prevent race conditions');
+  test('concurrent requests respect limit');
+  test('resets after window expires');
 });
 ```
 
@@ -1245,29 +1467,51 @@ describe('AI Settings Security Rules', () => {
 **AI Suggestions Rules Tests**:
 ```javascript
 describe('AI Suggestions Security Rules', () => {
+  // Read tests
   test('target user can read suggestion');
   test('requester user can read suggestion');
   test('other chat member cannot read suggestion');
   test('non-member cannot read suggestion');
+  
+  // Create tests
   test('client cannot create suggestion');
+  
+  // Update tests - status
   test('target user can update status to accepted');
   test('target user can update status to rejected');
   test('target user can update status to dismissed');
   test('target user cannot update status to expired');
   test('target user cannot update status to pending');
   test('non-target user cannot update suggestion');
+  
+  // Update tests - review fields
+  test('status accepted without reviewedBy denied');
+  test('status accepted without reviewedAt denied');
+  test('reviewedBy must equal auth.uid');
+  test('reviewedAt must be timestamp');
+  
+  // Update tests - immutable fields
   test('cannot modify immutable fields (type)');
   test('cannot modify immutable fields (suggestedPayload)');
   test('cannot modify immutable fields (requestedByUserId)');
   test('cannot modify immutable fields (createdAt)');
-  test('reviewedBy must equal auth.uid');
+  test('cannot modify immutable fields (generatedBy)');
+  
+  // Update tests - acceptedPayload
   test('acceptedPayload validated for tone_repair');
   test('acceptedPayload validated for task_suggestion');
   test('acceptedPayload rejects unknown fields');
   test('acceptedPayload rejects oversized strings');
+  test('acceptedPayload.assignedTo not-a-chat-member denied');
+  test('acceptedPayload.assignedTo valid chat member allowed');
+  test('acceptedPayload.assignedTo null allowed');
+  
+  // Dismiss reason
   test('dismissReason limited to 200 chars');
-  test('target user can delete suggestion');
-  test('non-target user cannot delete suggestion');
+  
+  // Delete tests
+  test('client delete aiSuggestion denied');
+  test('target user cannot delete suggestion');
 });
 ```
 
@@ -1277,6 +1521,8 @@ describe('AI Usage Security Rules', () => {
   test('user can read own usage');
   test('user cannot read other user usage');
   test('client cannot write usage');
+  test('client cannot create usage');
+  test('client cannot delete usage');
 });
 ```
 
@@ -1285,6 +1531,7 @@ describe('AI Usage Security Rules', () => {
 describe('AI Runs Security Rules', () => {
   test('client cannot read aiRuns');
   test('client cannot write aiRuns');
+  test('aiRuns contains no raw message content');
 });
 ```
 
@@ -1301,7 +1548,7 @@ describe('AI Runs Security Rules', () => {
 1. User A enables AI and toneRepair feature
 2. User A opens chat with User B
 3. User A types: "Why didn't you do this?"
-4. User A clicks Tone → Soften with AI
+4. User A clicks Tone -> Soften with AI
 5. VERIFY: Loading indicator appears
 6. VERIFY: Suggestion appears with softer text
 7. User A clicks Accept
@@ -1321,7 +1568,7 @@ describe('AI Runs Security Rules', () => {
 5. VERIFY: Task form appears with AI suggestions
 6. VERIFY: Title is reasonable (e.g., "Pick up groceries")
 7. VERIFY: Due date is tomorrow
-8. VERIFY: Assignee is User A (recipient)
+8. VERIFY: Assignee dropdown shows only User A and User B
 9. User A edits title slightly
 10. User A clicks Create Reminder
 11. VERIFY: Reminder created with "AI suggested" badge
@@ -1342,7 +1589,7 @@ describe('AI Runs Security Rules', () => {
 **Consent Flow Test**:
 ```
 1. New user signs up
-2. User navigates to Settings → AI
+2. User navigates to Settings -> AI
 3. VERIFY: All toggles are OFF by default
 4. User enables master toggle
 5. VERIFY: Consent timestamp recorded
@@ -1357,13 +1604,14 @@ describe('AI Runs Security Rules', () => {
 
 ### 7.4 Abuse Tests
 
-**Rapid Fire Requests**:
+**Concurrent Rate Limit Abuse Test**:
 ```
-1. Script sends 20 toneRepair requests in 1 second
-2. VERIFY: First 10 succeed
-3. VERIFY: Remaining get RATE_LIMIT_EXCEEDED
-4. VERIFY: No server errors or crashes
-5. VERIFY: Other users unaffected
+1. Script sends 20 toneRepair requests simultaneously (not sequentially)
+2. VERIFY: Exactly 10 succeed (transaction prevents race condition)
+3. VERIFY: Exactly 10 get RATE_LIMIT_EXCEEDED
+4. VERIFY: aiUsage.count is exactly 10, not higher
+5. VERIFY: No server errors or crashes
+6. VERIFY: Other users unaffected
 ```
 
 **Sensitive Data Injection**:
@@ -1381,10 +1629,33 @@ describe('AI Runs Security Rules', () => {
 1. User accepts suggestion via API
 2. Attempt to set status to 'expired'
 3. VERIFY: Rejected by security rules
-4. Attempt to modify suggestedPayload
+4. Attempt to set status to 'pending'
 5. VERIFY: Rejected by security rules
-6. Attempt to set reviewedBy to different user
+6. Attempt to modify suggestedPayload
 7. VERIFY: Rejected by security rules
+8. Attempt to set reviewedBy to different user
+9. VERIFY: Rejected by security rules
+10. Attempt to accept without reviewedBy
+11. VERIFY: Rejected by security rules
+12. Attempt to accept without reviewedAt
+13. VERIFY: Rejected by security rules
+```
+
+**Assignee Tampering**:
+```
+1. User accepts task_suggestion
+2. Attempt to set assignedTo to non-member uid
+3. VERIFY: Rejected by security rules (or callable function)
+4. Attempt to set assignedTo to valid member uid
+5. VERIFY: Accepted
+```
+
+**Delete Attempt**:
+```
+1. User tries to delete aiSuggestion document via SDK
+2. VERIFY: Permission denied
+3. User tries to delete via REST API
+4. VERIFY: Permission denied
 ```
 
 **Large Payload Attack**:
@@ -1427,6 +1698,7 @@ Reminders:
 - [ ] Manual reminder creation works
 - [ ] Reminder notifications work
 - [ ] Reminder completion works
+- [ ] AI-created reminders appear correctly
 
 Other Features:
 - [ ] Decisions work
@@ -1444,6 +1716,15 @@ Performance:
 - [ ] Chat scrolling smooth
 - [ ] No memory leaks
 - [ ] No console errors
+```
+
+**aiRuns Content Verification**:
+```
+1. Trigger aiToneRepair with known message
+2. Read aiRuns document via admin SDK
+3. VERIFY: No inputPreview field exists
+4. VERIFY: No raw message content in any field
+5. VERIFY: Only token counts, metadata present
 ```
 
 **Build Verification**:
@@ -1464,8 +1745,15 @@ Before implementation begins, the following must be reviewed and approved:
 - [ ] **Firestore Schema** - All collections, fields, and constraints reviewed
 - [ ] **Cloud Function Contracts** - All inputs, outputs, and error codes reviewed
 - [ ] **Security Rules** - All rules tested in emulator, no privilege escalation possible
+- [ ] **No client delete on aiSuggestions** - Verified
+- [ ] **Status change requires reviewedBy/reviewedAt** - Verified
+- [ ] **suggestedPayload immutability** - Verified
+- [ ] **assignedTo chat member validation** - Verified
+- [ ] **Rate limiting uses transactions** - Verified
+- [ ] **aiRuns contains no raw content** - Verified
+- [ ] **Three-point sensitive data filtering** - Verified
 - [ ] **UI Components** - Integration points identified, no breaking changes
-- [ ] **AI Prompts** - Reviewed for safety, no harmful outputs possible
+- [ ] **AI Prompts** - Reviewed for safety, sensitive data instruction included
 - [ ] **Rollback Plan** - Tested in staging, can disable within 5 minutes
 - [ ] **Testing Plan** - All test cases written before implementation
 
@@ -1475,6 +1763,6 @@ Before implementation begins, the following must be reviewed and approved:
 
 ---
 
-*Document Version: 1.0*
+*Document Version: 2.0*
 *Created: 2026-05-08*
 *Status: PENDING APPROVAL*
