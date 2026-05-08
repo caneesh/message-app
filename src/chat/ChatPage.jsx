@@ -241,7 +241,7 @@ function ChatPage() {
           onClick={() => setActiveTab('dashboard')}
           role="tab"
           aria-selected={activeTab === 'dashboard'}
-          aria-label="Dashboard"
+          title="Dashboard"
         >
           🏠
         </button>
@@ -250,55 +250,61 @@ function ChatPage() {
           onClick={() => setActiveTab('chat')}
           role="tab"
           aria-selected={activeTab === 'chat'}
+          title="Chat"
         >
-          Chat
+          💬
         </button>
         <button
           className={`tab-btn ${activeTab === 'reminders' ? 'active' : ''}`}
           onClick={() => setActiveTab('reminders')}
           role="tab"
           aria-selected={activeTab === 'reminders'}
+          title="Reminders"
         >
-          Reminders
+          ⏰
         </button>
         <button
           className={`tab-btn ${activeTab === 'notes' ? 'active' : ''}`}
           onClick={() => setActiveTab('notes')}
           role="tab"
           aria-selected={activeTab === 'notes'}
+          title="Notes"
         >
-          Notes
+          📝
         </button>
         <button
           className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`}
           onClick={() => setActiveTab('events')}
           role="tab"
           aria-selected={activeTab === 'events'}
+          title="Events"
         >
-          Events
+          📅
         </button>
         <button
           className={`tab-btn ${activeTab === 'lists' ? 'active' : ''}`}
           onClick={() => setActiveTab('lists')}
           role="tab"
           aria-selected={activeTab === 'lists'}
+          title="Lists"
         >
-          Lists
+          📋
         </button>
         <button
           className={`tab-btn ${activeTab === 'decisions' ? 'active' : ''}`}
           onClick={() => setActiveTab('decisions')}
           role="tab"
           aria-selected={activeTab === 'decisions'}
+          title="Decisions"
         >
-          Decisions
+          ⚖️
         </button>
         <button
           className={`tab-btn ${activeTab === 'vault' ? 'active' : ''}`}
           onClick={() => setActiveTab('vault')}
           role="tab"
           aria-selected={activeTab === 'vault'}
-          aria-label="Vault"
+          title="Vault"
         >
           🔐
         </button>
@@ -307,7 +313,7 @@ function ChatPage() {
           onClick={() => setActiveTab('checkin')}
           role="tab"
           aria-selected={activeTab === 'checkin'}
-          aria-label="Check-in"
+          title="Check-in"
         >
           💚
         </button>
@@ -316,7 +322,7 @@ function ChatPage() {
           onClick={() => setActiveTab('memories')}
           role="tab"
           aria-selected={activeTab === 'memories'}
-          aria-label="Memories"
+          title="Memories"
         >
           📸
         </button>
@@ -325,7 +331,7 @@ function ChatPage() {
           onClick={() => setActiveTab('devices')}
           role="tab"
           aria-selected={activeTab === 'devices'}
-          aria-label="Devices"
+          title="Devices"
         >
           📱
         </button>
@@ -334,7 +340,7 @@ function ChatPage() {
           onClick={() => setActiveTab('settings')}
           role="tab"
           aria-selected={activeTab === 'settings'}
-          aria-label="Settings"
+          title="Settings"
         >
           ⚙️
         </button>
