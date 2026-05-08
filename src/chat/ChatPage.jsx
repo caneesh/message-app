@@ -189,7 +189,7 @@ function ChatPage() {
   return (
     <div className="chat-container">
       <header className="chat-header">
-        <h1>Messages</h1>
+        <h1>OneRoom</h1>
         <div className="header-actions">
           <div className="search-container" role="search">
             <input

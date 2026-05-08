@@ -1,7 +1,7 @@
 {
-  "name": "Message App",
-  "short_name": "Messages",
-  "description": "Private one-to-one messaging",
+  "name": "OneRoom",
+  "short_name": "OneRoom",
+  "description": "A private shared space for two",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

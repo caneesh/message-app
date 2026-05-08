@@ -1,4 +1,4 @@
-# Message App
+# OneRoom
 
 A private shared space for two people to communicate, remember, plan, and care for each other. Built with React, Vite, and Firebase.
 
