@@ -10,6 +10,7 @@ import {
   setDoc,
   updateDoc,
   getDoc,
+  addDoc,
   serverTimestamp,
   limitToLast,
 } from 'firebase/firestore'
@@ -18,6 +19,7 @@ import { ref, deleteObject } from 'firebase/storage'
 const PREVIEW_MAX_LENGTH = 80
 const MESSAGE_LIMIT = 100
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+const CONVERSION_TYPES = ['reminder', 'decision', 'memory']
 
 function truncateText(text, maxLength = PREVIEW_MAX_LENGTH) {
   if (!text) return ''
@@ -47,6 +49,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [editText, setEditText] = useState('')
   const [friendLastReadAt, setFriendLastReadAt] = useState(null)
   const [showPinnedPanel, setShowPinnedPanel] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(null)
+  const [convertModal, setConvertModal] = useState(null)
+  const [convertTitle, setConvertTitle] = useState('')
+  const [convertBody, setConvertBody] = useState('')
+  const [converting, setConverting] = useState(false)
+  const [convertError, setConvertError] = useState('')
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -295,6 +303,86 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     }
   }
 
+  const openConvertModal = (message, type) => {
+    setShowMoreMenu(null)
+    const textContent = message.type === 'file' && message.file
+      ? `📎 ${message.file.fileName}`
+      : message.text || ''
+
+    setConvertTitle(truncateText(textContent, 200))
+    setConvertBody(textContent)
+    setConvertModal({ message, type })
+    setConvertError('')
+  }
+
+  const closeConvertModal = () => {
+    setConvertModal(null)
+    setConvertTitle('')
+    setConvertBody('')
+    setConvertError('')
+  }
+
+  const handleConvert = async () => {
+    if (!convertModal) return
+    const { message, type } = convertModal
+    const trimmedTitle = convertTitle.trim()
+
+    if (!trimmedTitle) {
+      setConvertError('Title is required')
+      return
+    }
+    if (trimmedTitle.length > 200) {
+      setConvertError('Title must be 200 characters or less')
+      return
+    }
+
+    setConverting(true)
+    setConvertError('')
+
+    try {
+      if (type === 'reminder') {
+        await addDoc(collection(db, 'chats', chatId, 'reminders'), {
+          title: trimmedTitle,
+          notes: convertBody.trim(),
+          dueAt: null,
+          priority: 'normal',
+          completed: false,
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          sourceMessageId: message.id,
+        })
+      } else if (type === 'decision') {
+        await addDoc(collection(db, 'chats', chatId, 'decisions'), {
+          title: trimmedTitle,
+          decision: convertBody.trim() || trimmedTitle,
+          reason: '',
+          status: 'active',
+          relatedMessageId: message.id,
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      } else if (type === 'memory') {
+        await addDoc(collection(db, 'chats', chatId, 'memories'), {
+          title: trimmedTitle,
+          description: convertBody.trim(),
+          date: serverTimestamp(),
+          sourceMessageId: message.id,
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      }
+      closeConvertModal()
+    } catch (err) {
+      console.error('Conversion error:', err)
+      setConvertError('Failed to save. Please try again.')
+    } finally {
+      setConverting(false)
+    }
+  }
+
   const renderReactions = (messageId) => {
     const messageReactions = reactions[messageId] || []
     if (messageReactions.length === 0) return null
@@ -465,8 +553,28 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                       {deletingId === message.id ? '...' : '×'}
                     </button>
                   )}
+                  <button
+                    className="more-btn"
+                    onClick={() => setShowMoreMenu(showMoreMenu === message.id ? null : message.id)}
+                    title="More actions"
+                  >
+                    ⋯
+                  </button>
                 </div>
               </div>
+              {showMoreMenu === message.id && (
+                <div className="more-menu">
+                  <button onClick={() => openConvertModal(message, 'reminder')}>
+                    Save as Reminder
+                  </button>
+                  <button onClick={() => openConvertModal(message, 'decision')}>
+                    Save as Decision
+                  </button>
+                  <button onClick={() => openConvertModal(message, 'memory')}>
+                    Save to Memories
+                  </button>
+                </div>
+              )}
               {showReactionPicker === message.id && (
                 <div className="reaction-picker">
                   {ALLOWED_REACTIONS.map((emoji) => (
@@ -521,6 +629,57 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
         })
       )}
       <div ref={messagesEndRef} />
+      {convertModal && (
+        <div className="convert-modal-overlay" onClick={closeConvertModal}>
+          <div className="convert-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="convert-modal-header">
+              <h3>
+                Save as {convertModal.type.charAt(0).toUpperCase() + convertModal.type.slice(1)}
+              </h3>
+              <button className="convert-modal-close" onClick={closeConvertModal}>×</button>
+            </div>
+            {convertError && <div className="convert-error">{convertError}</div>}
+            <div className="convert-modal-body">
+              <label>Title</label>
+              <input
+                type="text"
+                value={convertTitle}
+                onChange={(e) => setConvertTitle(e.target.value)}
+                maxLength={200}
+                className="convert-input"
+                autoFocus
+              />
+              {convertModal.type !== 'decision' && (
+                <>
+                  <label>{convertModal.type === 'memory' ? 'Description' : 'Notes'}</label>
+                  <textarea
+                    value={convertBody}
+                    onChange={(e) => setConvertBody(e.target.value)}
+                    className="convert-textarea"
+                    rows={3}
+                  />
+                </>
+              )}
+            </div>
+            <div className="convert-modal-actions">
+              <button
+                className="convert-cancel-btn"
+                onClick={closeConvertModal}
+                disabled={converting}
+              >
+                Cancel
+              </button>
+              <button
+                className="convert-save-btn"
+                onClick={handleConvert}
+                disabled={converting}
+              >
+                {converting ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
