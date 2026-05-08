@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { db, functions } from '../firebase/firebaseConfig'
 import { collection, doc, getDocs, setDoc, getDoc, deleteDoc, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
+import AiSettingsPanel from './AiSettingsPanel'
 
 function Settings({ currentUser, chatId, onChatJoined }) {
   const [pinEnabled, setPinEnabled] = useState(() => {
@@ -334,6 +335,8 @@ function Settings({ currentUser, chatId, onChatJoined }) {
           This feature is not yet implemented.
         </p>
       </div>
+
+      <AiSettingsPanel currentUser={currentUser} />
 
       <div className="settings-section">
         <h3>Export Data</h3>

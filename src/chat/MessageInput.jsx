@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { db, storage } from '../firebase/firebaseConfig'
 import { collection, addDoc, doc, setDoc, deleteDoc, getDoc, query, where, orderBy, limit, getDocs, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import ToneRepairAiButton from './ToneRepairAiButton'
 
 const MAX_MESSAGE_LENGTH = 2000
 
@@ -487,16 +488,25 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           📎
         </button>
         {trimmedText.length > 5 && (
-          <button
-            type="button"
-            className="tone-btn"
-            onClick={() => setShowToneOptions(!showToneOptions)}
-            disabled={sending}
-            title="Soften tone"
-            aria-label="Soften message tone"
-          >
-            💝
-          </button>
+          <>
+            <button
+              type="button"
+              className="tone-btn"
+              onClick={() => setShowToneOptions(!showToneOptions)}
+              disabled={sending}
+              title="Soften tone (local)"
+              aria-label="Soften message tone"
+            >
+              💝
+            </button>
+            <ToneRepairAiButton
+              currentUser={currentUser}
+              chatId={chatId}
+              text={text}
+              onSuggestion={(suggestion) => setToneSuggestion(suggestion)}
+              disabled={sending}
+            />
+          </>
         )}
         <input
           type="text"

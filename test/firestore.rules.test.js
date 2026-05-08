@@ -363,4 +363,271 @@ describe('Firestore Security Rules', () => {
       )
     })
   })
+
+  describe('AI Settings', () => {
+    it('user can create own AI settings', async () => {
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertSucceeds(
+        setDoc(doc(db, 'users', USER_A_ID, 'settings', 'ai'), {
+          enabled: true,
+          consentedAt: serverTimestamp(),
+          features: { toneRepair: true, messageToTask: true },
+          updatedAt: serverTimestamp(),
+        })
+      )
+    })
+
+    it('user can update own AI settings', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'users', USER_A_ID, 'settings', 'ai'), {
+          enabled: true,
+          consentedAt: new Date(),
+          features: { toneRepair: true },
+          updatedAt: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertSucceeds(
+        updateDoc(doc(db, 'users', USER_A_ID, 'settings', 'ai'), {
+          enabled: false,
+          updatedAt: serverTimestamp(),
+        })
+      )
+    })
+
+    it('user cannot access other user AI settings', async () => {
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(
+        setDoc(doc(db, 'users', USER_B_ID, 'settings', 'ai'), {
+          enabled: true,
+          consentedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      )
+    })
+
+    it('user cannot create AI settings with invalid enabled type', async () => {
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(
+        setDoc(doc(db, 'users', USER_A_ID, 'settings', 'ai'), {
+          enabled: 'yes',
+          updatedAt: serverTimestamp(),
+        })
+      )
+    })
+  })
+
+  describe('AI Usage', () => {
+    it('user can read own AI usage', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'users', USER_A_ID, 'aiUsage', '2024-01-toneRepair'), {
+          count: 5,
+          windowStart: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertSucceeds(getDoc(doc(db, 'users', USER_A_ID, 'aiUsage', '2024-01-toneRepair')))
+    })
+
+    it('user cannot write to AI usage', async () => {
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(
+        setDoc(doc(db, 'users', USER_A_ID, 'aiUsage', '2024-01-toneRepair'), {
+          count: 100,
+          windowStart: serverTimestamp(),
+        })
+      )
+    })
+
+    it('user cannot read other user AI usage', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'users', USER_B_ID, 'aiUsage', '2024-01-toneRepair'), {
+          count: 5,
+          windowStart: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(getDoc(doc(db, 'users', USER_B_ID, 'aiUsage', '2024-01-toneRepair')))
+    })
+  })
+
+  describe('AI Suggestions', () => {
+    it('member can read AI suggestions', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'pending',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertSucceeds(getDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1')))
+    })
+
+    it('non-member cannot read AI suggestions', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'pending',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: NON_MEMBER_ID })
+      await assertFails(getDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1')))
+    })
+
+    it('client cannot create AI suggestions', async () => {
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(
+        setDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'pending',
+          createdBy: USER_A_ID,
+          createdAt: serverTimestamp(),
+        })
+      )
+    })
+
+    it('client cannot delete AI suggestions', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'pending',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(deleteDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1')))
+    })
+
+    it('member can update AI suggestion status', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'pending',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertSucceeds(
+        updateDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'accepted',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      )
+    })
+
+    it('member cannot change immutable fields on AI suggestion', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'pending',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(
+        updateDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'messageToTask',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'pending',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      )
+    })
+
+    it('member cannot set invalid status on AI suggestion', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'pending',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(
+        updateDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
+          type: 'toneRepair',
+          sourceMessageId: 'msg1',
+          suggestion: 'Softened text',
+          status: 'completed',
+          createdBy: USER_A_ID,
+          createdAt: new Date(),
+        })
+      )
+    })
+  })
+
+  describe('AI Runs', () => {
+    it('client cannot read AI runs', async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        await setDoc(doc(db, 'chats', CHAT_ID, 'aiRuns', 'run1'), {
+          type: 'toneRepair',
+          userId: USER_A_ID,
+          status: 'completed',
+          createdAt: new Date(),
+        })
+      })
+
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(getDoc(doc(db, 'chats', CHAT_ID, 'aiRuns', 'run1')))
+    })
+
+    it('client cannot create AI runs', async () => {
+      const db = getFirestore({ uid: USER_A_ID })
+      await assertFails(
+        setDoc(doc(db, 'chats', CHAT_ID, 'aiRuns', 'run1'), {
+          type: 'toneRepair',
+          userId: USER_A_ID,
+          status: 'completed',
+          createdAt: serverTimestamp(),
+        })
+      )
+    })
+  })
 })

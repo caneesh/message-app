@@ -15,6 +15,7 @@ import {
   limitToLast,
 } from 'firebase/firestore'
 import { ref, deleteObject } from 'firebase/storage'
+import MessageToTaskAiAction from './MessageToTaskAiAction'
 
 const PREVIEW_MAX_LENGTH = 80
 const MESSAGE_LIMIT = 100
@@ -70,6 +71,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [capsules, setCapsules] = useState([])
   const [showCapsulePicker, setShowCapsulePicker] = useState(null)
   const [addingToCapsule, setAddingToCapsule] = useState(false)
+  const [showAiTaskExtract, setShowAiTaskExtract] = useState(null)
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -726,7 +728,21 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                       Add to Capsule
                     </button>
                   )}
+                  <button onClick={() => {
+                    setShowMoreMenu(null)
+                    setShowAiTaskExtract(showAiTaskExtract === message.id ? null : message.id)
+                  }}>
+                    ✨ AI Extract Tasks
+                  </button>
                 </div>
+              )}
+              {showAiTaskExtract === message.id && (
+                <MessageToTaskAiAction
+                  currentUser={currentUser}
+                  chatId={chatId}
+                  message={message}
+                  onClose={() => setShowAiTaskExtract(null)}
+                />
               )}
               {showCapsulePicker === message.id && (
                 <div className="capsule-picker">

@@ -559,6 +559,25 @@ service cloud.firestore {
                       && (!('body' in request.resource.data) || (request.resource.data.body is string && request.resource.data.body.size() <= 10000));
         allow delete: if isAuthenticated() && isChatMember(chatId);
       }
+
+      // AI Suggestions subcollection - server creates/deletes, client can only read and update status
+      match /aiSuggestions/{suggestionId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create, delete: if false;
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.type == resource.data.type
+                      && request.resource.data.sourceMessageId == resource.data.sourceMessageId
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.createdAt == resource.data.createdAt
+                      && request.resource.data.status in ['pending', 'accepted', 'dismissed', 'expired']
+                      && request.resource.data.suggestion == resource.data.suggestion;
+      }
+
+      // AI Runs subcollection - audit log, no client access
+      match /aiRuns/{runId} {
+        allow read, write: if false;
+      }
     }
 
     // Invites - read-only for authenticated users, writes managed by Cloud Functions
@@ -589,6 +608,28 @@ service cloud.firestore {
                       && request.auth.uid == userId
                       && request.resource.data.label is string
                       && request.resource.data.label.size() <= 100;
+      }
+
+      // AI settings - single document per user
+      match /settings/ai {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow create: if isAuthenticated()
+                      && request.auth.uid == userId
+                      && request.resource.data.keys().hasOnly(['enabled', 'consentedAt', 'features', 'updatedAt'])
+                      && request.resource.data.enabled is bool
+                      && (!('features' in request.resource.data) || request.resource.data.features is map);
+        allow update: if isAuthenticated()
+                      && request.auth.uid == userId
+                      && request.resource.data.keys().hasOnly(['enabled', 'consentedAt', 'features', 'updatedAt'])
+                      && request.resource.data.enabled is bool
+                      && (!('features' in request.resource.data) || request.resource.data.features is map);
+        allow delete: if isAuthenticated() && request.auth.uid == userId;
+      }
+
+      // AI usage - rate limit tracking, read-only for client (server writes)
+      match /aiUsage/{windowId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow write: if false;
       }
     }
 
