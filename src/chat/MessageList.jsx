@@ -19,7 +19,15 @@ import { ref, deleteObject } from 'firebase/storage'
 const PREVIEW_MAX_LENGTH = 80
 const MESSAGE_LIMIT = 100
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
-const CONVERSION_TYPES = ['reminder', 'decision', 'memory']
+const CONVERSION_TYPES = ['reminder', 'decision', 'memory', 'promise']
+const EMOTIONAL_RECEIPTS = [
+  { value: 'understood', label: 'I understood' },
+  { value: 'need_time', label: 'I need time' },
+  { value: 'disagree', label: 'I disagree' },
+  { value: 'feel_hurt', label: 'I feel hurt' },
+  { value: 'appreciate', label: 'I appreciate this' },
+  { value: 'talk_later', label: "Let's talk later" },
+]
 
 function truncateText(text, maxLength = PREVIEW_MAX_LENGTH) {
   if (!text) return ''
@@ -53,8 +61,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [convertModal, setConvertModal] = useState(null)
   const [convertTitle, setConvertTitle] = useState('')
   const [convertBody, setConvertBody] = useState('')
+  const [convertOwner, setConvertOwner] = useState('')
   const [converting, setConverting] = useState(false)
   const [convertError, setConvertError] = useState('')
+  const [emotionalReceipts, setEmotionalReceipts] = useState({})
+  const [showReceiptPicker, setShowReceiptPicker] = useState(null)
+  const [chatMembers, setChatMembers] = useState([])
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -74,9 +86,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
         setMessages(messageList)
         setLoading(false)
 
-        // Subscribe to reactions for each message
+        // Subscribe to reactions and emotional receipts for each message
         messageList.forEach((msg) => {
           subscribeToReactions(msg.id)
+          subscribeToEmotionalReceipts(msg.id)
         })
       },
       (err) => {
@@ -94,6 +107,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   }, [chatId])
 
   const reactionUnsubscribes = useRef({})
+  const receiptUnsubscribes = useRef({})
 
   const subscribeToReactions = (messageId) => {
     if (reactionUnsubscribes.current[messageId]) return
@@ -107,11 +121,38 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     reactionUnsubscribes.current[messageId] = unsubscribe
   }
 
+  const subscribeToEmotionalReceipts = (messageId) => {
+    if (receiptUnsubscribes.current[messageId]) return
+
+    const receiptsRef = collection(db, 'chats', chatId, 'messages', messageId, 'emotionalReceipts')
+    const unsubscribe = onSnapshot(receiptsRef, (snapshot) => {
+      const receiptList = snapshot.docs.map((doc) => doc.data())
+      setEmotionalReceipts((prev) => ({ ...prev, [messageId]: receiptList }))
+    }, () => {})
+
+    receiptUnsubscribes.current[messageId] = unsubscribe
+  }
+
   useEffect(() => {
     return () => {
       Object.values(reactionUnsubscribes.current).forEach((unsub) => unsub())
+      Object.values(receiptUnsubscribes.current).forEach((unsub) => unsub())
     }
   }, [])
+
+  useEffect(() => {
+    const fetchChatMembers = async () => {
+      try {
+        const chatDoc = await getDoc(doc(db, 'chats', chatId))
+        if (chatDoc.exists()) {
+          setChatMembers(chatDoc.data().members || [])
+        }
+      } catch (err) {
+        console.error('Error fetching chat members:', err)
+      }
+    }
+    fetchChatMembers()
+  }, [chatId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -311,6 +352,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
 
     setConvertTitle(truncateText(textContent, 200))
     setConvertBody(textContent)
+    setConvertOwner(currentUser.uid)
     setConvertModal({ message, type })
     setConvertError('')
   }
@@ -319,6 +361,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     setConvertModal(null)
     setConvertTitle('')
     setConvertBody('')
+    setConvertOwner('')
     setConvertError('')
   }
 
@@ -373,6 +416,19 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         })
+      } else if (type === 'promise') {
+        await addDoc(collection(db, 'chats', chatId, 'promises'), {
+          title: trimmedTitle,
+          description: convertBody.trim(),
+          ownerUid: convertOwner || currentUser.uid,
+          sourceMessageId: message.id,
+          sourceMessageTextPreview: truncateText(convertBody, 200),
+          status: 'pending',
+          dueAt: null,
+          createdBy: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
       }
       closeConvertModal()
     } catch (err) {
@@ -381,6 +437,49 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     } finally {
       setConverting(false)
     }
+  }
+
+  const handleEmotionalReceipt = async (messageId, receiptValue) => {
+    setShowReceiptPicker(null)
+    const receiptRef = doc(db, 'chats', chatId, 'messages', messageId, 'emotionalReceipts', currentUser.uid)
+
+    const currentReceipts = emotionalReceipts[messageId] || []
+    const myReceipt = currentReceipts.find((r) => r.uid === currentUser.uid)
+
+    try {
+      if (myReceipt?.receipt === receiptValue) {
+        await deleteDoc(receiptRef)
+      } else {
+        await setDoc(receiptRef, {
+          uid: currentUser.uid,
+          receipt: receiptValue,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      }
+    } catch (err) {
+      console.error('Emotional receipt error:', err)
+    }
+  }
+
+  const renderEmotionalReceipts = (messageId) => {
+    const messageReceipts = emotionalReceipts[messageId] || []
+    if (messageReceipts.length === 0) return null
+
+    return (
+      <div className="emotional-receipts">
+        {messageReceipts.map((r) => {
+          const receiptInfo = EMOTIONAL_RECEIPTS.find((er) => er.value === r.receipt)
+          const isOwn = r.uid === currentUser.uid
+          return (
+            <span key={r.uid} className={`emotional-receipt ${isOwn ? 'own' : ''}`}>
+              {receiptInfo?.label || r.receipt}
+              {!isOwn && <span className="receipt-from"> (friend)</span>}
+            </span>
+          )
+        })}
+      </div>
+    )
   }
 
   const renderReactions = (messageId) => {
@@ -573,6 +672,28 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                   <button onClick={() => openConvertModal(message, 'memory')}>
                     Save to Memories
                   </button>
+                  <button onClick={() => openConvertModal(message, 'promise')}>
+                    Track as Promise
+                  </button>
+                  <button onClick={() => {
+                    setShowMoreMenu(null)
+                    setShowReceiptPicker(showReceiptPicker === message.id ? null : message.id)
+                  }}>
+                    Send Receipt
+                  </button>
+                </div>
+              )}
+              {showReceiptPicker === message.id && (
+                <div className="receipt-picker">
+                  {EMOTIONAL_RECEIPTS.map((receipt) => (
+                    <button
+                      key={receipt.value}
+                      className="receipt-option"
+                      onClick={() => handleEmotionalReceipt(message.id, receipt.value)}
+                    >
+                      {receipt.label}
+                    </button>
+                  ))}
                 </div>
               )}
               {showReactionPicker === message.id && (
@@ -616,6 +737,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                 </>
               )}
               {renderReactions(message.id)}
+              {renderEmotionalReceipts(message.id)}
               <div className="message-time">
                 {formatTime(message.createdAt)}
                 {isOwn && message.createdAt && friendLastReadAt && (
@@ -658,6 +780,21 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                     className="convert-textarea"
                     rows={3}
                   />
+                </>
+              )}
+              {convertModal.type === 'promise' && (
+                <>
+                  <label>Who made this promise?</label>
+                  <select
+                    value={convertOwner}
+                    onChange={(e) => setConvertOwner(e.target.value)}
+                    className="convert-select"
+                  >
+                    <option value={currentUser.uid}>I promised</option>
+                    {chatMembers.filter(m => m !== currentUser.uid).map(uid => (
+                      <option key={uid} value={uid}>Friend promised</option>
+                    ))}
+                  </select>
                 </>
               )}
             </div>

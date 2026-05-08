@@ -17,6 +17,8 @@ import Devices from './Devices'
 import Decisions from './Decisions'
 import Vault from './Vault'
 import Dashboard from './Dashboard'
+import Promises from './Promises'
+import CareMode from './CareMode'
 
 const STALE_TYPING_MS = 5000
 
@@ -300,6 +302,15 @@ function ChatPage() {
           ⚖️
         </button>
         <button
+          className={`tab-btn ${activeTab === 'promises' ? 'active' : ''}`}
+          onClick={() => setActiveTab('promises')}
+          role="tab"
+          aria-selected={activeTab === 'promises'}
+          title="Promises"
+        >
+          🤝
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'vault' ? 'active' : ''}`}
           onClick={() => setActiveTab('vault')}
           role="tab"
@@ -316,6 +327,15 @@ function ChatPage() {
           title="Check-in"
         >
           💚
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'care' ? 'active' : ''}`}
+          onClick={() => setActiveTab('care')}
+          role="tab"
+          aria-selected={activeTab === 'care'}
+          title="Care Mode"
+        >
+          🏥
         </button>
         <button
           className={`tab-btn ${activeTab === 'memories' ? 'active' : ''}`}
@@ -375,10 +395,14 @@ function ChatPage() {
         <Lists currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'decisions' ? (
         <Decisions currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      ) : activeTab === 'promises' ? (
+        <Promises currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'vault' ? (
         <Vault currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'checkin' ? (
         <CheckIn currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      ) : activeTab === 'care' ? (
+        <CareMode currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'memories' ? (
         <Memories currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'devices' ? (

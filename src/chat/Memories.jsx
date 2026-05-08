@@ -9,6 +9,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  setDoc,
   serverTimestamp,
 } from 'firebase/firestore'
 
@@ -22,6 +23,10 @@ function Memories({ currentUser, chatId }) {
   const [date, setDate] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [selectedMemory, setSelectedMemory] = useState(null)
+  const [perspectives, setPerspectives] = useState({})
+  const [myPerspective, setMyPerspective] = useState('')
+  const [savingPerspective, setSavingPerspective] = useState(false)
 
   useEffect(() => {
     const memoriesRef = collection(db, 'chats', chatId, 'memories')
@@ -34,10 +39,29 @@ function Memories({ currentUser, chatId }) {
       }))
       setMemories(data)
       setLoading(false)
+
+      // Subscribe to perspectives for each memory
+      data.forEach((memory) => {
+        subscribeToPerspectives(memory.id)
+      })
     })
 
     return unsubscribe
   }, [chatId])
+
+  const perspectiveUnsubscribes = {}
+
+  const subscribeToPerspectives = (memoryId) => {
+    if (perspectiveUnsubscribes[memoryId]) return
+
+    const perspectivesRef = collection(db, 'chats', chatId, 'memories', memoryId, 'perspectives')
+    const unsubscribe = onSnapshot(perspectivesRef, (snapshot) => {
+      const data = snapshot.docs.map((doc) => doc.data())
+      setPerspectives((prev) => ({ ...prev, [memoryId]: data }))
+    }, () => {})
+
+    perspectiveUnsubscribes[memoryId] = unsubscribe
+  }
 
   const resetForm = () => {
     setShowForm(false)
@@ -136,8 +160,71 @@ function Memories({ currentUser, chatId }) {
       if (editingMemory?.id === id) {
         resetForm()
       }
+      if (selectedMemory?.id === id) {
+        setSelectedMemory(null)
+      }
     } catch (err) {
       console.error('Error deleting:', err)
+    }
+  }
+
+  const openMemoryDetail = (memory) => {
+    setSelectedMemory(memory)
+    const memoryPerspectives = perspectives[memory.id] || []
+    const mine = memoryPerspectives.find((p) => p.uid === currentUser.uid)
+    setMyPerspective(mine?.text || '')
+  }
+
+  const closeMemoryDetail = () => {
+    setSelectedMemory(null)
+    setMyPerspective('')
+  }
+
+  const savePerspective = async () => {
+    if (!selectedMemory) return
+    const trimmed = myPerspective.trim()
+    if (!trimmed) return
+    if (trimmed.length > 3000) {
+      alert('Perspective must be 3000 characters or less')
+      return
+    }
+
+    setSavingPerspective(true)
+    try {
+      const perspectiveRef = doc(
+        db,
+        'chats',
+        chatId,
+        'memories',
+        selectedMemory.id,
+        'perspectives',
+        currentUser.uid
+      )
+      await setDoc(perspectiveRef, {
+        uid: currentUser.uid,
+        text: trimmed,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    } catch (err) {
+      console.error('Error saving perspective:', err)
+      alert('Failed to save perspective')
+    } finally {
+      setSavingPerspective(false)
+    }
+  }
+
+  const deletePerspective = async () => {
+    if (!selectedMemory) return
+    if (!window.confirm('Delete your perspective?')) return
+
+    try {
+      await deleteDoc(
+        doc(db, 'chats', chatId, 'memories', selectedMemory.id, 'perspectives', currentUser.uid)
+      )
+      setMyPerspective('')
+    } catch (err) {
+      console.error('Error deleting perspective:', err)
     }
   }
 
@@ -195,28 +282,96 @@ function Memories({ currentUser, chatId }) {
         <div className="no-memories">No memories yet. Create your first one!</div>
       ) : (
         <div className="memories-list">
-          {memories.map((memory) => (
-            <div key={memory.id} className="memory-card" onClick={() => handleEdit(memory)}>
-              <div className="memory-date-badge">{formatDateDisplay(memory.date)}</div>
-              <h3 className="memory-title">{memory.title}</h3>
-              {memory.description && (
-                <p className="memory-description">
-                  {memory.description.length > 150
-                    ? memory.description.slice(0, 150) + '...'
-                    : memory.description}
-                </p>
-              )}
-              <button
-                className="memory-delete"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleDelete(memory.id)
-                }}
-              >
-                ×
-              </button>
+          {memories.map((memory) => {
+            const memPerspectives = perspectives[memory.id] || []
+            return (
+              <div key={memory.id} className="memory-card" onClick={() => openMemoryDetail(memory)}>
+                <div className="memory-date-badge">{formatDateDisplay(memory.date)}</div>
+                <h3 className="memory-title">{memory.title}</h3>
+                {memory.description && (
+                  <p className="memory-description">
+                    {memory.description.length > 150
+                      ? memory.description.slice(0, 150) + '...'
+                      : memory.description}
+                  </p>
+                )}
+                {memPerspectives.length > 0 && (
+                  <div className="memory-perspectives-badge">
+                    {memPerspectives.length} perspective{memPerspectives.length > 1 ? 's' : ''}
+                  </div>
+                )}
+                <div className="memory-card-actions">
+                  <button
+                    className="memory-edit-btn"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleEdit(memory)
+                    }}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="memory-delete"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDelete(memory.id)
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {selectedMemory && (
+        <div className="memory-detail-overlay" onClick={closeMemoryDetail}>
+          <div className="memory-detail" onClick={(e) => e.stopPropagation()}>
+            <div className="memory-detail-header">
+              <h3>{selectedMemory.title}</h3>
+              <button className="memory-detail-close" onClick={closeMemoryDetail}>×</button>
             </div>
-          ))}
+            <div className="memory-detail-date">{formatDateDisplay(selectedMemory.date)}</div>
+            {selectedMemory.description && (
+              <p className="memory-detail-description">{selectedMemory.description}</p>
+            )}
+
+            <div className="perspectives-section">
+              <h4>Our Perspectives</h4>
+              <p className="perspectives-hint">How do you each remember this moment?</p>
+
+              {(perspectives[selectedMemory.id] || []).map((p) => (
+                <div key={p.uid} className={`perspective-card ${p.uid === currentUser.uid ? 'own' : ''}`}>
+                  <div className="perspective-label">
+                    {p.uid === currentUser.uid ? 'Your memory' : "Friend's memory"}
+                  </div>
+                  <p className="perspective-text">{p.text}</p>
+                </div>
+              ))}
+
+              <div className="perspective-form">
+                <label>{perspectives[selectedMemory.id]?.find((p) => p.uid === currentUser.uid) ? 'Update your perspective' : 'Add your perspective'}</label>
+                <textarea
+                  value={myPerspective}
+                  onChange={(e) => setMyPerspective(e.target.value)}
+                  placeholder="What do you remember about this moment?"
+                  maxLength={3000}
+                />
+                <div className="perspective-actions">
+                  <button onClick={savePerspective} disabled={savingPerspective || !myPerspective.trim()}>
+                    {savingPerspective ? 'Saving...' : 'Save'}
+                  </button>
+                  {perspectives[selectedMemory.id]?.find((p) => p.uid === currentUser.uid) && (
+                    <button className="perspective-delete" onClick={deletePerspective}>
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

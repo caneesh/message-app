@@ -1,9 +1,53 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { db, storage } from '../firebase/firebaseConfig'
-import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, setDoc, deleteDoc, getDoc, query, where, orderBy, limit, getDocs, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 
 const MAX_MESSAGE_LENGTH = 2000
+
+const HARSH_PATTERNS = [
+  { pattern: /why didn't you/gi, softer: "Just checking — were you able to" },
+  { pattern: /you never/gi, softer: "I feel like I may not be getting through clearly about" },
+  { pattern: /you always/gi, softer: "It sometimes feels like" },
+  { pattern: /this is wrong/gi, softer: "I think there may be an issue here" },
+  { pattern: /what's wrong with you/gi, softer: "I'm a bit confused about" },
+  { pattern: /I can't believe you/gi, softer: "I was surprised when" },
+  { pattern: /you should have/gi, softer: "It might have helped if" },
+  { pattern: /you forgot/gi, softer: "Did you get a chance to remember" },
+]
+
+const softenMessage = (text) => {
+  let softened = text
+  let wasTransformed = false
+
+  for (const { pattern, softer } of HARSH_PATTERNS) {
+    if (pattern.test(softened)) {
+      softened = softened.replace(pattern, softer)
+      wasTransformed = true
+    }
+  }
+
+  if (!wasTransformed) {
+    const hasHarshIndicators =
+      text === text.toUpperCase() && text.length > 3 ||
+      (text.match(/!/g) || []).length >= 2 ||
+      /\?{2,}/.test(text)
+
+    if (hasHarshIndicators) {
+      softened = "Hey, I wanted to say this gently: " + text.toLowerCase().replace(/!+/g, '.').replace(/\?{2,}/g, '?')
+      wasTransformed = true
+    }
+  }
+
+  if (!wasTransformed && text.length > 10) {
+    softened = "Hey, " + text.charAt(0).toLowerCase() + text.slice(1)
+    wasTransformed = true
+  }
+
+  return { softened, wasTransformed }
+}
+
+const STRESSED_MOODS = ['😟', '😴']
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
 const ALLOWED_TYPES = [
   'image/jpeg',
@@ -37,9 +81,46 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   const [error, setError] = useState('')
   const [uploadProgress, setUploadProgress] = useState(null)
   const [showQuickActions, setShowQuickActions] = useState(false)
+  const [showToneOptions, setShowToneOptions] = useState(false)
+  const [toneSuggestion, setToneSuggestion] = useState(null)
+  const [partnerMood, setPartnerMood] = useState(null)
+  const [showMoodNudge, setShowMoodNudge] = useState(false)
+  const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const fileInputRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const isTypingRef = useRef(false)
+
+  useEffect(() => {
+    const fetchPartnerMood = async () => {
+      try {
+        const chatDoc = await getDoc(doc(db, 'chats', chatId))
+        if (!chatDoc.exists()) return
+
+        const members = chatDoc.data().members || []
+        const partnerUid = members.find(m => m !== currentUser.uid)
+        if (!partnerUid) return
+
+        const today = new Date().toISOString().split('T')[0]
+        const checkInsRef = collection(db, 'chats', chatId, 'checkIns')
+        const q = query(
+          checkInsRef,
+          where('userId', '==', partnerUid),
+          where('dateKey', '==', today),
+          limit(1)
+        )
+        const snapshot = await getDocs(q)
+        if (!snapshot.empty) {
+          const checkIn = snapshot.docs[0].data()
+          if (STRESSED_MOODS.includes(checkIn.mood)) {
+            setPartnerMood(checkIn.mood)
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching partner mood:', err)
+      }
+    }
+    fetchPartnerMood()
+  }, [chatId, currentUser.uid])
 
   const setTypingStatus = useCallback(async (isTyping) => {
     try {
@@ -118,14 +199,31 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   }
 
   const handleChange = (e) => {
-    setText(e.target.value)
+    const newText = e.target.value
+    setText(newText)
     if (error) setError('')
+    setToneSuggestion(null)
+    setShowToneOptions(false)
+
+    // Check for harsh patterns when partner is stressed
+    if (partnerMood && !nudgeDismissed && newText.trim().length > 10) {
+      const hasHarshIndicators =
+        newText === newText.toUpperCase() && newText.length > 5 ||
+        (newText.match(/!/g) || []).length >= 2 ||
+        HARSH_PATTERNS.some(({ pattern }) => pattern.test(newText))
+
+      if (hasHarshIndicators) {
+        setShowMoodNudge(true)
+      }
+    } else {
+      setShowMoodNudge(false)
+    }
 
     // Debounced typing status - only write to Firestore when status changes
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
-    if (e.target.value.trim()) {
+    if (newText.trim()) {
       if (!isTypingRef.current) {
         isTypingRef.current = true
         setTypingStatus(true)
@@ -138,6 +236,33 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
       isTypingRef.current = false
       setTypingStatus(false)
     }
+  }
+
+  const handleToneOption = (option) => {
+    setShowToneOptions(false)
+    const result = softenMessage(text)
+    if (result.wasTransformed) {
+      setToneSuggestion({ original: text, softened: result.softened, option })
+    } else {
+      setToneSuggestion({ original: text, softened: "Hey, " + text, option })
+    }
+  }
+
+  const acceptToneSuggestion = () => {
+    if (toneSuggestion) {
+      setText(toneSuggestion.softened)
+      setToneSuggestion(null)
+      setShowMoodNudge(false)
+    }
+  }
+
+  const cancelToneSuggestion = () => {
+    setToneSuggestion(null)
+  }
+
+  const dismissMoodNudge = () => {
+    setShowMoodNudge(false)
+    setNudgeDismissed(true)
   }
 
   const handleQuickAction = async (action) => {
@@ -270,6 +395,27 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           Message too long ({trimmedText.length}/{MAX_MESSAGE_LENGTH})
         </div>
       )}
+      {showMoodNudge && partnerMood && (
+        <div className="mood-nudge">
+          <span>
+            {partnerMood === '😟' ? "They seem stressed today." : "They seem tired today."} Consider sending this gently.
+          </span>
+          <div className="mood-nudge-actions">
+            <button onClick={() => setShowToneOptions(true)}>Soften</button>
+            <button onClick={dismissMoodNudge}>Dismiss</button>
+          </div>
+        </div>
+      )}
+      {toneSuggestion && (
+        <div className="tone-suggestion">
+          <div className="tone-suggestion-label">Suggested softer version:</div>
+          <div className="tone-suggestion-text">{toneSuggestion.softened}</div>
+          <div className="tone-suggestion-actions">
+            <button className="tone-accept" onClick={acceptToneSuggestion}>Accept</button>
+            <button className="tone-cancel" onClick={cancelToneSuggestion}>Keep Original</button>
+          </div>
+        </div>
+      )}
       {uploadProgress !== null && (
         <div className="upload-progress">
           <div className="upload-progress-bar" style={{ width: `${uploadProgress}%` }} />
@@ -288,6 +434,14 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
               {action.text}
             </button>
           ))}
+        </div>
+      )}
+      {showToneOptions && (
+        <div className="tone-options">
+          <button onClick={() => handleToneOption('softer')}>Make softer</button>
+          <button onClick={() => handleToneOption('clearer')}>Make clearer</button>
+          <button onClick={() => handleToneOption('caring')}>Make more caring</button>
+          <button onClick={() => setShowToneOptions(false)}>Cancel</button>
         </div>
       )}
       {activeReplyTo && (
@@ -332,6 +486,18 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
         >
           📎
         </button>
+        {trimmedText.length > 5 && (
+          <button
+            type="button"
+            className="tone-btn"
+            onClick={() => setShowToneOptions(!showToneOptions)}
+            disabled={sending}
+            title="Soften tone"
+            aria-label="Soften message tone"
+          >
+            💝
+          </button>
+        )}
         <input
           type="text"
           placeholder="Type a message..."
