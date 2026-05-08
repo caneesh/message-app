@@ -1,22 +1,89 @@
 # Message App
 
-A simple private one-to-one messaging app built with React, Vite, and Firebase. Designed for secure communication between two known users.
+A private shared space for two people to communicate, remember, plan, and care for each other. Built with React, Vite, and Firebase.
+
+## Overview
+
+More than just a chat app - this is a complete private space for couples, close friends, or family members to:
+- Chat in real-time with rich features
+- Track shared reminders with accountability
+- Record important decisions
+- Store memories together
+- Manage shared lists and events
+- Keep important information in a vault
 
 ## Tech Stack
 
-- React 18
-- Vite
-- Firebase Authentication (phone/SMS)
-- Cloud Firestore
-- Firebase Hosting
+- **Frontend:** React 18, Vite
+- **Backend:** Firebase (Authentication, Firestore, Storage, Cloud Functions, Cloud Messaging)
+- **Hosting:** Firebase Hosting
 
 ## Features
 
-- Phone/SMS authentication
+### Chat
 - Real-time messaging
-- Private chat between two users
-- Mobile-responsive UI
-- PWA-ready (manifest included)
+- Reply to messages
+- Edit and delete messages
+- Message reactions (emoji)
+- Pin important messages
+- Typing indicators
+- Read receipts
+- Photo and file sharing (up to 5MB)
+- Quick status buttons (Reached safely, On the way, Call me, etc.)
+- Search messages
+
+### Dashboard
+- Today's overview at a glance
+- Overdue and due-today reminders
+- Upcoming events
+- Recent check-ins
+- Active decisions
+
+### Reminders
+- Shared reminders with due dates
+- Assign to yourself or partner
+- Priority levels (low, normal, high)
+- Track who completed what
+
+### Decisions
+- Record important decisions
+- Track status (active, changed, cancelled)
+- Add reasoning/context
+- Link to source messages
+
+### Memories
+- Save meaningful moments
+- Add descriptions and dates
+- Link photos from chat
+
+### Lists
+- Shared lists (groceries, packing, etc.)
+- Check off items
+- Track who completed what
+
+### Events
+- Shared calendar events
+- Categorize by type (appointment, travel, birthday, etc.)
+- Set date and time
+
+### Vault
+- Store important information
+- Categories: emergency, health, home, travel, school, finance
+- Search and filter
+- Note: Not for passwords or highly sensitive data
+
+### Check-in
+- Daily mood/status check-in
+- See how your partner is feeling
+- Optional notes
+
+### Other Features
+- Dark mode
+- Push notifications
+- Device management
+- PIN lock screen
+- Auto-delete old messages (configurable)
+- Convert messages to reminders/decisions/memories
 
 ## Project Structure
 
@@ -24,13 +91,28 @@ A simple private one-to-one messaging app built with React, Vite, and Firebase. 
 src/
   firebase/       # Firebase configuration
   auth/           # Authentication components
-  chat/           # Chat components
+  chat/           # Chat and feature components
+    ChatPage.jsx
+    MessageList.jsx
+    MessageInput.jsx
+    Dashboard.jsx
+    Reminders.jsx
+    Decisions.jsx
+    Vault.jsx
+    Memories.jsx
+    Events.jsx
+    Lists.jsx
+    Notes.jsx
+    CheckIn.jsx
+    Settings.jsx
+    Devices.jsx
   layout/         # Layout components
   App.jsx         # Main app component
   main.jsx        # Entry point
   styles.css      # Global styles
-scripts/
-  createPrivateChat.js  # Admin script to create chat
+functions/        # Cloud Functions
+public/           # Static assets and service worker
+scripts/          # Admin scripts
 ```
 
 ## Setup
@@ -39,63 +121,58 @@ scripts/
 
 ```bash
 npm install
+cd functions && npm install && cd ..
 ```
 
 ### 2. Create a Firebase Project
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Click "Add project"
-3. Enter a project name and follow the setup wizard
-4. Once created, click the web icon (</>) to add a web app
-5. Register your app with a nickname
-6. Copy the Firebase config values shown
+2. Click "Add project" and follow the wizard
+3. Add a web app and copy the config values
 
-### 3. Enable Phone Authentication
+### 3. Enable Authentication
 
-1. In Firebase Console, go to **Authentication** > **Sign-in method**
-2. Click on **Phone**
-3. Enable the toggle
-4. Click **Save**
-
-#### Testing with Test Phone Numbers
-
-For development, add test phone numbers to avoid SMS charges:
-
-1. In Firebase Console, go to **Authentication** > **Sign-in method** > **Phone**
-2. Scroll to **Phone numbers for testing**
-3. Add test numbers (e.g., `+15555550100`) with verification codes (e.g., `123456`)
+1. Go to **Authentication** > **Sign-in method**
+2. Enable **Phone** authentication
+3. (Optional) Add test phone numbers for development
 
 ### 4. Create Firestore Database
 
-1. In Firebase Console, go to **Firestore Database**
-2. Click **Create database**
-3. Choose **Start in test mode** (we'll add security rules later)
-4. Select a location closest to your users
-5. Click **Enable**
+1. Go to **Firestore Database** > **Create database**
+2. Start in test mode, select a region
+3. Click **Enable**
 
-### 5. Create Users and Set Up Private Chat
+### 5. Enable Storage
+
+1. Go to **Storage** > **Get started**
+2. Start in test mode
+3. Select a region and click **Done**
+
+### 6. Set Up Cloud Messaging (Push Notifications)
+
+1. Go to **Project Settings** > **Cloud Messaging**
+2. Under "Web Push certificates", click **Generate key pair**
+3. Copy the VAPID key for your `.env` file
+
+### 7. Create Users and Private Chat
 
 #### Create Two Users
-
 1. Run the app with `npm run dev`
-2. Sign in with the first phone number - note the UID from Firebase Console > Authentication > Users
-3. Sign out and sign in with the second phone number - note the UID
+2. Sign in with two different phone numbers
+3. Note both UIDs from Firebase Console > Authentication > Users
 
 #### Download Service Account Key
-
-1. Go to Firebase Console > Project Settings > Service accounts
+1. Go to **Project Settings** > **Service accounts**
 2. Click **Generate new private key**
-3. Save the JSON file as `serviceAccountKey.json` in your project root
-4. **Never commit this file** - it's in `.gitignore`
+3. Save as `serviceAccountKey.json` in project root
+4. **Never commit this file**
 
 #### Configure Admin Environment
-
 ```bash
 cp .env.admin.example .env.admin
 ```
 
 Edit `.env.admin`:
-
 ```
 GOOGLE_APPLICATION_CREDENTIALS=./serviceAccountKey.json
 PRIVATE_CHAT_ID=private-chat-001
@@ -103,37 +180,42 @@ USER_ID_1=uid_of_first_user
 USER_ID_2=uid_of_second_user
 ```
 
-#### Run the Setup Script
-
+#### Run Setup Script
 ```bash
 npm run create-chat
 ```
 
-### 6. Configure Frontend Environment Variables
+### 8. Configure Frontend Environment
 
 ```bash
 cp .env.example .env
 ```
 
 Edit `.env`:
-
 ```
-VITE_FIREBASE_API_KEY=AIzaSy...
+VITE_FIREBASE_API_KEY=your_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=your-project
 VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
 VITE_FIREBASE_APP_ID=1:123456789:web:abc123
 VITE_PRIVATE_CHAT_ID=private-chat-001
+VITE_FIREBASE_VAPID_KEY=your_vapid_key
 ```
 
-### 7. Deploy Firestore Security Rules
+### 9. Deploy Security Rules and Indexes
 
 ```bash
-firebase deploy --only firestore:rules
+firebase deploy --only firestore,storage
 ```
 
-### 8. Run Development Server
+### 10. Deploy Cloud Functions
+
+```bash
+firebase deploy --only functions
+```
+
+### 11. Run Development Server
 
 ```bash
 npm run dev
@@ -141,21 +223,21 @@ npm run dev
 
 ## Deployment
 
-### Deploy to Firebase Hosting
-
-```bash
-npm run build
-firebase deploy --only hosting
-```
-
-Or deploy everything:
-
+### Full Deployment
 ```bash
 npm run build
 firebase deploy
 ```
 
-## Useful Commands
+### Partial Deployment
+```bash
+firebase deploy --only hosting          # Frontend only
+firebase deploy --only firestore        # Rules and indexes
+firebase deploy --only storage          # Storage rules
+firebase deploy --only functions        # Cloud Functions
+```
+
+## Commands
 
 | Command | Description |
 |---------|-------------|
@@ -163,22 +245,25 @@ firebase deploy
 | `npm run dev` | Start development server |
 | `npm run build` | Build for production |
 | `npm run create-chat` | Create private chat (admin) |
-| `firebase deploy --only firestore:rules` | Deploy security rules |
-| `firebase deploy --only hosting` | Deploy to hosting |
+| `firebase deploy` | Deploy everything |
+| `firebase deploy --only hosting` | Deploy frontend |
+| `firebase deploy --only firestore` | Deploy Firestore rules/indexes |
+| `firebase deploy --only functions` | Deploy Cloud Functions |
 
 ## Environment Variables
 
 ### Frontend (.env)
 
-| Variable | Description |
-|----------|-------------|
-| `VITE_FIREBASE_API_KEY` | Firebase API key |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase auth domain |
-| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID |
-| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase storage bucket |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase sender ID |
-| `VITE_FIREBASE_APP_ID` | Firebase app ID |
-| `VITE_PRIVATE_CHAT_ID` | ID of the private chat |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_FIREBASE_API_KEY` | Yes | Firebase API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Yes | Firebase auth domain |
+| `VITE_FIREBASE_PROJECT_ID` | Yes | Firebase project ID |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Yes | Firebase storage bucket |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Yes | Firebase sender ID |
+| `VITE_FIREBASE_APP_ID` | Yes | Firebase app ID |
+| `VITE_PRIVATE_CHAT_ID` | Yes | ID of the private chat |
+| `VITE_FIREBASE_VAPID_KEY` | No | For push notifications |
 
 ### Admin (.env.admin)
 
@@ -189,53 +274,67 @@ firebase deploy
 | `USER_ID_1` | First user's Firebase UID |
 | `USER_ID_2` | Second user's Firebase UID |
 
-## Security Notes
+## Security
 
-- **Access-Controlled:** Only the two configured users can read/write messages
-- **Not End-to-End Encrypted:** Messages are stored in Firestore. Firebase admins and project owners can technically access stored data
-- **Do not use for highly sensitive communication** unless you add end-to-end encryption
-- **Never commit:** `serviceAccountKey.json`, `.env`, or `.env.admin`
+### What's Protected
+- Only the two configured users can access the chat and all features
+- Firestore rules validate all data writes
+- Storage rules restrict file uploads to authenticated members
+- File uploads are type and size restricted
 
-## Limitations
+### Limitations
+- **Not end-to-end encrypted:** Data is encrypted in transit and at rest by Firebase, but project admins can technically access it
+- **Vault is not for secrets:** Do not store passwords, SSNs, or credit card numbers
+- **Firebase access:** Anyone with Firebase project access can view data
 
-- One fixed chat only (no group chat)
-- No file attachments
-- No push notifications
-- No message editing or deletion
-- No end-to-end encryption
-- No offline support
-- No read receipts or typing indicators
+### Security Best Practices
+- Never commit `serviceAccountKey.json`, `.env`, or `.env.admin`
+- Use strong, unique passwords for your Firebase account
+- Enable 2FA on your Google account
+- Regularly review Firebase Console access
+
+## Cloud Functions
+
+The app includes these Cloud Functions:
+
+| Function | Description |
+|----------|-------------|
+| `sendNewMessageNotification` | Send push notification when new message arrives |
+| `cleanupOldMessages` | Auto-delete old messages (runs daily) |
+| `createInvite` | Generate invite codes |
+| `redeemInvite` | Redeem invite codes |
 
 ## Troubleshooting
 
-### "Missing required environment variables"
-
-Check that your `.env` file exists and contains all required `VITE_FIREBASE_*` values.
-
 ### "You do not have access to this chat"
+1. Verify `VITE_PRIVATE_CHAT_ID` matches the created chat
+2. Ensure your UID is in the chat's `members` array
+3. Deploy Firestore rules: `firebase deploy --only firestore:rules`
 
-1. Verify `VITE_PRIVATE_CHAT_ID` matches the chat created by the admin script
-2. Ensure your user UID is in the chat's `members` array
-3. Check that Firestore security rules are deployed
+### Push notifications not working
+1. Ensure VAPID key is set in `.env`
+2. Check that the service worker is registered
+3. Verify browser notification permissions
 
-### Phone auth not working
+### File upload fails
+1. Check file size (max 5MB)
+2. Verify file type is allowed
+3. Deploy storage rules: `firebase deploy --only storage`
 
-1. Ensure Phone authentication is enabled in Firebase Console
-2. For testing, use test phone numbers to avoid SMS quota issues
-3. Check browser console for reCAPTCHA errors
+### Cloud Functions errors
+1. Check function logs: `firebase functions:log`
+2. Verify Node.js version is 20 in `functions/package.json`
+3. Redeploy: `firebase deploy --only functions`
 
-### Permission denied errors
+## Known Limitations
 
-1. Deploy Firestore rules: `firebase deploy --only firestore:rules`
-2. Verify the chat document exists and contains your UID in `members`
+- Single private chat only (no group chats)
+- No end-to-end encryption
+- No offline support
+- No video/voice calls
+- No recurring reminders
+- Push notifications require browser support
 
-## Future Enhancements
+## License
 
-- End-to-end encryption
-- Push notifications
-- Message deletion
-- Read receipts
-- Typing indicators
-- Multiple chat support
-- File attachments
-- Offline support with service worker
+Private project - not for redistribution.
