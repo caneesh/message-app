@@ -67,6 +67,9 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [emotionalReceipts, setEmotionalReceipts] = useState({})
   const [showReceiptPicker, setShowReceiptPicker] = useState(null)
   const [chatMembers, setChatMembers] = useState([])
+  const [capsules, setCapsules] = useState([])
+  const [showCapsulePicker, setShowCapsulePicker] = useState(null)
+  const [addingToCapsule, setAddingToCapsule] = useState(false)
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
@@ -152,6 +155,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
       }
     }
     fetchChatMembers()
+  }, [chatId])
+
+  useEffect(() => {
+    const capsulesRef = collection(db, 'chats', chatId, 'capsules')
+    const q = query(capsulesRef, orderBy('createdAt', 'desc'))
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setCapsules(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })))
+    }, () => {})
+    return unsubscribe
   }, [chatId])
 
   useEffect(() => {
@@ -462,6 +474,31 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     }
   }
 
+  const handleAddToCapsule = async (message, capsuleId) => {
+    setShowCapsulePicker(null)
+    setShowMoreMenu(null)
+    setAddingToCapsule(true)
+
+    const textContent = message.type === 'file' && message.file
+      ? `📎 ${message.file.fileName}`
+      : message.text || ''
+
+    try {
+      await addDoc(collection(db, 'chats', chatId, 'capsules', capsuleId, 'links'), {
+        targetType: 'message',
+        targetId: message.id,
+        textPreview: truncateText(textContent, 100),
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+      })
+    } catch (err) {
+      console.error('Error adding to capsule:', err)
+      alert('Failed to add to capsule')
+    } finally {
+      setAddingToCapsule(false)
+    }
+  }
+
   const renderEmotionalReceipts = (messageId) => {
     const messageReceipts = emotionalReceipts[messageId] || []
     if (messageReceipts.length === 0) return null
@@ -681,6 +718,29 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                   }}>
                     Send Receipt
                   </button>
+                  {capsules.length > 0 && (
+                    <button onClick={() => {
+                      setShowMoreMenu(null)
+                      setShowCapsulePicker(showCapsulePicker === message.id ? null : message.id)
+                    }}>
+                      Add to Capsule
+                    </button>
+                  )}
+                </div>
+              )}
+              {showCapsulePicker === message.id && (
+                <div className="capsule-picker">
+                  {capsules.map((capsule) => (
+                    <button
+                      key={capsule.id}
+                      className="capsule-option"
+                      onClick={() => handleAddToCapsule(message, capsule.id)}
+                      disabled={addingToCapsule}
+                      style={{ borderLeftColor: capsule.color }}
+                    >
+                      {capsule.title}
+                    </button>
+                  ))}
                 </div>
               )}
               {showReceiptPicker === message.id && (

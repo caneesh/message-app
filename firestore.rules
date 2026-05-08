@@ -448,6 +448,93 @@ service cloud.firestore {
         allow delete: if isAuthenticated() && isChatMember(chatId);
       }
 
+      // Misunderstandings subcollection (Clear the Air)
+      match /misunderstandings/{markerId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['whatIMeant', 'whatIHeard', 'whatINeed', 'status', 'responseByOther', 'createdBy', 'createdAt', 'updatedAt', 'resolvedBy', 'resolvedAt'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.status in ['open', 'resolved']
+                      && (!('whatIMeant' in request.resource.data) || (request.resource.data.whatIMeant is string && request.resource.data.whatIMeant.size() <= 1000))
+                      && (!('whatIHeard' in request.resource.data) || (request.resource.data.whatIHeard is string && request.resource.data.whatIHeard.size() <= 1000))
+                      && (!('whatINeed' in request.resource.data) || (request.resource.data.whatINeed is string && request.resource.data.whatINeed.size() <= 1000));
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['whatIMeant', 'whatIHeard', 'whatINeed', 'status', 'responseByOther', 'createdBy', 'createdAt', 'updatedAt', 'resolvedBy', 'resolvedAt'])
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.status in ['open', 'resolved']
+                      && (!('whatIMeant' in request.resource.data) || (request.resource.data.whatIMeant is string && request.resource.data.whatIMeant.size() <= 1000))
+                      && (!('whatIHeard' in request.resource.data) || (request.resource.data.whatIHeard is string && request.resource.data.whatIHeard.size() <= 1000))
+                      && (!('whatINeed' in request.resource.data) || (request.resource.data.whatINeed is string && request.resource.data.whatINeed.size() <= 1000))
+                      && (!('responseByOther' in request.resource.data) || (request.resource.data.responseByOther is string && request.resource.data.responseByOther.size() <= 1000));
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+      }
+
+      // Context Capsules subcollection
+      match /capsules/{capsuleId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'description', 'color', 'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 100
+                      && (!('description' in request.resource.data) || (request.resource.data.description is string && request.resource.data.description.size() <= 500));
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'description', 'color', 'createdBy', 'createdAt', 'updatedBy', 'updatedAt'])
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.updatedBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 100
+                      && (!('description' in request.resource.data) || (request.resource.data.description is string && request.resource.data.description.size() <= 500));
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+
+        // Capsule links subcollection
+        match /links/{linkId} {
+          allow read: if isAuthenticated() && isChatMember(chatId);
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && request.resource.data.keys().hasOnly(['targetType', 'targetId', 'textPreview', 'createdBy', 'createdAt'])
+                        && request.resource.data.createdBy == request.auth.uid
+                        && request.resource.data.targetType in ['message', 'file', 'reminder', 'note', 'decision', 'event', 'memory', 'vaultItem']
+                        && request.resource.data.targetId is string
+                        && request.resource.data.textPreview is string
+                        && request.resource.data.textPreview.size() <= 200;
+          allow delete: if isAuthenticated() && isChatMember(chatId);
+        }
+      }
+
+      // Gentle follow-ups subcollection
+      match /followUps/{followUpId} {
+        allow read: if isAuthenticated() && isChatMember(chatId);
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'relatedType', 'relatedId', 'messageText', 'dueAt', 'assignedTo', 'status', 'sentAt', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && request.resource.data.messageText is string
+                      && request.resource.data.messageText.size() <= 500
+                      && request.resource.data.status in ['pending', 'sent', 'dismissed', 'cancelled']
+                      && request.resource.data.relatedType in ['promise', 'reminder', 'message', 'decision', 'other'];
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && request.resource.data.keys().hasOnly(['title', 'relatedType', 'relatedId', 'messageText', 'dueAt', 'assignedTo', 'status', 'sentAt', 'createdBy', 'createdAt', 'updatedAt'])
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() > 0
+                      && request.resource.data.title.size() <= 200
+                      && request.resource.data.messageText is string
+                      && request.resource.data.messageText.size() <= 500
+                      && request.resource.data.status in ['pending', 'sent', 'dismissed', 'cancelled'];
+        allow delete: if isAuthenticated() && isChatMember(chatId);
+      }
+
       // Vault items subcollection
       match /vaultItems/{itemId} {
         allow read: if isAuthenticated() && isChatMember(chatId);

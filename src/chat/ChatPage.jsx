@@ -19,6 +19,9 @@ import Vault from './Vault'
 import Dashboard from './Dashboard'
 import Promises from './Promises'
 import CareMode from './CareMode'
+import Misunderstandings from './Misunderstandings'
+import Capsules from './Capsules'
+import FollowUps from './FollowUps'
 
 const STALE_TYPING_MS = 5000
 
@@ -311,6 +314,33 @@ function ChatPage() {
           🤝
         </button>
         <button
+          className={`tab-btn ${activeTab === 'followups' ? 'active' : ''}`}
+          onClick={() => setActiveTab('followups')}
+          role="tab"
+          aria-selected={activeTab === 'followups'}
+          title="Follow-ups"
+        >
+          🔔
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'capsules' ? 'active' : ''}`}
+          onClick={() => setActiveTab('capsules')}
+          role="tab"
+          aria-selected={activeTab === 'capsules'}
+          title="Capsules"
+        >
+          📦
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'misunderstandings' ? 'active' : ''}`}
+          onClick={() => setActiveTab('misunderstandings')}
+          role="tab"
+          aria-selected={activeTab === 'misunderstandings'}
+          title="Clear the Air"
+        >
+          🕊️
+        </button>
+        <button
           className={`tab-btn ${activeTab === 'vault' ? 'active' : ''}`}
           onClick={() => setActiveTab('vault')}
           role="tab"
@@ -397,6 +427,12 @@ function ChatPage() {
         <Decisions currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'promises' ? (
         <Promises currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      ) : activeTab === 'followups' ? (
+        <FollowUps currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      ) : activeTab === 'capsules' ? (
+        <Capsules currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      ) : activeTab === 'misunderstandings' ? (
+        <Misunderstandings currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'vault' ? (
         <Vault currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       ) : activeTab === 'checkin' ? (

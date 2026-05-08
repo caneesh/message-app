@@ -4972,3 +4972,941 @@ body.dark-mode .care-item {
 body.dark-mode .care-item-text {
   color: #e0e0e0;
 }
+
+/* Misunderstandings (Clear the Air) */
+.misunderstandings-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.misunderstandings-container.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.misunderstandings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.misunderstandings-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.add-marker-btn {
+  padding: 8px 16px;
+  background: #6c63ff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.misunderstandings-intro {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.marker-form {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.marker-error {
+  padding: 10px;
+  background: #fff3f3;
+  color: #dc3545;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.marker-field {
+  margin-bottom: 14px;
+}
+
+.marker-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6c63ff;
+  margin-bottom: 6px;
+}
+
+.marker-field textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.marker-field textarea:focus {
+  outline: none;
+  border-color: #6c63ff;
+}
+
+.marker-submit {
+  width: 100%;
+  padding: 12px;
+  background: #6c63ff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.no-markers {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.markers-section {
+  margin-bottom: 20px;
+}
+
+.markers-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.markers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.marker-card {
+  background: white;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  cursor: pointer;
+  border-left: 4px solid #6c63ff;
+}
+
+.marker-card.own {
+  border-left-color: #28a745;
+}
+
+.marker-card.resolved {
+  opacity: 0.6;
+  border-left-color: #6c757d;
+}
+
+.marker-meta {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.marker-preview {
+  font-size: 14px;
+  color: #333;
+  font-style: italic;
+}
+
+.marker-has-response {
+  font-size: 11px;
+  color: #28a745;
+  margin-top: 6px;
+}
+
+.marker-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.marker-detail {
+  background: white;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.marker-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.marker-detail-header h3 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.marker-detail-header button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.marker-detail-content {
+  padding: 20px;
+}
+
+.marker-author {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.marker-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.marker-section.response {
+  background: #e7f3ff;
+}
+
+.marker-section label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6c63ff;
+  margin-bottom: 6px;
+}
+
+.marker-section p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.marker-respond {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.marker-respond label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.marker-respond textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  margin-bottom: 10px;
+  font-family: inherit;
+}
+
+.marker-respond button {
+  padding: 10px 20px;
+  background: #6c63ff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.marker-detail-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.marker-detail-actions .resolve-btn {
+  flex: 1;
+  padding: 12px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.marker-detail-actions .delete-btn {
+  padding: 12px 20px;
+  background: #f8d7da;
+  color: #dc3545;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Context Capsules */
+.capsules-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.capsules-container.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.capsules-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.capsules-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.add-capsule-btn {
+  padding: 8px 16px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.capsules-intro {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.capsule-form {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.capsule-error {
+  padding: 10px;
+  background: #fff3f3;
+  color: #dc3545;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.capsule-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.capsule-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  margin-bottom: 12px;
+  font-family: inherit;
+}
+
+.capsule-colors {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.color-btn {
+  width: 32px;
+  height: 32px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.color-btn.selected {
+  border-color: #333;
+}
+
+.capsule-submit {
+  width: 100%;
+  padding: 12px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.no-capsules {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.capsules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.capsule-card {
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  position: relative;
+  min-height: 100px;
+}
+
+.capsule-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+}
+
+.capsule-description {
+  font-size: 12px;
+  color: #666;
+  margin: 0 0 8px 0;
+}
+
+.capsule-link-count {
+  font-size: 11px;
+  color: #666;
+}
+
+.capsule-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.capsule-card-actions button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: rgba(255,255,255,0.8);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.capsule-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.capsule-detail {
+  background: white;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-top: 4px solid #007bff;
+}
+
+.capsule-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.capsule-detail-header h3 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.capsule-detail-header button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.capsule-detail-description {
+  padding: 12px 20px;
+  font-size: 14px;
+  color: #666;
+}
+
+.capsule-links-section {
+  padding: 20px;
+}
+
+.capsule-links-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.no-links {
+  padding: 20px;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.capsule-links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.capsule-link-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.link-icon {
+  font-size: 18px;
+}
+
+.link-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.link-type {
+  display: block;
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.link-preview {
+  display: block;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-delete {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: #f8d7da;
+  color: #dc3545;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* Capsule picker in message menu */
+.capsule-picker {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  padding: 8px;
+  min-width: 180px;
+}
+
+.capsule-option {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-left: 3px solid #007bff;
+  background: transparent;
+  text-align: left;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 4px;
+}
+
+.capsule-option:hover {
+  background: #f0f0f0;
+}
+
+.capsule-option:last-child {
+  margin-bottom: 0;
+}
+
+/* Gentle Follow-ups */
+.followups-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.followups-container.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.followups-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.followups-header h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.add-followup-btn {
+  padding: 8px 16px;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.followups-intro {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.followups-note {
+  font-size: 12px;
+  color: #856404;
+  background: #fff3cd;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.followup-form {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.followup-error {
+  padding: 10px;
+  background: #fff3f3;
+  color: #dc3545;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.followup-input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.followup-field {
+  margin-bottom: 12px;
+}
+
+.followup-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.followup-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 8px;
+  background: white;
+}
+
+.followup-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.followup-datetime {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.followup-submit {
+  width: 100%;
+  padding: 12px;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.no-followups {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.followups-section {
+  margin-bottom: 20px;
+}
+
+.followups-section.due h3 {
+  color: #dc3545;
+}
+
+.followups-section.completed {
+  opacity: 0.7;
+}
+
+.followups-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.followups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.followup-card {
+  background: white;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.followup-card.due {
+  border-left: 4px solid #dc3545;
+  background: #fff5f5;
+}
+
+.followup-card.sent {
+  border-left: 4px solid #28a745;
+}
+
+.followup-card.dismissed {
+  border-left: 4px solid #6c757d;
+}
+
+.followup-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.followup-title {
+  font-weight: 500;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.followup-message {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+  margin-bottom: 4px;
+}
+
+.followup-due {
+  font-size: 12px;
+  color: #888;
+}
+
+.followup-status {
+  font-size: 12px;
+  color: #28a745;
+}
+
+.followup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.followup-actions .send-btn {
+  padding: 8px 16px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.followup-actions .dismiss-btn {
+  padding: 8px 16px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.followup-card .delete-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+/* Dark mode for new components */
+body.dark-mode .marker-form,
+body.dark-mode .capsule-form,
+body.dark-mode .followup-form {
+  background: #2a2a2a;
+}
+
+body.dark-mode .marker-field textarea,
+body.dark-mode .capsule-input,
+body.dark-mode .capsule-textarea,
+body.dark-mode .followup-input,
+body.dark-mode .followup-select,
+body.dark-mode .followup-textarea,
+body.dark-mode .followup-datetime {
+  background: #333;
+  border-color: #444;
+  color: white;
+}
+
+body.dark-mode .marker-card,
+body.dark-mode .followup-card {
+  background: #2a2a2a;
+}
+
+body.dark-mode .marker-preview,
+body.dark-mode .followup-title {
+  color: #e0e0e0;
+}
+
+body.dark-mode .marker-detail,
+body.dark-mode .capsule-detail {
+  background: #2a2a2a;
+}
+
+body.dark-mode .marker-detail-header,
+body.dark-mode .capsule-detail-header {
+  border-color: #444;
+}
+
+body.dark-mode .marker-detail-header h3,
+body.dark-mode .capsule-detail-header h3 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .marker-section {
+  background: #333;
+}
+
+body.dark-mode .marker-section.response {
+  background: #1a3a5c;
+}
+
+body.dark-mode .marker-section p {
+  color: #e0e0e0;
+}
+
+body.dark-mode .capsule-card {
+  background: #333;
+}
+
+body.dark-mode .capsule-title {
+  color: #e0e0e0;
+}
+
+body.dark-mode .capsule-link-item {
+  background: #333;
+}
+
+body.dark-mode .capsule-picker {
+  background: #2a2a2a;
+}
+
+body.dark-mode .capsule-option:hover {
+  background: #333;
+}
+
+body.dark-mode .followups-note {
+  background: #3a3520;
+  color: #ffc107;
+}
