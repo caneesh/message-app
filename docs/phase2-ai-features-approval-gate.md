@@ -1,49 +1,73 @@
-# Phase 2 AI Features - Implementation Approval Gate
+# Phase 2 AI Features - Implementation Approval Gate (Revised)
 
 ## Overview
 
 | Feature | Purpose | Trigger |
 |---------|---------|---------|
-| Misunderstanding Helper | Suggests clarification message when conflict detected | User clicks "✨ AI Help" in Clear the Air |
-| Gentle Follow-up Generator | Drafts polite follow-up for unanswered messages | User clicks "✨ AI Follow-up" on message |
-| Memory Assistant | Suggests memory title/description from photos/messages | User clicks "✨ AI Describe" when creating memory |
+| Misunderstanding Helper | Suggests clarification message for conflict | User clicks "✨ AI Help" on misunderstanding item |
+| Gentle Follow-up Generator | Drafts polite follow-up for pending item | User clicks "✨ AI Follow-up" on promise/reminder/followUp |
+| Memory Assistant | Suggests title/description from caption/text | User clicks "✨ AI Describe" when creating memory |
+
+### Critical Constraints (All Features)
+
+- User-triggered only
+- No background scanning
+- No scheduled summaries
+- No auto-send
+- No auto-save without user approval
+- No raw content in aiRuns
+- No AI API key in frontend
+- Existing MVP AI features must keep working
+- Existing non-AI features must keep working
 
 ---
 
-## Feature 1: Misunderstanding Helper
+## Shared Schemas (MVP-Compatible)
 
-### 1.1 Firestore Schema
+### AI Settings Schema (Existing - Do Not Change)
 
 ```
-/chats/{chatId}/aiSuggestions/{suggestionId}
+/users/{userId}/settings/ai
 {
-  type: "misunderstanding_helper",           // string, immutable
-  requestedByUserId: string,                 // UID of requester
-  targetUserId: string,                      // same as requester
-  sourceMessageId: string | null,            // optional linked message
-  sourceTextPreview: string,                 // sanitized preview (max 100 chars)
-  generatedBy: "anthropic",                  // provider
-  generatedByFunction: "aiMisunderstandingHelper",
-  suggestedPayload: {
-    clarificationText: string,               // max 2000 chars
-    issueIdentified: string,                 // max 500 chars
-    suggestedApproach: string,               // max 500 chars
+  aiEnabled: boolean,                        // master toggle
+  consentedAt: timestamp,                    // when user consented
+  consentVersion: string,                    // "1.0"
+  features: {
+    toneRepair: boolean,                     // MVP
+    messageToTask: boolean,                  // MVP
+    misunderstandingHelper: boolean,         // Phase 2
+    gentleFollowup: boolean,                 // Phase 2
+    memoryAssistant: boolean,                // Phase 2
   },
-  confidence: number,                        // 0.0-1.0
-  status: "pending" | "accepted" | "dismissed" | "expired",
-  acceptedPayload: object | null,            // user-modified version
-  reviewedBy: string | null,                 // UID
-  reviewedAt: timestamp | null,
-  dismissReason: string | null,
-  createdAt: timestamp,
-  expiresAt: timestamp,                      // +10 minutes
+  dataSharing: {
+    allowMessageAnalysis: boolean,           // required for AI
+  },
+  updatedAt: timestamp,
 }
+```
 
+### AI Usage Schema (Flat - MVP Pattern)
+
+```
+/users/{userId}/aiUsage/{windowId}
+{
+  windowId: string,                          // e.g., "misunderstandingHelper_hourly_2026-05-09T16"
+  feature: string,                           // "misunderstandingHelper" | "gentleFollowup" | "memoryAssistant"
+  count: number,                             // requests in window
+  windowStart: timestamp,                    // window start time
+  windowEnd: timestamp,                      // window end time
+  lastRequestAt: timestamp,                  // last request time
+}
+```
+
+### AI Runs Schema (No Raw Content)
+
+```
 /chats/{chatId}/aiRuns/{runId}
 {
   requestedByUserId: string,
-  feature: "misunderstandingHelper",
-  functionName: "aiMisunderstandingHelper",
+  feature: string,                           // feature name
+  functionName: string,                      // Cloud Function name
   inputTokenCount: number,
   outputTokenCount: number,
   success: boolean,
@@ -55,16 +79,95 @@
   latencyMs: number,
   estimatedCostUsd: number,
   suggestionId: string | null,
-  // NO raw content stored
+  // NO raw content - no messageText, no description, no caption
 }
+```
 
-/users/{userId}/aiUsage/{windowId}
+### AI Suggestions Security Model (MVP Pattern)
+
+```javascript
+match /chats/{chatId}/aiSuggestions/{suggestionId} {
+  // Only targetUserId or requestedByUserId can read
+  allow read: if request.auth != null
+    && isChatMember(chatId)
+    && (resource.data.targetUserId == request.auth.uid
+        || resource.data.requestedByUserId == request.auth.uid);
+
+  // Client cannot create (server only)
+  allow create: if false;
+
+  // Client cannot delete
+  allow delete: if false;
+
+  // Only targetUserId can update, only review fields
+  allow update: if request.auth != null
+    && isChatMember(chatId)
+    && resource.data.targetUserId == request.auth.uid
+    && onlyReviewFieldsChanged()
+    && validStatusTransition()
+    && validReviewerFields();
+
+  function onlyReviewFieldsChanged() {
+    return request.resource.data.diff(resource.data).affectedKeys()
+      .hasOnly(['status', 'acceptedPayload', 'reviewedBy', 'reviewedAt', 'dismissReason']);
+  }
+
+  function validStatusTransition() {
+    // Cannot set to pending or expired (server only)
+    return request.resource.data.status in ['accepted', 'dismissed'];
+  }
+
+  function validReviewerFields() {
+    // reviewedBy must equal auth.uid when status changes
+    // reviewedAt must be a timestamp when status changes
+    return request.resource.data.reviewedBy == request.auth.uid
+      && request.resource.data.reviewedAt is timestamp;
+  }
+}
+```
+
+---
+
+## Feature 1: Misunderstanding Helper
+
+### 1.1 Firestore Schema
+
+```
+/chats/{chatId}/aiSuggestions/{suggestionId}
 {
-  misunderstandingHelper: {
-    count: number,
-    firstRequestAt: timestamp,
+  type: "misunderstanding_helper",           // immutable
+  requestedByUserId: string,                 // UID of requester
+  targetUserId: string,                      // same as requester
+  sourceMessageId: string | null,            // optional linked message
+  sourceTextPreview: string,                 // sanitized preview (max 100 chars)
+  generatedBy: "anthropic",
+  generatedByFunction: "aiMisunderstandingHelper",
+  suggestedPayload: {
+    clarificationText: string,               // max 2000 chars
+    issueIdentified: string,                 // max 500 chars
+    suggestedApproach: string,               // max 500 chars
   },
-  // existing fields preserved
+  confidence: number,                        // 0.0-1.0
+  status: "pending" | "accepted" | "dismissed" | "expired",
+  acceptedPayload: {                         // set by client on accept
+    clarificationText: string,               // may be edited by user
+  } | null,
+  reviewedBy: string | null,                 // UID, set on status change
+  reviewedAt: timestamp | null,              // set on status change
+  dismissReason: string | null,              // optional
+  createdAt: timestamp,
+  expiresAt: timestamp,                      // +10 minutes
+}
+```
+
+**acceptedPayload Validation (Security Rules):**
+```javascript
+function validMisunderstandingHelperAcceptedPayload() {
+  let payload = request.resource.data.acceptedPayload;
+  return payload == null
+    || (payload.keys().hasOnly(['clarificationText'])
+        && payload.clarificationText is string
+        && payload.clarificationText.size() <= 2000);
 }
 ```
 
@@ -74,6 +177,7 @@
 Function: aiMisunderstandingHelper
 Type: onCall (v2)
 Secrets: [AI_API_KEY]
+Region: us-central1
 ```
 
 ### 1.3 Input JSON
@@ -81,8 +185,8 @@ Secrets: [AI_API_KEY]
 ```json
 {
   "chatId": "string (required)",
-  "misunderstandingId": "string (required) - ID from misunderstandings collection",
-  "contextMessageIds": ["string"] // optional, max 5
+  "misunderstandingId": "string (required)",
+  "contextMessageIds": ["string"]            // optional, max 5
 }
 ```
 
@@ -94,9 +198,9 @@ Secrets: [AI_API_KEY]
   "success": true,
   "suggestionId": "string",
   "suggestion": {
-    "clarificationText": "string (max 2000)",
-    "issueIdentified": "string (max 500)",
-    "suggestedApproach": "string (max 500)",
+    "clarificationText": "string",
+    "issueIdentified": "string",
+    "suggestedApproach": "string",
     "confidence": 0.85
   }
 }
@@ -116,16 +220,16 @@ Secrets: [AI_API_KEY]
 
 | Code | HTTP | Meaning |
 |------|------|---------|
-| `AI_TEMPORARILY_DISABLED` | 503 | Server-side kill switch active |
+| `AI_TEMPORARILY_DISABLED` | 503 | Server kill switch active |
 | `INVALID_INPUT` | 400 | Missing/invalid chatId or misunderstandingId |
-| `MISUNDERSTANDING_NOT_FOUND` | 404 | Misunderstanding document doesn't exist |
-| `NOT_CHAT_MEMBER` | 403 | User not in chat members array |
-| `AI_NOT_ENABLED` | 412 | User hasn't consented to AI |
-| `FEATURE_NOT_ENABLED` | 412 | misunderstandingHelper feature disabled |
-| `RATE_LIMIT_EXCEEDED` | 429 | Exceeded 10/hour limit |
-| `SENSITIVE_DATA_DETECTED` | 400 | Input contains PII |
-| `AI_TIMEOUT` | 504 | AI provider timeout |
-| `AI_PROVIDER_ERROR` | 500 | AI provider failure |
+| `MISUNDERSTANDING_NOT_FOUND` | 404 | Document doesn't exist |
+| `NOT_CHAT_MEMBER` | 403 | User not in chat members |
+| `AI_NOT_ENABLED` | 412 | aiEnabled=false or dataSharing.allowMessageAnalysis=false |
+| `FEATURE_NOT_ENABLED` | 412 | features.misunderstandingHelper=false |
+| `RATE_LIMIT_EXCEEDED` | 429 | Exceeded 10/hour |
+| `SENSITIVE_DATA_DETECTED` | 400 | PII in input |
+| `AI_TIMEOUT` | 504 | Provider timeout |
+| `AI_PROVIDER_ERROR` | 500 | Provider failure |
 
 ### 1.6 Auth Checks
 
@@ -152,12 +256,27 @@ if (!members.includes(uid)) {
 ### 1.8 AI Consent Checks
 
 ```javascript
-const settingsDoc = await db.doc(`users/${uid}/settings/ai`).get();
-if (!settingsDoc.exists || !settingsDoc.data().enabled) {
-  throw new HttpsError('failed-precondition', 'AI_NOT_ENABLED');
+async function verifyAIEnabled(uid, feature) {
+  const settingsDoc = await db.doc(`users/${uid}/settings/ai`).get();
+  if (!settingsDoc.exists) {
+    return { enabled: false, reason: 'AI_NOT_ENABLED' };
+  }
+  const settings = settingsDoc.data();
+  if (!settings.aiEnabled) {
+    return { enabled: false, reason: 'AI_NOT_ENABLED' };
+  }
+  if (!settings.dataSharing?.allowMessageAnalysis) {
+    return { enabled: false, reason: 'AI_NOT_ENABLED' };
+  }
+  if (settings.features?.[feature] === false) {
+    return { enabled: false, reason: 'FEATURE_NOT_ENABLED' };
+  }
+  return { enabled: true };
 }
-if (settingsDoc.data().features?.misunderstandingHelper === false) {
-  throw new HttpsError('failed-precondition', 'FEATURE_NOT_ENABLED');
+
+const aiCheck = await verifyAIEnabled(uid, 'misunderstandingHelper');
+if (!aiCheck.enabled) {
+  throw new HttpsError('failed-precondition', aiCheck.reason);
 }
 ```
 
@@ -165,49 +284,92 @@ if (settingsDoc.data().features?.misunderstandingHelper === false) {
 
 ```javascript
 // 10 requests per hour per user
-const windowId = `misunderstandingHelper_${uid}_${hourKey}`;
-const usageRef = db.doc(`users/${uid}/aiUsage/${windowId}`);
-// Transaction: check count < 10, increment
+const hourKey = new Date().toISOString().slice(0, 13); // "2026-05-09T16"
+const windowId = `misunderstandingHelper_hourly_${hourKey}`;
+
+await db.runTransaction(async (tx) => {
+  const usageRef = db.doc(`users/${uid}/aiUsage/${windowId}`);
+  const usageDoc = await tx.get(usageRef);
+  
+  const now = new Date();
+  const windowStart = new Date(hourKey + ':00:00.000Z');
+  const windowEnd = new Date(windowStart.getTime() + 60 * 60 * 1000);
+  
+  if (usageDoc.exists) {
+    const data = usageDoc.data();
+    if (data.count >= 10) {
+      throw new HttpsError('resource-exhausted', 'RATE_LIMIT_EXCEEDED');
+    }
+    tx.update(usageRef, {
+      count: FieldValue.increment(1),
+      lastRequestAt: FieldValue.serverTimestamp(),
+    });
+  } else {
+    tx.set(usageRef, {
+      windowId,
+      feature: 'misunderstandingHelper',
+      count: 1,
+      windowStart,
+      windowEnd,
+      lastRequestAt: FieldValue.serverTimestamp(),
+    });
+  }
+});
 ```
 
 ### 1.10 Sensitive Data Checks
 
 ```javascript
 const SENSITIVE_PATTERNS = [
-  /\b\d{3}-\d{2}-\d{4}\b/,        // SSN
+  /\b\d{3}-\d{2}-\d{4}\b/,                   // SSN
   /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/, // Credit card
-  /\bpassword\s*[:=]\s*\S+/i,     // Password
+  /\bpassword\s*[:=]\s*\S+/i,                // Password
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, // Email (optional)
 ];
+
 function containsSensitiveData(text) {
+  if (!text) return false;
   return SENSITIVE_PATTERNS.some(p => p.test(text));
 }
-// Check: misunderstanding description + context messages
+
+// Check misunderstanding description
+const misDoc = await db.doc(`chats/${chatId}/misunderstandings/${misunderstandingId}`).get();
+if (!misDoc.exists) {
+  throw new HttpsError('not-found', 'MISUNDERSTANDING_NOT_FOUND');
+}
+const description = misDoc.data().description || '';
+if (containsSensitiveData(description)) {
+  throw new HttpsError('invalid-argument', 'SENSITIVE_DATA_DETECTED');
+}
 ```
 
 ### 1.11 Firestore Writes
 
-1. `/chats/{chatId}/aiRuns/{runId}` - always (metadata only)
-2. `/chats/{chatId}/aiSuggestions/{suggestionId}` - on success
+1. `/chats/{chatId}/aiRuns/{runId}` - always (metadata only, no raw content)
+2. `/chats/{chatId}/aiSuggestions/{suggestionId}` - on success only
 3. `/users/{uid}/aiUsage/{windowId}` - rate limit counter
 
 ### 1.12 Security Rule Additions
 
 ```javascript
-match /chats/{chatId}/misunderstandings/{misId} {
-  // Existing rules - no change needed
+// Add to existing aiSuggestions rules
+function validAcceptedPayload() {
+  let type = resource.data.type;
+  let payload = request.resource.data.acceptedPayload;
+  
+  return payload == null
+    || (type == 'misunderstanding_helper' && validMisunderstandingHelperAcceptedPayload())
+    || (type == 'gentle_followup' && validGentleFollowupAcceptedPayload())
+    || (type == 'memory_assistant' && validMemoryAssistantAcceptedPayload())
+    || (type == 'tone_repair' && validToneRepairAcceptedPayload())
+    || (type == 'message_to_task' && validMessageToTaskAcceptedPayload());
 }
 
-// aiSuggestions already has rules from MVP
-// Add type validation for misunderstanding_helper:
-match /chats/{chatId}/aiSuggestions/{suggestionId} {
-  allow read: if isChatMember(chatId);
-  allow create: if false; // server only
-  allow update: if isChatMember(chatId)
-    && request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['status', 'acceptedPayload', 'reviewedBy', 'reviewedAt', 'dismissReason'])
-    && request.resource.data.status in ['accepted', 'dismissed']
-    && resource.data.type == request.resource.data.type;
-  allow delete: if false;
+function validMisunderstandingHelperAcceptedPayload() {
+  let payload = request.resource.data.acceptedPayload;
+  return payload.keys().hasOnly(['clarificationText'])
+    && payload.clarificationText is string
+    && payload.clarificationText.size() <= 2000;
 }
 ```
 
@@ -215,23 +377,23 @@ match /chats/{chatId}/aiSuggestions/{suggestionId} {
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `MisunderstandingAiButton` | `src/chat/MisunderstandingAiButton.jsx` | Trigger button in Clear the Air |
-| `MisunderstandingAiSuggestion` | `src/chat/MisunderstandingAiSuggestion.jsx` | Display suggestion with Accept/Edit/Dismiss |
+| `MisunderstandingAiButton` | `src/chat/MisunderstandingAiButton.jsx` | Trigger button |
+| `MisunderstandingAiSuggestion` | `src/chat/MisunderstandingAiSuggestion.jsx` | Display/edit suggestion |
 
-**Integration point:** `src/chat/Misunderstandings.jsx` - add button to unresolved items
+**Integration:** `src/chat/Misunderstandings.jsx` - add button to unresolved items
 
-**State flow:**
+**Flow:**
 1. User clicks "✨ AI Help" on misunderstanding
-2. Loading state shown
-3. Suggestion panel appears with clarificationText
-4. User can Accept (copies to input), Edit, or Dismiss
-5. No auto-send - user must manually send
+2. Loading indicator shown
+3. Suggestion panel appears
+4. User can Edit -> Accept (copies to message input) or Dismiss
+5. User must manually click Send - NO auto-send
 
 ### 1.14 AI Prompt Template
 
 ```javascript
-const MISUNDERSTANDING_HELPER_SYSTEM = `You are a caring relationship communication assistant. 
-Your role is to help people resolve misunderstandings with their partner through gentle, empathetic clarification.
+const MISUNDERSTANDING_HELPER_SYSTEM = `You are a caring relationship communication assistant.
+Help people resolve misunderstandings through gentle, empathetic clarification.
 
 RULES:
 1. Return ONLY valid JSON
@@ -272,47 +434,86 @@ ${contextMessages?.length ? `RECENT CONTEXT:\n${contextMessages.join('\n')}` : '
 
 TODAY: ${today}
 
-Suggest a gentle clarification message the user could send. Return JSON only.`;
+Suggest a gentle clarification message. Return JSON only.`;
 }
 ```
 
 ### 1.15 Unit Tests
 
 ```javascript
-// functions/test/aiMisunderstandingHelper.test.js
 describe('aiMisunderstandingHelper', () => {
-  it('returns suggestion for valid misunderstanding');
+  // Input validation
   it('throws INVALID_INPUT for missing chatId');
   it('throws INVALID_INPUT for missing misunderstandingId');
-  it('throws MISUNDERSTANDING_NOT_FOUND for nonexistent misunderstanding');
+  it('throws MISUNDERSTANDING_NOT_FOUND for nonexistent doc');
+  
+  // Auth & membership
+  it('throws unauthenticated when not logged in');
   it('throws NOT_CHAT_MEMBER for non-member');
-  it('throws AI_NOT_ENABLED when consent not given');
-  it('throws FEATURE_NOT_ENABLED when feature toggled off');
+  
+  // AI consent
+  it('throws AI_NOT_ENABLED when aiEnabled=false');
+  it('throws AI_NOT_ENABLED when dataSharing.allowMessageAnalysis=false');
+  it('throws FEATURE_NOT_ENABLED when features.misunderstandingHelper=false');
+  
+  // Rate limiting
   it('throws RATE_LIMIT_EXCEEDED after 10 requests/hour');
+  it('resets rate limit in new hour window');
+  
+  // Sensitive data
   it('throws SENSITIVE_DATA_DETECTED for SSN in description');
-  it('returns NO_SUGGESTION when AI cannot help');
+  it('throws SENSITIVE_DATA_DETECTED for credit card');
   it('filters AI output containing sensitive data');
+  
+  // Success cases
+  it('returns suggestion for valid misunderstanding');
+  it('returns NO_SUGGESTION when AI cannot help');
+  
+  // Firestore writes
   it('creates aiRun document on every call');
   it('creates aiSuggestion only on success');
   it('does not store raw description in aiRuns');
-  it('respects AI_ENABLED=false kill switch');
+  it('updates aiUsage with flat schema');
+  
+  // Kill switch
+  it('throws AI_TEMPORARILY_DISABLED when AI_ENABLED=false');
 });
 ```
 
 ### 1.16 Emulator Security Tests
 
 ```javascript
-// test/firestore.rules.test.js - additions
 describe('AI Misunderstanding Helper Rules', () => {
-  it('chat member can read aiSuggestion with type misunderstanding_helper');
-  it('non-member cannot read aiSuggestion');
+  // Read access
+  it('targetUserId can read own suggestion');
+  it('requestedByUserId can read suggestion they requested');
+  it('other chat member cannot read suggestion');
+  it('non-member cannot read suggestion');
+  
+  // Create/delete
   it('client cannot create aiSuggestion');
   it('client cannot delete aiSuggestion');
-  it('member can update status to accepted');
-  it('member can update status to dismissed');
-  it('member cannot update status to expired');
-  it('member cannot modify suggestedPayload');
-  it('member cannot modify type');
+  
+  // Update - valid
+  it('targetUserId can update status to accepted');
+  it('targetUserId can update status to dismissed');
+  it('targetUserId can set acceptedPayload with clarificationText');
+  it('targetUserId can set dismissReason');
+  
+  // Update - invalid
+  it('client cannot set status to pending');
+  it('client cannot set status to expired');
+  it('client cannot modify suggestedPayload');
+  it('client cannot modify type');
+  it('client cannot modify createdAt');
+  it('requestedByUserId (non-target) cannot update');
+  it('reviewedBy must equal auth.uid');
+  it('reviewedAt must be timestamp');
+  
+  // acceptedPayload validation
+  it('rejects acceptedPayload with extra fields');
+  it('rejects acceptedPayload.clarificationText > 2000 chars');
+  it('rejects acceptedPayload.clarificationText non-string');
 });
 ```
 
@@ -320,83 +521,75 @@ describe('AI Misunderstanding Helper Rules', () => {
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 1 | Button hidden when AI disabled | User A disables AI -> opens Clear the Air | No ✨ button |
-| 2 | Button shown when AI enabled | User A enables AI -> opens Clear the Air | ✨ AI Help button visible |
-| 3 | Extract suggestion | Click ✨ AI Help on misunderstanding | Loading -> suggestion appears |
-| 4 | Accept suggestion | Click Accept | Text copied to message input |
-| 5 | User must send manually | After Accept | Message NOT auto-sent |
-| 6 | Dismiss suggestion | Click Dismiss | Panel closes, suggestion marked dismissed |
-| 7 | Edit before accept | Modify text -> Accept | Modified text used |
-| 8 | Rate limit | Use 11 times in 1 hour | Error on 11th |
-| 9 | Sensitive data rejected | Misunderstanding with SSN | Error shown |
-| 10 | User B sees sent message | User A accepts + sends | User B sees normal message |
+| 1 | Button hidden when AI disabled | User A: Settings -> AI off -> Clear the Air | No ✨ button |
+| 2 | Button hidden when feature disabled | User A: AI on, misunderstandingHelper off | No ✨ button |
+| 3 | Button shown when enabled | User A: AI on, feature on -> Clear the Air | ✨ AI Help visible |
+| 4 | Generate suggestion | Click ✨ AI Help | Loading -> suggestion appears |
+| 5 | Edit suggestion | Modify clarificationText | Edit reflected |
+| 6 | Accept copies to input | Click Accept | Text in message input, NOT sent |
+| 7 | Manual send required | After Accept, click Send | Message sent |
+| 8 | User B sees normal message | User A sends | User B sees normal message |
+| 9 | Dismiss closes panel | Click Dismiss | Panel closes |
+| 10 | Rate limit error | Use 11 times in 1 hour | Error on 11th |
+| 11 | Sensitive data rejected | Misunderstanding with SSN | Error shown |
 
 ### 1.18 Rollback Plan
 
-1. **Immediate:** Set `AI_ENABLED=false` in Firebase config -> all AI features disabled
-2. **Feature-specific:** 
-   - Remove `misunderstandingHelper` from user's `features` object
-   - UI button won't render
-3. **Full rollback:**
-   - Revert frontend deployment to pre-Phase-2
-   - Functions continue to run (harmless if not called)
-   - No data migration needed
+1. **Immediate kill switch:** Set `AI_ENABLED=false` in environment
+2. **Feature-specific:** Set `features.misunderstandingHelper=false` in user settings
+3. **Full rollback:** Revert frontend deployment, functions remain (harmless if not called)
 
 ---
 
 ## Feature 2: Gentle Follow-up Generator
+
+### Phase 2 Scope
+
+- Generate follow-up for **pending promises, reminders, or followUp items only**
+- User selects a pending item and clicks "✨ AI Follow-up"
+- No automatic unanswered-message detection
+- No inference of hidden intent
+- User-triggered only
 
 ### 2.1 Firestore Schema
 
 ```
 /chats/{chatId}/aiSuggestions/{suggestionId}
 {
-  type: "gentle_followup",
+  type: "gentle_followup",                   // immutable
   requestedByUserId: string,
-  targetUserId: string,
-  sourceMessageId: string,                   // required - message to follow up on
+  targetUserId: string,                      // same as requester
+  sourceMessageId: string | null,            // optional
+  sourceItemType: "promise" | "reminder" | "followUp", // required
+  sourceItemId: string,                      // ID of the pending item
   sourceTextPreview: string,                 // max 100 chars
   generatedBy: "anthropic",
   generatedByFunction: "aiGentleFollowup",
   suggestedPayload: {
     followupText: string,                    // max 1000 chars
     tone: "gentle" | "caring" | "patient",
-    timeSinceOriginal: string,               // "2 days ago"
+    itemContext: string,                     // brief context about the pending item
   },
   confidence: number,
   status: "pending" | "accepted" | "dismissed" | "expired",
-  acceptedPayload: object | null,
+  acceptedPayload: {
+    followupText: string,                    // may be edited
+  } | null,
   reviewedBy: string | null,
   reviewedAt: timestamp | null,
   dismissReason: string | null,
   createdAt: timestamp,
   expiresAt: timestamp,                      // +5 minutes
 }
+```
 
-/chats/{chatId}/aiRuns/{runId}
-{
-  requestedByUserId: string,
-  feature: "gentleFollowup",
-  functionName: "aiGentleFollowup",
-  inputTokenCount: number,
-  outputTokenCount: number,
-  success: boolean,
-  errorCode: string | null,
-  provider: "anthropic",
-  model: string,
-  requestedAt: timestamp,
-  completedAt: timestamp,
-  latencyMs: number,
-  estimatedCostUsd: number,
-  suggestionId: string | null,
-}
-
-/users/{userId}/aiUsage/{windowId}
-{
-  gentleFollowup: {
-    count: number,
-    firstRequestAt: timestamp,
-  },
+**acceptedPayload Validation:**
+```javascript
+function validGentleFollowupAcceptedPayload() {
+  let payload = request.resource.data.acceptedPayload;
+  return payload.keys().hasOnly(['followupText'])
+    && payload.followupText is string
+    && payload.followupText.size() <= 1000;
 }
 ```
 
@@ -406,6 +599,7 @@ describe('AI Misunderstanding Helper Rules', () => {
 Function: aiGentleFollowup
 Type: onCall (v2)
 Secrets: [AI_API_KEY]
+Region: us-central1
 ```
 
 ### 2.3 Input JSON
@@ -413,8 +607,9 @@ Secrets: [AI_API_KEY]
 ```json
 {
   "chatId": "string (required)",
-  "messageId": "string (required) - message to follow up on",
-  "tone": "gentle" | "caring" | "patient" // optional, default "gentle"
+  "itemType": "promise" | "reminder" | "followUp" (required),
+  "itemId": "string (required)",
+  "tone": "gentle" | "caring" | "patient"    // optional, default "gentle"
 }
 ```
 
@@ -426,9 +621,9 @@ Secrets: [AI_API_KEY]
   "success": true,
   "suggestionId": "string",
   "suggestion": {
-    "followupText": "string (max 1000)",
+    "followupText": "string",
     "tone": "gentle",
-    "timeSinceOriginal": "2 days ago",
+    "itemContext": "string",
     "confidence": 0.9
   }
 }
@@ -440,7 +635,7 @@ Secrets: [AI_API_KEY]
   "success": true,
   "suggestionId": null,
   "suggestion": null,
-  "reason": "NO_FOLLOWUP_NEEDED" | "MESSAGE_TOO_RECENT" | "AI_OUTPUT_FILTERED"
+  "reason": "NO_FOLLOWUP_NEEDED" | "ITEM_COMPLETED" | "AI_OUTPUT_FILTERED"
 }
 ```
 
@@ -449,16 +644,16 @@ Secrets: [AI_API_KEY]
 | Code | HTTP | Meaning |
 |------|------|---------|
 | `AI_TEMPORARILY_DISABLED` | 503 | Kill switch active |
-| `INVALID_INPUT` | 400 | Missing chatId/messageId |
-| `MESSAGE_NOT_FOUND` | 404 | Message doesn't exist |
-| `NOT_YOUR_MESSAGE` | 403 | Can only follow up on own messages |
-| `NOT_CHAT_MEMBER` | 403 | User not in chat |
+| `INVALID_INPUT` | 400 | Missing/invalid parameters |
+| `ITEM_NOT_FOUND` | 404 | Promise/reminder/followUp not found |
+| `ITEM_COMPLETED` | 400 | Item already completed |
+| `NOT_CHAT_MEMBER` | 403 | Not in chat |
 | `AI_NOT_ENABLED` | 412 | No AI consent |
-| `FEATURE_NOT_ENABLED` | 412 | gentleFollowup disabled |
+| `FEATURE_NOT_ENABLED` | 412 | gentleFollowup=false |
 | `RATE_LIMIT_EXCEEDED` | 429 | Exceeded 15/day |
-| `SENSITIVE_DATA_DETECTED` | 400 | PII in message |
-| `AI_TIMEOUT` | 504 | Provider timeout |
-| `AI_PROVIDER_ERROR` | 500 | Provider failure |
+| `SENSITIVE_DATA_DETECTED` | 400 | PII in item |
+| `AI_TIMEOUT` | 504 | Timeout |
+| `AI_PROVIDER_ERROR` | 500 | Failure |
 
 ### 2.6 Auth Checks
 
@@ -484,12 +679,9 @@ if (!chatDoc.data().members?.includes(uid)) {
 ### 2.8 AI Consent Checks
 
 ```javascript
-const settings = await db.doc(`users/${uid}/settings/ai`).get();
-if (!settings.exists || !settings.data().enabled) {
-  throw new HttpsError('failed-precondition', 'AI_NOT_ENABLED');
-}
-if (settings.data().features?.gentleFollowup === false) {
-  throw new HttpsError('failed-precondition', 'FEATURE_NOT_ENABLED');
+const aiCheck = await verifyAIEnabled(uid, 'gentleFollowup');
+if (!aiCheck.enabled) {
+  throw new HttpsError('failed-precondition', aiCheck.reason);
 }
 ```
 
@@ -497,15 +689,28 @@ if (settings.data().features?.gentleFollowup === false) {
 
 ```javascript
 // 15 requests per day per user
-const windowId = `gentleFollowup_${uid}_${dateKey}`;
+const dateKey = new Date().toISOString().slice(0, 10); // "2026-05-09"
+const windowId = `gentleFollowup_daily_${dateKey}`;
 // Transaction: check count < 15, increment
 ```
 
 ### 2.10 Sensitive Data Checks
 
 ```javascript
-// Check original message text
-if (containsSensitiveData(messageData.text)) {
+// Get item text based on type
+let itemText = '';
+if (itemType === 'promise') {
+  const doc = await db.doc(`chats/${chatId}/promises/${itemId}`).get();
+  itemText = doc.data()?.text || '';
+} else if (itemType === 'reminder') {
+  const doc = await db.doc(`chats/${chatId}/reminders/${itemId}`).get();
+  itemText = doc.data()?.title || '';
+} else if (itemType === 'followUp') {
+  const doc = await db.doc(`chats/${chatId}/followUps/${itemId}`).get();
+  itemText = doc.data()?.text || '';
+}
+
+if (containsSensitiveData(itemText)) {
   throw new HttpsError('invalid-argument', 'SENSITIVE_DATA_DETECTED');
 }
 ```
@@ -519,38 +724,48 @@ if (containsSensitiveData(messageData.text)) {
 ### 2.12 Security Rule Additions
 
 ```javascript
-// Same pattern as misunderstanding_helper
-// Type validation for gentle_followup in aiSuggestions update rule
+function validGentleFollowupAcceptedPayload() {
+  let payload = request.resource.data.acceptedPayload;
+  return payload.keys().hasOnly(['followupText'])
+    && payload.followupText is string
+    && payload.followupText.size() <= 1000;
+}
 ```
 
 ### 2.13 UI Components
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `FollowupAiButton` | `src/chat/FollowupAiButton.jsx` | Button in message context menu |
-| `FollowupAiSuggestion` | `src/chat/FollowupAiSuggestion.jsx` | Suggestion display panel |
+| `FollowupAiButton` | `src/chat/FollowupAiButton.jsx` | Button on pending items |
+| `FollowupAiSuggestion` | `src/chat/FollowupAiSuggestion.jsx` | Display/edit panel |
 
-**Integration point:** `src/chat/MessageList.jsx` - add to message action menu for user's own messages older than 1 hour
+**Integration points:**
+- `src/chat/Promises.jsx` - add button to pending promises
+- `src/chat/Reminders.jsx` - add button to pending reminders
+- `src/chat/FollowUps.jsx` - add button to pending follow-ups
 
-**Visibility rules:**
-- Only on user's own messages
-- Only when message is > 1 hour old
-- Only when no reply received after that message
+**Flow:**
+1. User opens Promises/Reminders/Follow-ups
+2. On pending item, clicks "✨ AI Follow-up"
+3. Loading indicator
+4. Suggestion panel appears
+5. User can Edit -> Accept (copies to input) or Dismiss
+6. User must manually Send - NO auto-send
 
 ### 2.14 AI Prompt Template
 
 ```javascript
-const GENTLE_FOLLOWUP_SYSTEM = `You are a thoughtful communication assistant helping people follow up on unanswered messages in a kind, non-pressuring way.
+const GENTLE_FOLLOWUP_SYSTEM = `You are a thoughtful communication assistant.
+Help people follow up on pending commitments in a kind, non-pressuring way.
 
 RULES:
 1. Return ONLY valid JSON
 2. Never guilt-trip or pressure
 3. Acknowledge the other person may be busy
 4. Keep followups brief (under 150 words)
-5. Do not repeat the original message verbatim
-6. Do not include sensitive data
-7. If the original message doesn't warrant a followup, return no_suggestion
-8. Match the relationship tone (casual for friends/partners)
+5. Do not include sensitive data
+6. If no followup is appropriate, return no_suggestion
+7. Match casual relationship tone
 
 TONES:
 - gentle: soft reminder, very low pressure
@@ -561,7 +776,7 @@ OUTPUT FORMAT:
 {
   "followupText": "suggested followup message",
   "tone": "gentle|caring|patient",
-  "timeSinceOriginal": "human readable time",
+  "itemContext": "brief context about what's pending",
   "confidence": 0.0 to 1.0
 }
 
@@ -569,16 +784,18 @@ If no followup needed:
 {
   "followupText": null,
   "tone": null,
-  "timeSinceOriginal": null,
+  "itemContext": null,
   "confidence": 0,
   "no_suggestion": true
 }`;
 
-function buildGentleFollowupPrompt({ originalText, timeSince, tone, today }) {
-  return `Suggest a ${tone} follow-up for this unanswered message.
+function buildGentleFollowupPrompt({ itemType, itemText, createdAt, tone, today }) {
+  const timeSince = getHumanReadableTimeSince(createdAt);
+  
+  return `Suggest a ${tone} follow-up for this pending ${itemType}.
 
-ORIGINAL MESSAGE (sent ${timeSince}):
-${originalText}
+PENDING ITEM (created ${timeSince}):
+${itemText}
 
 TODAY: ${today}
 
@@ -590,17 +807,37 @@ Return JSON only.`;
 
 ```javascript
 describe('aiGentleFollowup', () => {
-  it('returns suggestion for valid unanswered message');
+  // Input validation
   it('throws INVALID_INPUT for missing chatId');
-  it('throws MESSAGE_NOT_FOUND for nonexistent message');
-  it('throws NOT_YOUR_MESSAGE when following up others message');
+  it('throws INVALID_INPUT for missing itemType');
+  it('throws INVALID_INPUT for invalid itemType');
+  it('throws INVALID_INPUT for missing itemId');
+  it('throws ITEM_NOT_FOUND for nonexistent item');
+  it('throws ITEM_COMPLETED for completed item');
+  
+  // Auth & membership
+  it('throws unauthenticated when not logged in');
   it('throws NOT_CHAT_MEMBER for non-member');
-  it('throws AI_NOT_ENABLED without consent');
-  it('throws RATE_LIMIT_EXCEEDED after 15/day');
-  it('throws SENSITIVE_DATA_DETECTED for credit card');
-  it('returns NO_FOLLOWUP_NEEDED for recent messages');
-  it('does not store original text in aiRuns');
-  it('respects kill switch');
+  
+  // AI consent
+  it('throws AI_NOT_ENABLED when aiEnabled=false');
+  it('throws FEATURE_NOT_ENABLED when features.gentleFollowup=false');
+  
+  // Rate limiting
+  it('throws RATE_LIMIT_EXCEEDED after 15 requests/day');
+  
+  // Sensitive data
+  it('throws SENSITIVE_DATA_DETECTED for SSN in item text');
+  
+  // Success cases
+  it('returns suggestion for pending promise');
+  it('returns suggestion for pending reminder');
+  it('returns suggestion for pending followUp');
+  it('respects tone parameter');
+  
+  // Firestore
+  it('does not store item text in aiRuns');
+  it('uses flat aiUsage schema');
 });
 ```
 
@@ -608,11 +845,15 @@ describe('aiGentleFollowup', () => {
 
 ```javascript
 describe('AI Gentle Followup Rules', () => {
-  it('member can read aiSuggestion type gentle_followup');
-  it('non-member cannot read');
+  it('targetUserId can read own suggestion');
+  it('non-target cannot read');
   it('client cannot create');
-  it('member can update status to accepted/dismissed');
-  it('member cannot modify suggestedPayload');
+  it('client cannot delete');
+  it('targetUserId can update status to accepted/dismissed');
+  it('cannot set status to pending/expired');
+  it('cannot modify suggestedPayload');
+  it('acceptedPayload must have only followupText');
+  it('acceptedPayload.followupText max 1000 chars');
 });
 ```
 
@@ -620,80 +861,74 @@ describe('AI Gentle Followup Rules', () => {
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 1 | Button on own old message | User A message > 1hr old, no reply | ✨ Follow-up button visible |
-| 2 | Button hidden on recent | User A message < 1hr old | No button |
-| 3 | Button hidden on partner's | User B's message | No button for User A |
-| 4 | Button hidden after reply | User A message, User B replied | No button |
-| 5 | Generate followup | Click ✨ Follow-up | Suggestion appears |
-| 6 | Accept | Accept suggestion | Text in input, NOT sent |
-| 7 | Send manually | After accept, click Send | Message sent normally |
-| 8 | Rate limit | 16 followups in 1 day | Error on 16th |
+| 1 | Button on pending promise | User A creates promise -> views Promises | ✨ button on pending item |
+| 2 | Button hidden on completed | Complete a promise | No ✨ button |
+| 3 | Button hidden when AI off | Disable AI | No ✨ button |
+| 4 | Generate for promise | Click ✨ on pending promise | Suggestion appears |
+| 5 | Generate for reminder | Click ✨ on pending reminder | Suggestion appears |
+| 6 | Generate for followUp | Click ✨ on pending followUp | Suggestion appears |
+| 7 | Accept copies to input | Accept suggestion | Text in input, NOT sent |
+| 8 | Manual send | Send message | Message appears normally |
+| 9 | Rate limit | 16 uses in 1 day | Error on 16th |
 
 ### 2.18 Rollback Plan
 
-Same as Feature 1:
 1. Kill switch: `AI_ENABLED=false`
-2. Feature toggle: remove `gentleFollowup` from features
-3. Full rollback: revert frontend
+2. Feature toggle: `features.gentleFollowup=false`
+3. Full rollback: Revert frontend
 
 ---
 
 ## Feature 3: Memory Assistant
+
+### Phase 2 Scope
+
+- Generate title/description from **caption and selected message text only**
+- **NO image URLs sent to AI** (vision deferred to later phase)
+- User provides caption or selects messages for context
+- User-triggered only
 
 ### 3.1 Firestore Schema
 
 ```
 /chats/{chatId}/aiSuggestions/{suggestionId}
 {
-  type: "memory_assistant",
+  type: "memory_assistant",                  // immutable
   requestedByUserId: string,
-  targetUserId: string,
-  sourceMessageId: string | null,            // if from message
-  sourceTextPreview: string,                 // sanitized
+  targetUserId: string,                      // same as requester
+  sourceMessageId: string | null,            // optional linked message
+  sourceTextPreview: string,                 // max 100 chars
   generatedBy: "anthropic",
   generatedByFunction: "aiMemoryAssistant",
   suggestedPayload: {
     title: string,                           // max 100 chars
     description: string,                     // max 500 chars
-    suggestedDate: string | null,            // YYYY-MM-DD
-    detectedPeople: string[],                // max 5
+    suggestedDate: string | null,            // "YYYY-MM-DD"
     mood: string | null,                     // "happy", "romantic", etc.
   },
   confidence: number,
   status: "pending" | "accepted" | "dismissed" | "expired",
-  acceptedPayload: object | null,
+  acceptedPayload: {
+    title: string,                           // may be edited
+    description: string,                     // may be edited
+  } | null,
   reviewedBy: string | null,
   reviewedAt: timestamp | null,
   dismissReason: string | null,
   createdAt: timestamp,
   expiresAt: timestamp,                      // +10 minutes
 }
+```
 
-/chats/{chatId}/aiRuns/{runId}
-{
-  requestedByUserId: string,
-  feature: "memoryAssistant",
-  functionName: "aiMemoryAssistant",
-  inputTokenCount: number,
-  outputTokenCount: number,
-  success: boolean,
-  errorCode: string | null,
-  provider: "anthropic",
-  model: string,
-  requestedAt: timestamp,
-  completedAt: timestamp,
-  latencyMs: number,
-  estimatedCostUsd: number,
-  suggestionId: string | null,
-  // NO image URLs or descriptions stored
-}
-
-/users/{userId}/aiUsage/{windowId}
-{
-  memoryAssistant: {
-    count: number,
-    firstRequestAt: timestamp,
-  },
+**acceptedPayload Validation:**
+```javascript
+function validMemoryAssistantAcceptedPayload() {
+  let payload = request.resource.data.acceptedPayload;
+  return payload.keys().hasOnly(['title', 'description'])
+    && payload.title is string
+    && payload.title.size() <= 100
+    && payload.description is string
+    && payload.description.size() <= 500;
 }
 ```
 
@@ -703,6 +938,7 @@ Same as Feature 1:
 Function: aiMemoryAssistant
 Type: onCall (v2)
 Secrets: [AI_API_KEY]
+Region: us-central1
 ```
 
 ### 3.3 Input JSON
@@ -710,11 +946,12 @@ Secrets: [AI_API_KEY]
 ```json
 {
   "chatId": "string (required)",
-  "imageUrl": "string (optional) - Firebase Storage URL",
   "caption": "string (optional) - user-provided context",
-  "messageIds": ["string"] // optional - related messages for context
+  "messageIds": ["string"]                   // optional, max 5
 }
 ```
+
+**Note:** No `imageUrl` parameter in Phase 2.
 
 ### 3.4 Output JSON
 
@@ -724,11 +961,10 @@ Secrets: [AI_API_KEY]
   "success": true,
   "suggestionId": "string",
   "suggestion": {
-    "title": "Beach sunset with Sarah",
-    "description": "A beautiful evening watching the sunset at Malibu...",
-    "suggestedDate": "2024-03-15",
-    "detectedPeople": ["Sarah"],
-    "mood": "romantic",
+    "title": "string",
+    "description": "string",
+    "suggestedDate": "2026-05-09" | null,
+    "mood": "happy" | null,
     "confidence": 0.85
   }
 }
@@ -740,7 +976,7 @@ Secrets: [AI_API_KEY]
   "success": true,
   "suggestionId": null,
   "suggestion": null,
-  "reason": "NO_SUGGESTION" | "IMAGE_ANALYSIS_FAILED" | "AI_OUTPUT_FILTERED"
+  "reason": "NO_SUGGESTION" | "INSUFFICIENT_CONTEXT" | "AI_OUTPUT_FILTERED"
 }
 ```
 
@@ -749,16 +985,16 @@ Secrets: [AI_API_KEY]
 | Code | HTTP | Meaning |
 |------|------|---------|
 | `AI_TEMPORARILY_DISABLED` | 503 | Kill switch |
-| `INVALID_INPUT` | 400 | No imageUrl or messageIds provided |
-| `IMAGE_NOT_FOUND` | 404 | Image URL invalid/inaccessible |
-| `IMAGE_TOO_LARGE` | 400 | Image > 10MB |
+| `INVALID_INPUT` | 400 | No caption and no messageIds |
+| `INSUFFICIENT_CONTEXT` | 400 | Caption too short and no messages |
+| `MESSAGE_NOT_FOUND` | 404 | Referenced message doesn't exist |
 | `NOT_CHAT_MEMBER` | 403 | Not in chat |
 | `AI_NOT_ENABLED` | 412 | No consent |
-| `FEATURE_NOT_ENABLED` | 412 | memoryAssistant disabled |
+| `FEATURE_NOT_ENABLED` | 412 | memoryAssistant=false |
 | `RATE_LIMIT_EXCEEDED` | 429 | Exceeded 20/day |
-| `SENSITIVE_DATA_DETECTED` | 400 | PII in caption |
+| `SENSITIVE_DATA_DETECTED` | 400 | PII in caption/messages |
 | `AI_TIMEOUT` | 504 | Timeout |
-| `AI_PROVIDER_ERROR` | 500 | Provider error |
+| `AI_PROVIDER_ERROR` | 500 | Failure |
 
 ### 3.6 Auth Checks
 
@@ -780,85 +1016,97 @@ if (!chatDoc.exists || !chatDoc.data().members?.includes(uid)) {
 ### 3.8 AI Consent Checks
 
 ```javascript
-const settings = await db.doc(`users/${uid}/settings/ai`).get();
-if (!settings.exists || !settings.data().enabled) {
-  throw new HttpsError('failed-precondition', 'AI_NOT_ENABLED');
-}
-if (settings.data().features?.memoryAssistant === false) {
-  throw new HttpsError('failed-precondition', 'FEATURE_NOT_ENABLED');
+const aiCheck = await verifyAIEnabled(uid, 'memoryAssistant');
+if (!aiCheck.enabled) {
+  throw new HttpsError('failed-precondition', aiCheck.reason);
 }
 ```
 
 ### 3.9 Rate Limit Checks
 
 ```javascript
-// 20 requests per day (image analysis is expensive)
-const windowId = `memoryAssistant_${uid}_${dateKey}`;
+// 20 requests per day
+const dateKey = new Date().toISOString().slice(0, 10);
+const windowId = `memoryAssistant_daily_${dateKey}`;
 // Transaction: check count < 20, increment
 ```
 
 ### 3.10 Sensitive Data Checks
 
 ```javascript
-// Check caption text only (can't scan images server-side without vision API)
+// Check caption
 if (caption && containsSensitiveData(caption)) {
   throw new HttpsError('invalid-argument', 'SENSITIVE_DATA_DETECTED');
 }
-// Note: AI prompt instructs not to include sensitive details in output
+
+// Check messages
+for (const msgId of messageIds || []) {
+  const msgDoc = await db.doc(`chats/${chatId}/messages/${msgId}`).get();
+  if (msgDoc.exists && containsSensitiveData(msgDoc.data().text || '')) {
+    throw new HttpsError('invalid-argument', 'SENSITIVE_DATA_DETECTED');
+  }
+}
 ```
 
 ### 3.11 Firestore Writes
 
-1. `/chats/{chatId}/aiRuns/{runId}` - always (no image URL stored)
+1. `/chats/{chatId}/aiRuns/{runId}` - always (no caption/messages stored)
 2. `/chats/{chatId}/aiSuggestions/{suggestionId}` - on success
 3. `/users/{uid}/aiUsage/{windowId}` - rate limit
 
 ### 3.12 Security Rule Additions
 
 ```javascript
-// Same pattern - type validation for memory_assistant
+function validMemoryAssistantAcceptedPayload() {
+  let payload = request.resource.data.acceptedPayload;
+  return payload.keys().hasOnly(['title', 'description'])
+    && payload.title is string
+    && payload.title.size() <= 100
+    && payload.description is string
+    && payload.description.size() <= 500;
+}
 ```
 
 ### 3.13 UI Components
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `MemoryAiButton` | `src/chat/MemoryAiButton.jsx` | Button in memory creation form |
-| `MemoryAiSuggestion` | `src/chat/MemoryAiSuggestion.jsx` | Suggestion display with fields |
+| `MemoryAiButton` | `src/chat/MemoryAiButton.jsx` | Button in create form |
+| `MemoryAiSuggestion` | `src/chat/MemoryAiSuggestion.jsx` | Display/edit suggestion |
 
-**Integration point:** `src/chat/Memories.jsx` - add button in "Create Memory" form
+**Integration:** `src/chat/Memories.jsx` - add button in "Create Memory" form
 
 **Flow:**
 1. User opens Create Memory
-2. Uploads photo or selects message
+2. Enters caption OR selects messages for context
 3. Clicks "✨ AI Describe"
-4. Suggestion fills title/description fields
-5. User can edit before saving
-6. User must click Save - no auto-save
+4. Loading indicator
+5. Suggestion fills title/description
+6. User can edit before clicking Save
+7. User must click Save - NO auto-save
 
 ### 3.14 AI Prompt Template
 
 ```javascript
-const MEMORY_ASSISTANT_SYSTEM = `You are a thoughtful assistant helping people document meaningful memories with their loved ones.
+const MEMORY_ASSISTANT_SYSTEM = `You are a thoughtful assistant helping people document meaningful memories.
 
 RULES:
 1. Return ONLY valid JSON
 2. Create warm, personal titles (not generic)
-3. Descriptions should capture the emotional essence
-4. Do not include sensitive data (addresses, IDs, etc.)
+3. Descriptions should capture emotional essence
+4. Do not include sensitive data
 5. Do not make assumptions about relationship status
-6. If you cannot generate meaningful content, return no_suggestion
+6. If insufficient context, return no_suggestion
 7. Keep titles under 50 characters
 8. Keep descriptions under 200 characters
-9. Only suggest dates if clearly evident
-10. Be sentimental but not overly dramatic
+9. Only suggest dates if clearly mentioned
+10. Be sentimental but not dramatic
 
 OUTPUT FORMAT:
 {
   "title": "short evocative title",
-  "description": "warm description of the moment",
+  "description": "warm description",
   "suggestedDate": "YYYY-MM-DD" or null,
-  "detectedPeople": ["name1", "name2"] or [],
   "mood": "happy|romantic|peaceful|adventurous|cozy|celebratory" or null,
   "confidence": 0.0 to 1.0
 }
@@ -868,7 +1116,6 @@ If cannot help:
   "title": null,
   "description": null,
   "suggestedDate": null,
-  "detectedPeople": [],
   "mood": null,
   "confidence": 0,
   "no_suggestion": true
@@ -888,36 +1135,42 @@ Generate a warm title and description. Return JSON only.`;
 }
 ```
 
-**Note:** For image analysis, use Claude's vision capability:
-```javascript
-const response = await anthropic.messages.create({
-  model: 'claude-sonnet-4-20250514',
-  max_tokens: 500,
-  messages: [{
-    role: 'user',
-    content: [
-      { type: 'image', source: { type: 'url', url: imageUrl } },
-      { type: 'text', text: prompt }
-    ]
-  }]
-});
-```
-
 ### 3.15 Unit Tests
 
 ```javascript
 describe('aiMemoryAssistant', () => {
-  it('returns suggestion for image with caption');
-  it('returns suggestion for messages without image');
-  it('throws INVALID_INPUT when no image or messages');
-  it('throws IMAGE_NOT_FOUND for invalid URL');
-  it('throws IMAGE_TOO_LARGE for > 10MB');
+  // Input validation
+  it('throws INVALID_INPUT when no caption and no messageIds');
+  it('throws INSUFFICIENT_CONTEXT for very short caption with no messages');
+  it('throws MESSAGE_NOT_FOUND for invalid messageId');
+  
+  // Auth & membership
+  it('throws unauthenticated when not logged in');
   it('throws NOT_CHAT_MEMBER for non-member');
-  it('throws AI_NOT_ENABLED without consent');
-  it('throws RATE_LIMIT_EXCEEDED after 20/day');
+  
+  // AI consent
+  it('throws AI_NOT_ENABLED when aiEnabled=false');
+  it('throws FEATURE_NOT_ENABLED when features.memoryAssistant=false');
+  
+  // Rate limiting
+  it('throws RATE_LIMIT_EXCEEDED after 20 requests/day');
+  
+  // Sensitive data
   it('throws SENSITIVE_DATA_DETECTED for SSN in caption');
-  it('does not store image URL in aiRuns');
-  it('respects kill switch');
+  it('throws SENSITIVE_DATA_DETECTED for credit card in message');
+  
+  // Success cases
+  it('returns suggestion from caption only');
+  it('returns suggestion from messages only');
+  it('returns suggestion from caption + messages');
+  
+  // Firestore
+  it('does not store caption in aiRuns');
+  it('does not store message text in aiRuns');
+  it('uses flat aiUsage schema');
+  
+  // Phase 2 scope
+  it('does not accept imageUrl parameter');
 });
 ```
 
@@ -925,11 +1178,15 @@ describe('aiMemoryAssistant', () => {
 
 ```javascript
 describe('AI Memory Assistant Rules', () => {
-  it('member can read aiSuggestion type memory_assistant');
-  it('non-member cannot read');
+  it('targetUserId can read own suggestion');
+  it('non-target cannot read');
   it('client cannot create');
-  it('member can update status');
-  it('member cannot modify suggestedPayload');
+  it('client cannot delete');
+  it('targetUserId can update status');
+  it('cannot modify suggestedPayload');
+  it('acceptedPayload must have only title and description');
+  it('acceptedPayload.title max 100 chars');
+  it('acceptedPayload.description max 500 chars');
 });
 ```
 
@@ -937,71 +1194,33 @@ describe('AI Memory Assistant Rules', () => {
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 1 | Button in create form | Open Create Memory | ✨ AI Describe button visible |
-| 2 | Generate from photo | Upload photo -> ✨ AI Describe | Title/description populated |
-| 3 | Generate from caption | Enter caption -> ✨ AI Describe | Suggestion based on caption |
-| 4 | User edits before save | Edit suggestion -> Save | Edited version saved |
-| 5 | No auto-save | Generate suggestion | Memory NOT created until Save clicked |
-| 6 | Dismiss | Click Dismiss | Fields cleared |
-| 7 | Rate limit | 21 uses in 1 day | Error on 21st |
-| 8 | Both users see memory | User A saves | User B sees in memories |
+| 1 | Button in create form | Open Memories -> Create | ✨ AI Describe visible |
+| 2 | Button hidden when AI off | Disable AI | No ✨ button |
+| 3 | Generate from caption | Enter caption -> ✨ | Title/description filled |
+| 4 | Generate from messages | Select messages -> ✨ | Title/description filled |
+| 5 | User edits before save | Modify title -> Save | Edited version saved |
+| 6 | No auto-save | Generate suggestion | Memory NOT created |
+| 7 | Manual save required | Click Save | Memory created |
+| 8 | Both users see memory | User A saves | User B sees in Memories |
+| 9 | Rate limit | 21 uses in 1 day | Error on 21st |
 
 ### 3.18 Rollback Plan
 
-Same pattern:
-1. Kill switch
-2. Feature toggle
-3. Full rollback
+1. Kill switch: `AI_ENABLED=false`
+2. Feature toggle: `features.memoryAssistant=false`
+3. Full rollback: Revert frontend
 
 ---
 
-## Global Requirements
+## Rate Limit Summary
 
-### AI Settings Panel Updates
-
-Add to `src/chat/AiSettingsPanel.jsx`:
-```javascript
-features: {
-  toneRepair: true,        // existing
-  messageToTask: true,     // existing
-  misunderstandingHelper: true,  // new
-  gentleFollowup: true,          // new
-  memoryAssistant: true,         // new
-}
-```
-
-### Firestore Rules Update Summary
-
-```javascript
-// users/{userId}/settings/ai - add new feature fields
-allow write: if isOwner(userId)
-  && request.resource.data.keys().hasOnly([
-    'enabled', 'consentedAt', 'features', 'updatedAt'
-  ])
-  && request.resource.data.features.keys().hasOnly([
-    'toneRepair', 'messageToTask', 
-    'misunderstandingHelper', 'gentleFollowup', 'memoryAssistant'
-  ]);
-```
-
-### Rate Limit Summary
-
-| Feature | Limit | Window |
-|---------|-------|--------|
-| toneRepair | 10 | hour |
-| messageToTask | 20 | day |
-| misunderstandingHelper | 10 | hour |
-| gentleFollowup | 15 | day |
-| memoryAssistant | 20 | day |
-
-### Estimated Token Usage
-
-| Feature | Input | Output | Cost/call |
-|---------|-------|--------|-----------|
-| misunderstandingHelper | ~500 | ~400 | ~$0.003 |
-| gentleFollowup | ~300 | ~200 | ~$0.002 |
-| memoryAssistant (text) | ~400 | ~300 | ~$0.002 |
-| memoryAssistant (image) | ~1000 | ~300 | ~$0.005 |
+| Feature | Limit | Window | windowId Pattern |
+|---------|-------|--------|------------------|
+| toneRepair (MVP) | 10 | hour | `toneRepair_hourly_{YYYY-MM-DDTHH}` |
+| messageToTask (MVP) | 20 | day | `messageToTask_daily_{YYYY-MM-DD}` |
+| misunderstandingHelper | 10 | hour | `misunderstandingHelper_hourly_{YYYY-MM-DDTHH}` |
+| gentleFollowup | 15 | day | `gentleFollowup_daily_{YYYY-MM-DD}` |
+| memoryAssistant | 20 | day | `memoryAssistant_daily_{YYYY-MM-DD}` |
 
 ---
 
@@ -1009,19 +1228,21 @@ allow write: if isOwner(userId)
 
 | Item | Approved | Notes |
 |------|----------|-------|
-| Firestore schemas reviewed | [ ] | |
-| Function contracts reviewed | [ ] | |
-| Error handling complete | [ ] | |
-| Security rules sufficient | [ ] | |
-| Rate limits appropriate | [ ] | |
-| No raw content in aiRuns | [ ] | |
-| User-triggered only | [ ] | |
+| Uses existing AI settings schema (aiEnabled, features, dataSharing) | [ ] | |
+| Uses flat aiUsage schema (windowId, feature, count, etc.) | [ ] | |
+| Reuses MVP aiSuggestions security model | [ ] | |
+| acceptedPayload validation per type | [ ] | |
+| Standardized type names (snake_case) | [ ] | |
+| User-triggered only (no background) | [ ] | |
 | No auto-send | [ ] | |
 | No auto-save | [ ] | |
+| No raw content in aiRuns | [ ] | |
+| Memory Assistant: no image URLs to AI | [ ] | |
+| Gentle Follow-up: from pending items only | [ ] | |
+| Rate limits appropriate | [ ] | |
 | Kill switch works | [ ] | |
 | MVP features unaffected | [ ] | |
 | Non-AI features unaffected | [ ] | |
-| Rollback plan tested | [ ] | |
 
 ---
 
