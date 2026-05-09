@@ -6,6 +6,18 @@
 
 html, body, #root {
   height: 100%;
+  overflow: hidden;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  overscroll-behavior: none;
 }
 
 /* Accessibility: Focus states */
@@ -234,7 +246,8 @@ body {
 /* App Shell Layout */
 .app-shell {
   display: flex;
-  height: 100vh;
+  height: 100%;
+  height: 100dvh;
   width: 100%;
   overflow: hidden;
 }
@@ -244,7 +257,8 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -426,7 +440,8 @@ body {
   left: 0;
   width: 280px;
   max-width: 85vw;
-  height: 100vh;
+  height: 100%;
+  height: 100dvh;
   background: #1a1a2e;
   color: white;
   transform: translateX(-100%);
@@ -524,10 +539,57 @@ body {
 
   .app-header {
     justify-content: flex-start;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
   }
 
   .app-content {
     max-width: 100%;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-drawer {
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .drawer-nav {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .hamburger-btn {
+    font-size: 22px;
+  }
+
+  .mobile-title {
+    font-size: 17px;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .search-input {
+    width: 100px;
+    font-size: 14px;
+    padding: 6px 10px;
+  }
+
+  .search-input:focus {
+    width: 130px;
+  }
+
+  .logout-btn {
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+
+  .theme-btn,
+  .notification-btn {
+    font-size: 18px;
+    padding: 6px;
   }
 }
 
@@ -2069,13 +2131,15 @@ body.dark-mode .device-meta {
   padding-bottom: max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid #e9ecef;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   background: white;
   flex-shrink: 0;
+  align-items: center;
 }
 
 .message-input-container input {
   flex: 1;
+  min-width: 0;
   padding: 12px 16px;
   border: 1px solid #ddd;
   border-radius: 24px;
@@ -2087,7 +2151,7 @@ body.dark-mode .device-meta {
   border-color: #007bff;
 }
 
-.message-input-container button {
+.message-input-container button[type="submit"] {
   padding: 12px 20px;
   background-color: #007bff;
   color: white;
@@ -2095,15 +2159,87 @@ body.dark-mode .device-meta {
   border-radius: 24px;
   cursor: pointer;
   font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.message-input-container button:hover {
+.message-input-container button[type="submit"]:hover {
   background-color: #0056b3;
 }
 
-.message-input-container button:disabled {
+.message-input-container button[type="submit"]:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+}
+
+/* Mobile message input adjustments */
+@media (max-width: 480px) {
+  .message-input-container {
+    padding: 8px 10px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+
+  .message-input-container input {
+    padding: 10px 12px;
+    font-size: 16px;
+  }
+
+  .message-input-container button[type="submit"] {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .message-input-container .quick-toggle-btn,
+  .message-input-container .attach-btn,
+  .message-input-container .tone-btn {
+    padding: 8px;
+    min-width: 36px;
+    min-height: 36px;
+    font-size: 16px;
+  }
+
+  .tone-repair-ai .tone-ai-btn {
+    padding: 6px 8px;
+    min-width: 36px;
+    min-height: 36px;
+    font-size: 14px;
+  }
+}
+
+/* Very small screens - hide less essential buttons when tone buttons appear */
+@media (max-width: 380px) {
+  .message-input-container {
+    gap: 4px;
+  }
+
+  .message-input-container .quick-toggle-btn {
+    display: none;
+  }
+
+  .message-input-container .attach-btn,
+  .message-input-container .tone-btn {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 14px;
+  }
+
+  .tone-repair-ai .tone-ai-btn {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 13px;
+  }
+
+  .message-input-container input {
+    padding: 8px 10px;
+  }
+
+  .message-input-container button[type="submit"] {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
 }
 
 /* Loading & Error States */
