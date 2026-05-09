@@ -191,6 +191,9 @@ exports.cleanupOldMessages = onSchedule('every 6 hours', async () => {
 });
 
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
+
+const aiApiKey = defineSecret('AI_API_KEY');
 const crypto = require('crypto');
 
 function generateInviteCode() {
@@ -355,7 +358,7 @@ async function verifyChatMembership(chatId, uid) {
   return { isMember: true, members };
 }
 
-exports.aiToneRepair = onCall(async (request) => {
+exports.aiToneRepair = onCall({ secrets: [aiApiKey] }, async (request) => {
   if (!isAIGloballyEnabled()) {
     throw new HttpsError('unavailable', 'AI_TEMPORARILY_DISABLED');
   }
@@ -504,7 +507,7 @@ exports.aiToneRepair = onCall(async (request) => {
   };
 });
 
-exports.aiMessageToTask = onCall(async (request) => {
+exports.aiMessageToTask = onCall({ secrets: [aiApiKey] }, async (request) => {
   if (!isAIGloballyEnabled()) {
     throw new HttpsError('unavailable', 'AI_TEMPORARILY_DISABLED');
   }
@@ -666,7 +669,7 @@ exports.aiMessageToTask = onCall(async (request) => {
   };
 });
 
-exports.aiCreateReminderFromSuggestion = onCall(async (request) => {
+exports.aiCreateReminderFromSuggestion = onCall({ secrets: [aiApiKey] }, async (request) => {
   if (!isAIGloballyEnabled()) {
     throw new HttpsError('unavailable', 'AI_TEMPORARILY_DISABLED');
   }
