@@ -173,6 +173,19 @@ function AiSettingsPanel({ currentUser }) {
                 <span className="feature-desc">Extract reminders and tasks from messages</span>
               </label>
             </div>
+
+            <div className="ai-feature-toggle">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={settings.features?.misunderstandingHelper !== false}
+                  onChange={() => handleFeatureToggle('misunderstandingHelper')}
+                  disabled={saving}
+                />
+                <span className="feature-name">Misunderstanding Helper</span>
+                <span className="feature-desc">Suggest clarification messages in Clear the Air</span>
+              </label>
+            </div>
           </div>
 
           <button

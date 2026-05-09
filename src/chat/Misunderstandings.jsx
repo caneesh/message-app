@@ -11,6 +11,8 @@ import {
   doc,
   serverTimestamp,
 } from 'firebase/firestore'
+import MisunderstandingAiButton from './MisunderstandingAiButton'
+import MisunderstandingAiSuggestion from './MisunderstandingAiSuggestion'
 
 function Misunderstandings({ currentUser, chatId }) {
   const [markers, setMarkers] = useState([])
@@ -23,6 +25,8 @@ function Misunderstandings({ currentUser, chatId }) {
   const [error, setError] = useState('')
   const [selectedMarker, setSelectedMarker] = useState(null)
   const [response, setResponse] = useState('')
+  const [showAiPanel, setShowAiPanel] = useState(false)
+  const [aiSuggestedText, setAiSuggestedText] = useState('')
 
   useEffect(() => {
     const markersRef = collection(db, 'chats', chatId, 'misunderstandings')
@@ -92,14 +96,16 @@ function Misunderstandings({ currentUser, chatId }) {
   }
 
   const handleAddResponse = async () => {
-    if (!selectedMarker || !response.trim()) return
+    const textToSend = aiSuggestedText || response
+    if (!selectedMarker || !textToSend.trim()) return
 
     try {
       await updateDoc(doc(db, 'chats', chatId, 'misunderstandings', selectedMarker.id), {
-        responseByOther: response.trim(),
+        responseByOther: textToSend.trim(),
         updatedAt: serverTimestamp(),
       })
       setResponse('')
+      setAiSuggestedText('')
     } catch (err) {
       console.error('Error adding response:', err)
     }
@@ -287,16 +293,39 @@ function Misunderstandings({ currentUser, chatId }) {
                 <div className="marker-respond">
                   <label>Your response:</label>
                   <textarea
-                    value={response}
-                    onChange={(e) => setResponse(e.target.value)}
+                    value={aiSuggestedText || response}
+                    onChange={(e) => {
+                      setResponse(e.target.value)
+                      setAiSuggestedText('')
+                    }}
                     placeholder="I understand now. Here's what I want you to know..."
                     maxLength={1000}
                     rows={3}
                   />
-                  <button onClick={handleAddResponse} disabled={!response.trim()}>
-                    Send Response
-                  </button>
+                  <div className="marker-respond-actions">
+                    <button onClick={handleAddResponse} disabled={!(aiSuggestedText || response).trim()}>
+                      Send Response
+                    </button>
+                    <MisunderstandingAiButton
+                      currentUser={currentUser}
+                      onClick={() => setShowAiPanel(true)}
+                      disabled={showAiPanel}
+                    />
+                  </div>
                 </div>
+              )}
+
+              {showAiPanel && selectedMarker.status === 'open' && (
+                <MisunderstandingAiSuggestion
+                  currentUser={currentUser}
+                  chatId={chatId}
+                  misunderstanding={selectedMarker}
+                  onClose={() => setShowAiPanel(false)}
+                  onAccept={(text) => {
+                    setAiSuggestedText(text)
+                    setShowAiPanel(false)
+                  }}
+                />
               )}
 
               <div className="marker-detail-actions">

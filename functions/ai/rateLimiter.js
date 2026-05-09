@@ -3,6 +3,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const RATE_LIMITS = {
   toneRepair: { max: 10, windowType: 'hour' },
   messageToTask: { max: 20, windowType: 'day' },
+  misunderstandingHelper: { max: 10, windowType: 'hour' },
 };
 
 function getWindowKey(feature, windowType) {

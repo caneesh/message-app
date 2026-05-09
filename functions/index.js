@@ -760,3 +760,170 @@ exports.aiCreateReminderFromSuggestion = onCall({ secrets: [aiApiKey] }, async (
 
   return { success: true, reminderId: result.reminderId };
 });
+
+// ============================================
+// PHASE 2 AI FEATURES
+// ============================================
+
+const {
+  MISUNDERSTANDING_HELPER_SYSTEM,
+  buildMisunderstandingHelperPrompt,
+} = require('./ai/prompts');
+
+exports.aiMisunderstandingHelper = onCall({ secrets: [aiApiKey] }, async (request) => {
+  if (!isAIGloballyEnabled()) {
+    throw new HttpsError('unavailable', 'AI_TEMPORARILY_DISABLED');
+  }
+
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be logged in');
+  }
+
+  const uid = request.auth.uid;
+  const { chatId, misunderstandingId, contextMessageIds } = request.data;
+
+  if (!chatId || typeof chatId !== 'string') {
+    throw new HttpsError('invalid-argument', 'INVALID_INPUT');
+  }
+  if (!misunderstandingId || typeof misunderstandingId !== 'string') {
+    throw new HttpsError('invalid-argument', 'INVALID_INPUT');
+  }
+
+  const membershipCheck = await verifyChatMembership(chatId, uid);
+  if (!membershipCheck.isMember) {
+    throw new HttpsError(
+      membershipCheck.reason === 'CHAT_NOT_FOUND' ? 'not-found' : 'permission-denied',
+      membershipCheck.reason
+    );
+  }
+
+  const aiCheck = await verifyAIEnabled(uid, 'misunderstandingHelper');
+  if (!aiCheck.enabled) {
+    throw new HttpsError('failed-precondition', aiCheck.reason);
+  }
+
+  const misDoc = await db.doc(`chats/${chatId}/misunderstandings/${misunderstandingId}`).get();
+  if (!misDoc.exists) {
+    throw new HttpsError('not-found', 'MISUNDERSTANDING_NOT_FOUND');
+  }
+
+  const misData = misDoc.data();
+  const whatIMeant = misData.whatIMeant || '';
+  const whatIHeard = misData.whatIHeard || '';
+  const whatINeed = misData.whatINeed || '';
+  const combinedText = `${whatIMeant} ${whatIHeard} ${whatINeed}`;
+
+  if (combinedText.trim().length < 10) {
+    throw new HttpsError('invalid-argument', 'TEXT_TOO_SHORT');
+  }
+
+  if (containsSensitiveData(whatIMeant) || containsSensitiveData(whatIHeard) || containsSensitiveData(whatINeed)) {
+    throw new HttpsError('invalid-argument', 'SENSITIVE_DATA_DETECTED');
+  }
+
+  const rateLimit = await checkAndIncrementRateLimit(db, uid, 'misunderstandingHelper');
+  if (!rateLimit.allowed) {
+    throw new HttpsError('resource-exhausted', 'RATE_LIMIT_EXCEEDED');
+  }
+
+  let contextMessages = [];
+  if (contextMessageIds && Array.isArray(contextMessageIds) && contextMessageIds.length > 0) {
+    const limitedIds = contextMessageIds.slice(0, 5);
+    for (const msgId of limitedIds) {
+      const msgDoc = await db.doc(`chats/${chatId}/messages/${msgId}`).get();
+      if (msgDoc.exists) {
+        const text = msgDoc.data().text || '';
+        if (!containsSensitiveData(text)) {
+          contextMessages.push(text.slice(0, 200));
+        }
+      }
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const userPrompt = buildMisunderstandingHelperPrompt({
+    whatIMeant,
+    whatIHeard,
+    whatINeed,
+    contextMessages,
+    today,
+  });
+
+  const aiResult = await callAI(MISUNDERSTANDING_HELPER_SYSTEM, userPrompt, { maxTokens: 800 });
+
+  const runId = db.collection(`chats/${chatId}/aiRuns`).doc().id;
+  await db.doc(`chats/${chatId}/aiRuns/${runId}`).set({
+    requestedByUserId: uid,
+    feature: 'misunderstandingHelper',
+    functionName: 'aiMisunderstandingHelper',
+    inputTokenCount: aiResult.inputTokens || 0,
+    outputTokenCount: aiResult.outputTokens || 0,
+    success: aiResult.success,
+    errorCode: aiResult.error || null,
+    provider: 'anthropic',
+    model: aiResult.model || 'unknown',
+    requestedAt: FieldValue.serverTimestamp(),
+    completedAt: FieldValue.serverTimestamp(),
+    latencyMs: 0,
+    estimatedCostUsd: 0,
+    suggestionId: null,
+  });
+
+  if (!aiResult.success) {
+    if (aiResult.error === 'AI_TIMEOUT') {
+      throw new HttpsError('deadline-exceeded', 'AI_TIMEOUT');
+    }
+    throw new HttpsError('internal', 'AI_PROVIDER_ERROR');
+  }
+
+  const parsed = parseJSONResponse(aiResult.content);
+  if (!parsed || parsed.no_suggestion || !parsed.clarificationText) {
+    return { success: true, suggestionId: null, suggestion: null, reason: 'NO_SUGGESTION' };
+  }
+
+  if (containsSensitiveData(parsed.clarificationText) ||
+      containsSensitiveData(parsed.issueIdentified) ||
+      containsSensitiveData(parsed.suggestedApproach)) {
+    return { success: true, suggestionId: null, suggestion: null, reason: 'AI_OUTPUT_FILTERED' };
+  }
+
+  const suggestionId = db.collection(`chats/${chatId}/aiSuggestions`).doc().id;
+  const suggestionData = {
+    type: 'misunderstanding_helper',
+    requestedByUserId: uid,
+    targetUserId: uid,
+    sourceMessageId: null,
+    sourceTextPreview: sanitizeForPreview(combinedText, 100),
+    generatedBy: 'anthropic',
+    generatedByFunction: 'aiMisunderstandingHelper',
+    suggestedPayload: {
+      clarificationText: parsed.clarificationText.slice(0, 2000),
+      issueIdentified: (parsed.issueIdentified || '').slice(0, 500),
+      suggestedApproach: (parsed.suggestedApproach || '').slice(0, 500),
+    },
+    confidence: typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.7,
+    status: 'pending',
+    acceptedPayload: null,
+    reviewedBy: null,
+    reviewedAt: null,
+    dismissReason: null,
+    createdAt: FieldValue.serverTimestamp(),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+  };
+
+  await db.doc(`chats/${chatId}/aiSuggestions/${suggestionId}`).set(suggestionData);
+  await db.doc(`chats/${chatId}/aiRuns/${runId}`).update({ suggestionId });
+
+  logger.info('AI Misunderstanding Helper suggestion created:', suggestionId);
+
+  return {
+    success: true,
+    suggestionId,
+    suggestion: {
+      clarificationText: parsed.clarificationText.slice(0, 2000),
+      issueIdentified: (parsed.issueIdentified || '').slice(0, 500),
+      suggestedApproach: (parsed.suggestedApproach || '').slice(0, 500),
+      confidence: suggestionData.confidence,
+    },
+  };
+});

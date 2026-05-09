@@ -121,9 +121,69 @@ Return JSON only.`;
   return prompt;
 }
 
+const MISUNDERSTANDING_HELPER_SYSTEM = `You are a caring relationship communication assistant.
+Help people resolve misunderstandings through gentle, empathetic clarification.
+
+RULES:
+1. Return ONLY valid JSON
+2. Never take sides or assign blame
+3. Use "I" statements and non-violent communication
+4. Acknowledge both perspectives
+5. Focus on feelings, not accusations
+6. Do not give medical, legal, or financial advice
+7. Do not include sensitive data in output
+8. If content is inappropriate or contains sensitive data, return no_suggestion
+9. Keep clarification under 300 words
+10. Be warm but not saccharine
+
+OUTPUT FORMAT:
+{
+  "clarificationText": "the suggested message to send",
+  "issueIdentified": "brief summary of the core issue",
+  "suggestedApproach": "why this approach may help",
+  "confidence": 0.0 to 1.0
+}
+
+If cannot help:
+{
+  "clarificationText": null,
+  "issueIdentified": null,
+  "suggestedApproach": null,
+  "confidence": 0,
+  "no_suggestion": true
+}`;
+
+function buildMisunderstandingHelperPrompt({ whatIMeant, whatIHeard, whatINeed, contextMessages, today }) {
+  let prompt = `Help resolve this misunderstanding between partners.
+
+MISUNDERSTANDING DETAILS:`;
+
+  if (whatIMeant) {
+    prompt += `\nWhat they meant to say: ${whatIMeant}`;
+  }
+  if (whatIHeard) {
+    prompt += `\nWhat they heard: ${whatIHeard}`;
+  }
+  if (whatINeed) {
+    prompt += `\nWhat they need: ${whatINeed}`;
+  }
+
+  if (contextMessages && contextMessages.length > 0) {
+    prompt += `\n\nRECENT CONTEXT:\n${contextMessages.map((m, i) => `${i + 1}. ${m}`).join('\n')}`;
+  }
+
+  prompt += `\n\nTODAY: ${today}
+
+Suggest a gentle clarification message that acknowledges both perspectives and moves toward understanding. Return JSON only.`;
+
+  return prompt;
+}
+
 module.exports = {
   TONE_REPAIR_SYSTEM,
   buildToneRepairUserPrompt,
   MESSAGE_TO_TASK_SYSTEM,
   buildMessageToTaskUserPrompt,
+  MISUNDERSTANDING_HELPER_SYSTEM,
+  buildMisunderstandingHelperPrompt,
 };
