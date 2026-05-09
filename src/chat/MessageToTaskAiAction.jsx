@@ -65,12 +65,18 @@ function MessageToTaskAiAction({ currentUser, chatId, message, onClose }) {
         text: messageText.trim(),
       })
 
-      if (result.data.tasks && result.data.tasks.length > 0) {
+      if (result.data.suggestion) {
+        const task = {
+          title: result.data.suggestion.taskTitle,
+          notes: result.data.suggestion.taskDescription || '',
+          dueAt: result.data.suggestion.suggestedDueDate || null,
+          assignedTo: result.data.suggestion.suggestedAssignee || null,
+        }
         setSuggestions({
-          tasks: result.data.tasks,
+          tasks: [task],
           suggestionId: result.data.suggestionId,
         })
-      } else if (result.data.noSuggestion) {
+      } else if (result.data.reason === 'NO_TASK_DETECTED' || result.data.noSuggestion) {
         setError('No tasks found in this message')
       }
     } catch (err) {
