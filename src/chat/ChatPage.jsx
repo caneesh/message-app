@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { db, PRIVATE_CHAT_ID, VAPID_KEY, requestNotificationPermission } from '../firebase/firebaseConfig'
 import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
+import AppShell from '../components/AppShell'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import Reminders from './Reminders'
@@ -191,262 +192,81 @@ function ChatPage() {
     return <LockScreen onUnlock={() => setIsLocked(false)} />
   }
 
-  return (
-    <div className="chat-container">
-      <header className="chat-header">
-        <h1>OneRoom</h1>
-        <div className="header-actions">
-          <div className="search-container" role="search">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search messages"
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <Dashboard currentUser={currentUser} chatId={PRIVATE_CHAT_ID} onNavigate={setActiveTab} />
+      case 'chat':
+        return (
+          <>
+            <MessageList
+              currentUser={currentUser}
+              chatId={PRIVATE_CHAT_ID}
+              onReply={setActiveReplyTo}
+              searchQuery={searchQuery}
             />
-            {searchQuery && (
-              <button
-                className="search-clear"
-                onClick={() => setSearchQuery('')}
-                title="Clear search"
-                aria-label="Clear search"
-              >
-                ×
-              </button>
+            {friendTyping && (
+              <div className="typing-indicator">Friend is typing...</div>
             )}
-          </div>
-          <button
-            className="theme-btn"
-            onClick={toggleDarkMode}
-            title={darkMode ? 'Light mode' : 'Dark mode'}
-            aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-          {VAPID_KEY && (
-            <button
-              className={`notification-btn ${notificationsEnabled ? 'enabled' : ''}`}
-              onClick={handleToggleNotifications}
-              disabled={notificationStatus === 'requesting'}
-              title={notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
-              aria-label={notificationsEnabled ? 'Disable push notifications' : 'Enable push notifications'}
-            >
-              {notificationStatus === 'requesting' ? '...' : notificationsEnabled ? '🔔' : '🔕'}
-            </button>
-          )}
-          <button className="logout-btn" onClick={logout} aria-label="Log out">
-            Log out
-          </button>
-        </div>
-      </header>
-      <nav className="chat-tabs" role="tablist" aria-label="Main navigation">
-        <button
-          className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('dashboard')}
-          role="tab"
-          aria-selected={activeTab === 'dashboard'}
-          title="Dashboard"
-        >
-          🏠
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
-          onClick={() => setActiveTab('chat')}
-          role="tab"
-          aria-selected={activeTab === 'chat'}
-          title="Chat"
-        >
-          💬
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'reminders' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reminders')}
-          role="tab"
-          aria-selected={activeTab === 'reminders'}
-          title="Reminders"
-        >
-          ⏰
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'notes' ? 'active' : ''}`}
-          onClick={() => setActiveTab('notes')}
-          role="tab"
-          aria-selected={activeTab === 'notes'}
-          title="Notes"
-        >
-          📝
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`}
-          onClick={() => setActiveTab('events')}
-          role="tab"
-          aria-selected={activeTab === 'events'}
-          title="Events"
-        >
-          📅
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'lists' ? 'active' : ''}`}
-          onClick={() => setActiveTab('lists')}
-          role="tab"
-          aria-selected={activeTab === 'lists'}
-          title="Lists"
-        >
-          📋
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'decisions' ? 'active' : ''}`}
-          onClick={() => setActiveTab('decisions')}
-          role="tab"
-          aria-selected={activeTab === 'decisions'}
-          title="Decisions"
-        >
-          ⚖️
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'promises' ? 'active' : ''}`}
-          onClick={() => setActiveTab('promises')}
-          role="tab"
-          aria-selected={activeTab === 'promises'}
-          title="Promises"
-        >
-          🤝
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'followups' ? 'active' : ''}`}
-          onClick={() => setActiveTab('followups')}
-          role="tab"
-          aria-selected={activeTab === 'followups'}
-          title="Follow-ups"
-        >
-          🔔
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'capsules' ? 'active' : ''}`}
-          onClick={() => setActiveTab('capsules')}
-          role="tab"
-          aria-selected={activeTab === 'capsules'}
-          title="Capsules"
-        >
-          📦
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'misunderstandings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('misunderstandings')}
-          role="tab"
-          aria-selected={activeTab === 'misunderstandings'}
-          title="Clear the Air"
-        >
-          🕊️
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'vault' ? 'active' : ''}`}
-          onClick={() => setActiveTab('vault')}
-          role="tab"
-          aria-selected={activeTab === 'vault'}
-          title="Vault"
-        >
-          🔐
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'checkin' ? 'active' : ''}`}
-          onClick={() => setActiveTab('checkin')}
-          role="tab"
-          aria-selected={activeTab === 'checkin'}
-          title="Check-in"
-        >
-          💚
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'care' ? 'active' : ''}`}
-          onClick={() => setActiveTab('care')}
-          role="tab"
-          aria-selected={activeTab === 'care'}
-          title="Care Mode"
-        >
-          🏥
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'memories' ? 'active' : ''}`}
-          onClick={() => setActiveTab('memories')}
-          role="tab"
-          aria-selected={activeTab === 'memories'}
-          title="Memories"
-        >
-          📸
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'devices' ? 'active' : ''}`}
-          onClick={() => setActiveTab('devices')}
-          role="tab"
-          aria-selected={activeTab === 'devices'}
-          title="Devices"
-        >
-          📱
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('settings')}
-          role="tab"
-          aria-selected={activeTab === 'settings'}
-          title="Settings"
-        >
-          ⚙️
-        </button>
-      </nav>
-      {activeTab === 'dashboard' ? (
-        <Dashboard currentUser={currentUser} chatId={PRIVATE_CHAT_ID} onNavigate={setActiveTab} />
-      ) : activeTab === 'chat' ? (
-        <>
-          <MessageList
-            currentUser={currentUser}
-            chatId={PRIVATE_CHAT_ID}
-            onReply={setActiveReplyTo}
-            searchQuery={searchQuery}
-          />
-          {friendTyping && (
-            <div className="typing-indicator">Friend is typing...</div>
-          )}
-          <MessageInput
-            currentUser={currentUser}
-            chatId={PRIVATE_CHAT_ID}
-            activeReplyTo={activeReplyTo}
-            clearReply={clearReply}
-          />
-        </>
-      ) : activeTab === 'reminders' ? (
-        <Reminders currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'notes' ? (
-        <Notes currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'events' ? (
-        <Events currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'lists' ? (
-        <Lists currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'decisions' ? (
-        <Decisions currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'promises' ? (
-        <Promises currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'followups' ? (
-        <FollowUps currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'capsules' ? (
-        <Capsules currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'misunderstandings' ? (
-        <Misunderstandings currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'vault' ? (
-        <Vault currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'checkin' ? (
-        <CheckIn currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'care' ? (
-        <CareMode currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'memories' ? (
-        <Memories currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      ) : activeTab === 'devices' ? (
-        <Devices currentUser={currentUser} />
-      ) : (
-        <Settings currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
-      )}
-    </div>
+            <MessageInput
+              currentUser={currentUser}
+              chatId={PRIVATE_CHAT_ID}
+              activeReplyTo={activeReplyTo}
+              clearReply={clearReply}
+            />
+          </>
+        )
+      case 'reminders':
+        return <Reminders currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'notes':
+        return <Notes currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'events':
+        return <Events currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'lists':
+        return <Lists currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'decisions':
+        return <Decisions currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'promises':
+        return <Promises currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'followups':
+        return <FollowUps currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'capsules':
+        return <Capsules currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'misunderstandings':
+        return <Misunderstandings currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'vault':
+        return <Vault currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'checkin':
+        return <CheckIn currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'care':
+        return <CareMode currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'memories':
+        return <Memories currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'devices':
+        return <Devices currentUser={currentUser} />
+      case 'settings':
+        return <Settings currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      default:
+        return <Dashboard currentUser={currentUser} chatId={PRIVATE_CHAT_ID} onNavigate={setActiveTab} />
+    }
+  }
+
+  return (
+    <AppShell
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      darkMode={darkMode}
+      onToggleDarkMode={toggleDarkMode}
+      notificationsEnabled={notificationsEnabled}
+      onToggleNotifications={handleToggleNotifications}
+      notificationStatus={notificationStatus}
+      showNotificationBtn={!!VAPID_KEY}
+      onLogout={logout}
+      searchQuery={searchQuery}
+      onSearchChange={setSearchQuery}
+    >
+      {renderContent()}
+    </AppShell>
   )
 }
 
