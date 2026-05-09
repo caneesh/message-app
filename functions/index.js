@@ -334,14 +334,11 @@ async function verifyAIEnabled(uid, feature) {
     return { enabled: false, reason: 'AI_NOT_ENABLED' };
   }
   const settings = settingsDoc.data();
-  if (!settings.aiEnabled) {
+  if (!settings.enabled) {
     return { enabled: false, reason: 'AI_NOT_ENABLED' };
   }
   if (!settings.features?.[feature]) {
     return { enabled: false, reason: 'FEATURE_NOT_ENABLED' };
-  }
-  if (!settings.dataSharing?.allowMessageAnalysis) {
-    return { enabled: false, reason: 'MESSAGE_ANALYSIS_NOT_ALLOWED' };
   }
   return { enabled: true };
 }

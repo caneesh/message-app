@@ -7,14 +7,11 @@ function AiSettingsPanel({ currentUser }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [settings, setSettings] = useState({
-    aiEnabled: false,
+    enabled: false,
     consentedAt: null,
     features: {
       toneRepair: true,
       messageToTask: true,
-    },
-    dataSharing: {
-      allowMessageAnalysis: true,
     },
   })
   const [showConsent, setShowConsent] = useState(false)
@@ -60,11 +57,8 @@ function AiSettingsPanel({ currentUser }) {
   const handleEnableAI = async () => {
     const newSettings = {
       ...settings,
-      aiEnabled: true,
+      enabled: true,
       consentedAt: serverTimestamp(),
-      dataSharing: {
-        allowMessageAnalysis: true,
-      },
     }
     await saveSettings(newSettings)
     setShowConsent(false)
@@ -73,7 +67,7 @@ function AiSettingsPanel({ currentUser }) {
   const handleDisableAI = async () => {
     const newSettings = {
       ...settings,
-      aiEnabled: false,
+      enabled: false,
     }
     await saveSettings(newSettings)
   }
@@ -108,7 +102,7 @@ function AiSettingsPanel({ currentUser }) {
 
       {error && <div className="settings-error">{error}</div>}
 
-      {!settings.aiEnabled ? (
+      {!settings.enabled ? (
         showConsent ? (
           <div className="ai-consent">
             <h4>Enable AI Features</h4>

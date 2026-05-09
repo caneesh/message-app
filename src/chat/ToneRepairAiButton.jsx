@@ -19,7 +19,7 @@ function ToneRepairAiButton({ currentUser, chatId, text, onSuggestion, disabled 
       const snapshot = await getDoc(settingsRef)
       if (snapshot.exists()) {
         const settings = snapshot.data()
-        setAiEnabled(settings.aiEnabled && settings.features?.toneRepair !== false)
+        setAiEnabled(settings.enabled && settings.features?.toneRepair !== false)
       }
     } catch (err) {
       console.error('Error checking AI settings:', err)
