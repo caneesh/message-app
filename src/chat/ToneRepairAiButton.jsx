@@ -36,18 +36,18 @@ function ToneRepairAiButton({ currentUser, chatId, text, onSuggestion, disabled 
       const aiToneRepair = httpsCallable(functions, 'aiToneRepair')
       const result = await aiToneRepair({
         chatId,
-        text: text.trim(),
-        mode: 'softer',
+        originalText: text.trim(),
+        toneGoal: 'softer',
       })
 
-      if (result.data.suggestion) {
+      if (result.data.suggestion?.rewrittenText) {
         onSuggestion({
           original: text,
-          softened: result.data.suggestion,
+          softened: result.data.suggestion.rewrittenText,
           suggestionId: result.data.suggestionId,
           isAi: true,
         })
-      } else if (result.data.noSuggestion) {
+      } else if (result.data.reason === 'NO_SUGGESTION' || result.data.reason === 'AI_OUTPUT_FILTERED') {
         setError('No changes needed')
         setTimeout(() => setError(''), 2000)
       }
