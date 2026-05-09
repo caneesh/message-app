@@ -320,6 +320,11 @@ const {
 
 const VALID_TONE_GOALS = ['softer', 'clearer', 'more_caring', 'less_angry'];
 
+function isAIGloballyEnabled() {
+  const aiEnabled = process.env.AI_ENABLED;
+  return aiEnabled !== 'false' && aiEnabled !== '0';
+}
+
 async function verifyAIEnabled(uid, feature) {
   const settingsDoc = await db.doc(`users/${uid}/settings/ai`).get();
   if (!settingsDoc.exists) {
@@ -351,6 +356,10 @@ async function verifyChatMembership(chatId, uid) {
 }
 
 exports.aiToneRepair = onCall(async (request) => {
+  if (!isAIGloballyEnabled()) {
+    throw new HttpsError('unavailable', 'AI_TEMPORARILY_DISABLED');
+  }
+
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be logged in');
   }
@@ -496,6 +505,10 @@ exports.aiToneRepair = onCall(async (request) => {
 });
 
 exports.aiMessageToTask = onCall(async (request) => {
+  if (!isAIGloballyEnabled()) {
+    throw new HttpsError('unavailable', 'AI_TEMPORARILY_DISABLED');
+  }
+
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be logged in');
   }
@@ -654,6 +667,10 @@ exports.aiMessageToTask = onCall(async (request) => {
 });
 
 exports.aiCreateReminderFromSuggestion = onCall(async (request) => {
+  if (!isAIGloballyEnabled()) {
+    throw new HttpsError('unavailable', 'AI_TEMPORARILY_DISABLED');
+  }
+
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be logged in');
   }
