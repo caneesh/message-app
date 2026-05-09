@@ -66,11 +66,21 @@ function MessageToTaskAiAction({ currentUser, chatId, message, onClose }) {
       })
 
       if (result.data.suggestion) {
+        // Translate "sender"/"recipient" to actual UIDs
+        let assignedTo = null
+        const suggestedAssignee = result.data.suggestion.suggestedAssignee
+        if (suggestedAssignee === 'sender') {
+          assignedTo = message.senderId
+        } else if (suggestedAssignee === 'recipient') {
+          const members = result.data.chatMembers || chatMembers
+          assignedTo = members.find(m => m !== message.senderId) || currentUser.uid
+        }
+
         const task = {
           title: result.data.suggestion.taskTitle,
           notes: result.data.suggestion.taskDescription || '',
           dueAt: result.data.suggestion.suggestedDueDate || null,
-          assignedTo: result.data.suggestion.suggestedAssignee || null,
+          assignedTo,
         }
         setSuggestions({
           tasks: [task],
@@ -109,11 +119,12 @@ function MessageToTaskAiAction({ currentUser, chatId, message, onClose }) {
       await aiCreateReminder({
         chatId,
         suggestionId: suggestions.suggestionId,
-        title: task.title,
-        notes: task.notes || '',
-        dueAt: task.dueAt || null,
-        assignedTo: task.assignedTo || currentUser.uid,
-        sourceMessageId: message.id,
+        acceptedPayload: {
+          taskTitle: task.title,
+          taskDescription: task.notes || '',
+          dueDate: task.dueAt || null,
+          assignedTo: task.assignedTo || currentUser.uid,
+        },
       })
 
       setSuggestions((prev) => ({
