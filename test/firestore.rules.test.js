@@ -539,12 +539,7 @@ describe('Firestore Security Rules', () => {
       const db = getFirestore({ uid: USER_A_ID })
       await assertSucceeds(
         updateDoc(doc(db, 'chats', CHAT_ID, 'aiSuggestions', 'sug1'), {
-          type: 'toneRepair',
-          sourceMessageId: 'msg1',
-          suggestion: 'Softened text',
           status: 'accepted',
-          createdBy: USER_A_ID,
-          createdAt: new Date(),
         })
       )
     })
