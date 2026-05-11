@@ -1,0 +1,582 @@
+/* ============================================
+   OneRoom Mobile UX System
+   Touch-First • Thumb-Friendly • Premium
+   ============================================ */
+
+/* ----------------------------------------
+   Safe Area & Viewport Handling
+   ---------------------------------------- */
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+
+  /* Mobile-specific spacing */
+  --mobile-gutter: 16px;
+  --mobile-card-radius: 20px;
+  --mobile-touch-target: 48px;
+  --mobile-touch-target-lg: 56px;
+
+  /* Bottom bar heights */
+  --tab-bar-height: 64px;
+  --composer-height: 72px;
+  --keyboard-offset: 0px;
+}
+
+/* Viewport height fix for mobile browsers */
+@supports (height: 100dvh) {
+  :root {
+    --app-height: 100dvh;
+  }
+}
+
+@supports not (height: 100dvh) {
+  :root {
+    --app-height: calc(100vh - var(--safe-area-top) - var(--safe-area-bottom));
+  }
+}
+
+/* ----------------------------------------
+   Touch Interaction Enhancements
+   ---------------------------------------- */
+
+/* Prevent text selection during swipe */
+.touch-action-pan-y {
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.touch-action-pan-x {
+  touch-action: pan-x;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.touch-action-none {
+  touch-action: none;
+}
+
+/* Disable highlight on tap */
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Active state for touch feedback */
+.touch-feedback {
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+.touch-feedback:active {
+  transform: scale(0.97);
+}
+
+/* ----------------------------------------
+   Mobile Typography Scale
+   ---------------------------------------- */
+@media (max-width: 640px) {
+  :root {
+    --font-size-xs: 0.6875rem;   /* 11px */
+    --font-size-sm: 0.75rem;     /* 12px */
+    --font-size-base: 0.875rem;  /* 14px */
+    --font-size-md: 0.9375rem;   /* 15px */
+    --font-size-lg: 1rem;        /* 16px - minimum for iOS */
+    --font-size-xl: 1.125rem;    /* 18px */
+    --font-size-2xl: 1.25rem;    /* 20px */
+    --font-size-3xl: 1.375rem;   /* 22px */
+  }
+}
+
+/* ----------------------------------------
+   Mobile Spacing Scale
+   ---------------------------------------- */
+@media (max-width: 640px) {
+  .mobile-gutter {
+    padding-left: var(--mobile-gutter);
+    padding-right: var(--mobile-gutter);
+  }
+
+  .mobile-safe-top {
+    padding-top: max(var(--space-4), var(--safe-area-top));
+  }
+
+  .mobile-safe-bottom {
+    padding-bottom: max(var(--space-4), var(--safe-area-bottom));
+  }
+
+  .mobile-safe-x {
+    padding-left: max(var(--mobile-gutter), var(--safe-area-left));
+    padding-right: max(var(--mobile-gutter), var(--safe-area-right));
+  }
+}
+
+/* ----------------------------------------
+   Thumb Zone Optimization
+   ---------------------------------------- */
+
+/* Primary actions in bottom third of screen */
+.thumb-zone-primary {
+  position: fixed;
+  bottom: calc(var(--tab-bar-height) + var(--safe-area-bottom) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Secondary actions - middle zone */
+.thumb-zone-secondary {
+  /* Naturally reachable area */
+}
+
+/* Tertiary actions - top zone (use sparingly) */
+.thumb-zone-tertiary {
+  /* Hard to reach - minimize usage on mobile */
+}
+
+/* ----------------------------------------
+   Mobile Card System
+   ---------------------------------------- */
+.mobile-card {
+  background: var(--color-bg-secondary);
+  border-radius: var(--mobile-card-radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+
+  /* Subtle shadow for depth */
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.mobile-card-interactive {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mobile-card-interactive:active {
+  transform: scale(0.98);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+/* Status indicators */
+.mobile-card-status-pending {
+  border-left: 4px solid var(--color-warning);
+}
+
+.mobile-card-status-done {
+  border-left: 4px solid var(--color-success);
+  background: linear-gradient(to right, rgba(0, 184, 148, 0.05), transparent);
+}
+
+.mobile-card-status-cancelled {
+  opacity: 0.6;
+}
+
+/* ----------------------------------------
+   Mobile Bottom Navigation
+   ---------------------------------------- */
+.mobile-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+
+  height: var(--tab-bar-height);
+  padding-bottom: var(--safe-area-bottom);
+
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.dark-mode .mobile-tab-bar {
+  background: rgba(15, 15, 18, 0.92);
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+.mobile-tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+
+  min-width: 64px;
+  max-width: 120px;
+  padding: 8px;
+
+  color: var(--color-text-tertiary);
+  transition: color 0.2s ease;
+}
+
+.mobile-tab-item.active {
+  color: var(--color-accent-primary);
+}
+
+.mobile-tab-icon {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.2s ease;
+}
+
+.mobile-tab-item.active .mobile-tab-icon {
+  transform: scale(1.1);
+}
+
+.mobile-tab-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* ----------------------------------------
+   Floating Composer
+   ---------------------------------------- */
+.floating-composer {
+  position: fixed;
+  bottom: calc(var(--tab-bar-height) + var(--safe-area-bottom) + 12px);
+  left: 12px;
+  right: 12px;
+  z-index: 90;
+
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+
+  padding: 8px;
+  border-radius: 28px;
+
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.dark-mode .floating-composer {
+  background: rgba(30, 30, 35, 0.95);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.floating-composer-input {
+  flex: 1;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 12px 16px;
+
+  font-size: 16px; /* Prevent iOS zoom */
+  line-height: 1.4;
+
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+
+  color: var(--color-text-primary);
+}
+
+.floating-composer-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.floating-composer-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+
+  background: var(--color-accent-primary);
+  color: white;
+
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.floating-composer-btn:active {
+  transform: scale(0.9);
+}
+
+.floating-composer-btn:disabled {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-tertiary);
+}
+
+/* ----------------------------------------
+   Swipe Gestures
+   ---------------------------------------- */
+.swipeable-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.swipeable-content {
+  position: relative;
+  z-index: 1;
+  background: var(--color-bg-secondary);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.swipeable-actions {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.swipeable-actions-left {
+  left: 0;
+}
+
+.swipeable-actions-right {
+  right: 0;
+}
+
+.swipeable-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+
+  width: 72px;
+  padding: 8px;
+
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.swipeable-action-archive {
+  background: var(--color-warning);
+  color: #78350f;
+}
+
+.swipeable-action-delete {
+  background: var(--color-error);
+  color: white;
+}
+
+.swipeable-action-done {
+  background: var(--color-success);
+  color: white;
+}
+
+/* ----------------------------------------
+   Pull to Refresh
+   ---------------------------------------- */
+.pull-refresh-indicator {
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+
+  background: var(--color-bg-secondary);
+  box-shadow: var(--shadow-lg);
+
+  transition: top 0.2s ease;
+}
+
+.pull-refresh-indicator.pulling {
+  transition: none;
+}
+
+.pull-refresh-spinner {
+  width: 20px;
+  height: 20px;
+  color: var(--color-accent-primary);
+}
+
+/* ----------------------------------------
+   Mobile Sheet / Bottom Drawer
+   ---------------------------------------- */
+.mobile-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.mobile-sheet-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.mobile-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 201;
+
+  background: var(--color-bg-secondary);
+  border-radius: 24px 24px 0 0;
+
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.mobile-sheet.open {
+  transform: translateY(0);
+}
+
+.mobile-sheet-handle {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+}
+
+.mobile-sheet-handle-bar {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-text-tertiary);
+  opacity: 0.3;
+}
+
+.mobile-sheet-content {
+  padding: 0 var(--mobile-gutter);
+  padding-bottom: max(var(--space-6), var(--safe-area-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ----------------------------------------
+   Mobile Animations
+   ---------------------------------------- */
+@keyframes mobile-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mobile-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mobile-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes mobile-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-mobile-slide-up {
+  animation: mobile-slide-up 0.25s ease-out;
+}
+
+.animate-mobile-slide-down {
+  animation: mobile-slide-down 0.25s ease-out;
+}
+
+.animate-mobile-scale-in {
+  animation: mobile-scale-in 0.2s ease-out;
+}
+
+.animate-mobile-fade-in {
+  animation: mobile-fade-in 0.2s ease-out;
+}
+
+/* ----------------------------------------
+   Haptic Feedback Hints
+   ---------------------------------------- */
+/* Add data attribute to elements that should trigger haptics */
+[data-haptic="light"]:active,
+[data-haptic="medium"]:active,
+[data-haptic="heavy"]:active {
+  /* Visual feedback - actual haptics handled in JS */
+}
+
+/* ----------------------------------------
+   Reduced Motion
+   ---------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .floating-composer,
+  .mobile-sheet,
+  .swipeable-content {
+    transition: none !important;
+  }
+}
+
+/* ----------------------------------------
+   Landscape Adjustments
+   ---------------------------------------- */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --tab-bar-height: 48px;
+    --composer-height: 56px;
+  }
+
+  .mobile-tab-label {
+    display: none;
+  }
+
+  .mobile-card {
+    padding: var(--space-3);
+  }
+}

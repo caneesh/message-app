@@ -1,0 +1,419 @@
+/**
+ * OneRoom Design System - Theme Variables
+ *
+ * Premium, calm, emotionally intelligent design tokens.
+ * Communicates: trust, clarity, calmness, collaboration.
+ */
+
+/* ============================================
+   ROOT VARIABLES - LIGHT MODE
+   ============================================ */
+:root {
+  /* ----------------------------------------
+     Color Primitives
+     ---------------------------------------- */
+
+  /* Neutral Scale */
+  --color-neutral-0: #FFFFFF;
+  --color-neutral-50: #FAFBFC;
+  --color-neutral-100: #F4F5F7;
+  --color-neutral-150: #EBEDF0;
+  --color-neutral-200: #DFE1E6;
+  --color-neutral-300: #C1C7D0;
+  --color-neutral-400: #A5ADBA;
+  --color-neutral-500: #7A869A;
+  --color-neutral-600: #6B778C;
+  --color-neutral-700: #505F79;
+  --color-neutral-800: #344563;
+  --color-neutral-900: #172B4D;
+  --color-neutral-950: #091E42;
+
+  /* Primary - Violet (Trust & Wisdom) */
+  --color-primary-50: #F5F3FF;
+  --color-primary-100: #EDE9FE;
+  --color-primary-200: #DDD6FE;
+  --color-primary-300: #C4B5FD;
+  --color-primary-400: #A78BFA;
+  --color-primary-500: #8B5CF6;
+  --color-primary-600: #7C3AED;
+  --color-primary-700: #6D28D9;
+  --color-primary-800: #5B21B6;
+  --color-primary-900: #4C1D95;
+
+  /* Secondary - Teal (Harmony & Balance) */
+  --color-secondary-50: #F0FDFA;
+  --color-secondary-100: #CCFBF1;
+  --color-secondary-200: #99F6E4;
+  --color-secondary-300: #5EEAD4;
+  --color-secondary-400: #2DD4BF;
+  --color-secondary-500: #14B8A6;
+  --color-secondary-600: #0D9488;
+  --color-secondary-700: #0F766E;
+  --color-secondary-800: #115E59;
+  --color-secondary-900: #134E4A;
+
+  /* Success - Green (Completion) */
+  --color-success-50: #ECFDF5;
+  --color-success-100: #D1FAE5;
+  --color-success-200: #A7F3D0;
+  --color-success-300: #6EE7B7;
+  --color-success-400: #34D399;
+  --color-success-500: #10B981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+  --color-success-800: #065F46;
+  --color-success-900: #064E3B;
+
+  /* Warning - Amber (Attention) */
+  --color-warning-50: #FFFBEB;
+  --color-warning-100: #FEF3C7;
+  --color-warning-200: #FDE68A;
+  --color-warning-300: #FCD34D;
+  --color-warning-400: #FBBF24;
+  --color-warning-500: #F59E0B;
+  --color-warning-600: #D97706;
+  --color-warning-700: #B45309;
+  --color-warning-800: #92400E;
+  --color-warning-900: #78350F;
+
+  /* Danger - Red (Caution) */
+  --color-danger-50: #FEF2F2;
+  --color-danger-100: #FEE2E2;
+  --color-danger-200: #FECACA;
+  --color-danger-300: #FCA5A5;
+  --color-danger-400: #F87171;
+  --color-danger-500: #EF4444;
+  --color-danger-600: #DC2626;
+  --color-danger-700: #B91C1C;
+  --color-danger-800: #991B1B;
+  --color-danger-900: #7F1D1D;
+
+  /* Info - Blue (Information) */
+  --color-info-50: #EFF6FF;
+  --color-info-100: #DBEAFE;
+  --color-info-200: #BFDBFE;
+  --color-info-300: #93C5FD;
+  --color-info-400: #60A5FA;
+  --color-info-500: #3B82F6;
+  --color-info-600: #2563EB;
+  --color-info-700: #1D4ED8;
+  --color-info-800: #1E40AF;
+  --color-info-900: #1E3A8A;
+
+  /* ----------------------------------------
+     Semantic Tokens - Light Mode
+     ---------------------------------------- */
+
+  /* Backgrounds */
+  --bg-primary: var(--color-neutral-50);
+  --bg-secondary: var(--color-neutral-0);
+  --bg-tertiary: var(--color-neutral-100);
+  --bg-elevated: var(--color-neutral-0);
+  --bg-sunken: var(--color-neutral-150);
+  --bg-overlay: rgba(9, 30, 66, 0.54);
+
+  /* Surfaces */
+  --surface-default: var(--color-neutral-0);
+  --surface-raised: var(--color-neutral-0);
+  --surface-overlay: var(--color-neutral-0);
+  --surface-sunken: var(--color-neutral-100);
+
+  /* Text */
+  --text-primary: var(--color-neutral-900);
+  --text-secondary: var(--color-neutral-600);
+  --text-tertiary: var(--color-neutral-500);
+  --text-disabled: var(--color-neutral-400);
+  --text-inverse: var(--color-neutral-0);
+  --text-link: var(--color-primary-600);
+  --text-link-hover: var(--color-primary-700);
+
+  /* Borders */
+  --border-default: var(--color-neutral-200);
+  --border-light: var(--color-neutral-150);
+  --border-subtle: var(--color-neutral-100);
+  --border-focus: var(--color-primary-500);
+  --border-error: var(--color-danger-500);
+
+  /* Interactive - Primary */
+  --interactive-primary: var(--color-primary-500);
+  --interactive-primary-hover: var(--color-primary-600);
+  --interactive-primary-active: var(--color-primary-700);
+  --interactive-primary-disabled: var(--color-primary-300);
+
+  /* Interactive - Secondary */
+  --interactive-secondary: var(--color-secondary-500);
+  --interactive-secondary-hover: var(--color-secondary-600);
+  --interactive-secondary-active: var(--color-secondary-700);
+  --interactive-secondary-disabled: var(--color-secondary-300);
+
+  /* ----------------------------------------
+     Feature-Specific Semantic Tokens
+     ---------------------------------------- */
+
+  /* Decisions */
+  --decision-active: var(--color-primary-500);
+  --decision-active-bg: var(--color-primary-50);
+  --decision-changed: var(--color-warning-500);
+  --decision-changed-bg: var(--color-warning-50);
+  --decision-cancelled: var(--color-neutral-500);
+  --decision-cancelled-bg: var(--color-neutral-100);
+
+  /* Promises */
+  --promise-pending: var(--color-warning-500);
+  --promise-pending-bg: var(--color-warning-50);
+  --promise-kept: var(--color-success-500);
+  --promise-kept-bg: var(--color-success-50);
+  --promise-broken: var(--color-danger-500);
+  --promise-broken-bg: var(--color-danger-50);
+
+  /* Agreements */
+  --agreement-draft: var(--color-neutral-500);
+  --agreement-draft-bg: var(--color-neutral-100);
+  --agreement-proposed: var(--color-info-500);
+  --agreement-proposed-bg: var(--color-info-50);
+  --agreement-accepted: var(--color-secondary-500);
+  --agreement-accepted-bg: var(--color-secondary-50);
+  --agreement-disputed: var(--color-warning-500);
+  --agreement-disputed-bg: var(--color-warning-50);
+
+  /* Accountability */
+  --accountability-on-track: var(--color-success-500);
+  --accountability-on-track-bg: var(--color-success-50);
+  --accountability-at-risk: var(--color-warning-500);
+  --accountability-at-risk-bg: var(--color-warning-50);
+  --accountability-overdue: var(--color-danger-500);
+  --accountability-overdue-bg: var(--color-danger-50);
+  --accountability-completed: var(--color-primary-500);
+  --accountability-completed-bg: var(--color-primary-50);
+
+  /* ----------------------------------------
+     Shadows
+     ---------------------------------------- */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+  --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.03);
+
+  /* Colored Shadows */
+  --shadow-primary: 0 4px 14px 0 rgba(139, 92, 246, 0.2);
+  --shadow-secondary: 0 4px 14px 0 rgba(20, 184, 166, 0.2);
+  --shadow-success: 0 4px 14px 0 rgba(16, 185, 129, 0.2);
+  --shadow-warning: 0 4px 14px 0 rgba(245, 158, 11, 0.2);
+  --shadow-danger: 0 4px 14px 0 rgba(239, 68, 68, 0.2);
+
+  /* ----------------------------------------
+     Border Radius
+     ---------------------------------------- */
+  --radius-none: 0;
+  --radius-sm: 0.25rem;
+  --radius-default: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* ----------------------------------------
+     Typography
+     ---------------------------------------- */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace;
+
+  /* Font Sizes */
+  --text-2xs: 0.625rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+
+  /* Line Heights */
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+  --leading-loose: 2;
+
+  /* Letter Spacing */
+  --tracking-tighter: -0.05em;
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.025em;
+  --tracking-wider: 0.05em;
+  --tracking-widest: 0.1em;
+
+  /* ----------------------------------------
+     Animation
+     ---------------------------------------- */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  --duration-instant: 50ms;
+  --duration-fastest: 100ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 400ms;
+  --duration-slowest: 500ms;
+
+  /* ----------------------------------------
+     Z-Index Scale
+     ---------------------------------------- */
+  --z-base: 0;
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-fixed: 30;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-tooltip: 70;
+  --z-toast: 80;
+  --z-max: 100;
+
+  /* ----------------------------------------
+     Layout
+     ---------------------------------------- */
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 72px;
+  --header-height: 56px;
+  --tab-bar-height: 64px;
+  --composer-height: 72px;
+  --max-content-width: 840px;
+
+  /* Safe Areas */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+
+  /* ----------------------------------------
+     Glassmorphism
+     ---------------------------------------- */
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-blur: 20px;
+}
+
+/* ============================================
+   DARK MODE
+   ============================================ */
+.dark,
+[data-theme="dark"] {
+  /* Semantic Tokens - Dark Mode */
+
+  /* Backgrounds */
+  --bg-primary: #0D0D10;
+  --bg-secondary: #131318;
+  --bg-tertiary: #1A1A21;
+  --bg-elevated: #1E1E26;
+  --bg-sunken: #08080A;
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+
+  /* Surfaces */
+  --surface-default: #131318;
+  --surface-raised: #1A1A21;
+  --surface-overlay: #1E1E26;
+  --surface-sunken: #0D0D10;
+
+  /* Text */
+  --text-primary: #F4F5F7;
+  --text-secondary: #A5ADBA;
+  --text-tertiary: #7A869A;
+  --text-disabled: #505F79;
+  --text-inverse: #172B4D;
+  --text-link: var(--color-primary-400);
+  --text-link-hover: var(--color-primary-300);
+
+  /* Borders */
+  --border-default: #2D2D38;
+  --border-light: #242430;
+  --border-subtle: #1E1E26;
+  --border-focus: var(--color-primary-400);
+  --border-error: var(--color-danger-400);
+
+  /* Shadows - More subtle in dark mode */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(19, 19, 24, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  /* Feature colors get slightly adjusted for dark mode */
+  --decision-active-bg: rgba(139, 92, 246, 0.15);
+  --decision-changed-bg: rgba(245, 158, 11, 0.15);
+  --decision-cancelled-bg: rgba(122, 134, 154, 0.15);
+
+  --promise-pending-bg: rgba(251, 191, 36, 0.15);
+  --promise-kept-bg: rgba(16, 185, 129, 0.15);
+  --promise-broken-bg: rgba(239, 68, 68, 0.15);
+
+  --agreement-draft-bg: rgba(122, 134, 154, 0.15);
+  --agreement-proposed-bg: rgba(59, 130, 246, 0.15);
+  --agreement-accepted-bg: rgba(20, 184, 166, 0.15);
+  --agreement-disputed-bg: rgba(245, 158, 11, 0.15);
+
+  --accountability-on-track-bg: rgba(16, 185, 129, 0.15);
+  --accountability-at-risk-bg: rgba(245, 158, 11, 0.15);
+  --accountability-overdue-bg: rgba(239, 68, 68, 0.15);
+  --accountability-completed-bg: rgba(139, 92, 246, 0.15);
+}
+
+/* ============================================
+   HIGH CONTRAST MODE (Accessibility)
+   ============================================ */
+@media (prefers-contrast: high) {
+  :root {
+    --text-primary: #000000;
+    --text-secondary: #1a1a1a;
+    --border-default: #000000;
+    --border-focus: #0000FF;
+  }
+
+  .dark,
+  [data-theme="dark"] {
+    --text-primary: #FFFFFF;
+    --text-secondary: #E5E5E5;
+    --border-default: #FFFFFF;
+    --border-focus: #00FFFF;
+  }
+}
+
+/* ============================================
+   REDUCED MOTION
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 0ms;
+    --duration-fastest: 0ms;
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+    --duration-slower: 0ms;
+    --duration-slowest: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
