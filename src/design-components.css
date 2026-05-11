@@ -17,12 +17,7 @@
   scroll-behavior: smooth;
 }
 
-.message-list > * {
-  max-width: var(--max-content-width);
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-}
+/* Messages align themselves via align-self */
 
 .message-list.loading,
 .message-list.error {
