@@ -120,6 +120,33 @@
   --header-height: 56px;
   --max-content-width: 840px;
   --input-bar-height: 64px;
+
+  /* Soft Minimalist Surfaces (for redesign) */
+  --surface-card: #FFFFFF;
+  --surface-muted: #F8F9FA;
+  --surface-subtle: #F3F4F6;
+  --surface-sunken: #EBEDF0;
+
+  /* Message Bubbles */
+  --bubble-incoming: #F3F4F6;
+  --bubble-outgoing: rgba(108, 92, 231, 0.08);
+  --bubble-urgent: rgba(225, 112, 85, 0.08);
+
+  /* Soft Status Backgrounds */
+  --status-active-bg: rgba(0, 184, 148, 0.08);
+  --status-pending-bg: rgba(253, 203, 110, 0.12);
+  --status-overdue-bg: rgba(225, 112, 85, 0.08);
+  --status-complete-bg: rgba(0, 184, 148, 0.06);
+
+  /* Card Shadows (soft, layered) */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
+
+  /* Nav Active States */
+  --nav-active-bg: rgba(108, 92, 231, 0.08);
+  --nav-active-border: var(--color-accent-primary);
+  --nav-hover-bg: rgba(0, 0, 0, 0.03);
 }
 
 /* Dark Mode */
@@ -152,6 +179,33 @@
   --color-success-light: rgba(0, 184, 148, 0.2);
   --color-warning-light: rgba(253, 203, 110, 0.2);
   --color-error-light: rgba(225, 112, 85, 0.2);
+
+  /* Soft Minimalist Surfaces (dark mode) */
+  --surface-card: #232327;
+  --surface-muted: #1F1F23;
+  --surface-subtle: #27272A;
+  --surface-sunken: #18181B;
+
+  /* Message Bubbles (dark mode) */
+  --bubble-incoming: #27272A;
+  --bubble-outgoing: rgba(108, 92, 231, 0.15);
+  --bubble-urgent: rgba(225, 112, 85, 0.15);
+
+  /* Soft Status Backgrounds (dark mode) */
+  --status-active-bg: rgba(0, 184, 148, 0.12);
+  --status-pending-bg: rgba(253, 203, 110, 0.15);
+  --status-overdue-bg: rgba(225, 112, 85, 0.12);
+  --status-complete-bg: rgba(0, 184, 148, 0.10);
+
+  /* Card Shadows (dark mode) */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.15);
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
+
+  /* Nav Active States (dark mode) */
+  --nav-active-bg: rgba(108, 92, 231, 0.15);
+  --nav-active-border: var(--color-accent-primary);
+  --nav-hover-bg: rgba(255, 255, 255, 0.04);
 }
 
 /* ----------------------------------------
@@ -353,24 +407,28 @@ input[type="submit"], input[type="button"] {
 }
 
 .nav-category {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.nav-category:last-child {
+  margin-bottom: 0;
 }
 
 .nav-category-label {
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-1);
+  letter-spacing: 0.08em;
+  padding: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 .sidebar.collapsed .nav-category-label {
   display: none;
 }
 
-/* Navigation Items */
+/* Navigation Items - Soft Minimalist */
 .sidebar-nav-item {
   display: flex;
   align-items: center;
@@ -380,23 +438,24 @@ input[type="submit"], input[type="button"] {
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   gap: var(--space-3);
   text-align: left;
-  transition: all var(--transition-fast);
-  min-height: 44px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  min-height: 40px;
   position: relative;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
 }
 
 .sidebar-nav-item:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--nav-hover-bg);
   color: var(--color-text-primary);
 }
 
 .sidebar-nav-item.active {
-  background: var(--color-accent-primary-light);
+  background: var(--nav-active-bg);
   color: var(--color-accent-primary);
+  font-weight: var(--font-weight-medium);
 }
 
 .sidebar-nav-item.active::before {
@@ -406,8 +465,8 @@ input[type="submit"], input[type="button"] {
   top: 50%;
   transform: translateY(-50%);
   width: 3px;
-  height: 20px;
-  background: var(--color-accent-primary);
+  height: 18px;
+  background: var(--nav-active-border);
   border-radius: 0 var(--radius-full) var(--radius-full) 0;
 }
 
