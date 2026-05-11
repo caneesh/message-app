@@ -1,7 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import './styles/premium-base.css'
 import './design-system.css'
 import './design-components.css'
 import './design-features.css'
