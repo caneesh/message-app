@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { navItems } from './Sidebar'
+import { navCategories } from './Sidebar'
+import { XIcon } from './icons'
 
 function MobileDrawer({ isOpen, onClose, activeTab, onTabChange }) {
   const drawerRef = useRef(null)
@@ -51,20 +52,30 @@ function MobileDrawer({ isOpen, onClose, activeTab, onTabChange }) {
             onClick={onClose}
             aria-label="Close menu"
           >
-            ×
+            <XIcon />
           </button>
         </div>
         <nav className="drawer-nav" role="navigation">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              className={`drawer-nav-item ${activeTab === item.id ? 'active' : ''}`}
-              onClick={() => handleNavClick(item.id)}
-              aria-current={activeTab === item.id ? 'page' : undefined}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span className="nav-label">{item.label}</span>
-            </button>
+          {navCategories.map((category) => (
+            <div key={category.label} className="nav-category">
+              <div className="nav-category-label">{category.label}</div>
+              {category.items.map((item) => {
+                const IconComponent = item.icon
+                return (
+                  <button
+                    key={item.id}
+                    className={`drawer-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                    onClick={() => handleNavClick(item.id)}
+                    aria-current={activeTab === item.id ? 'page' : undefined}
+                  >
+                    <span className="nav-icon">
+                      <IconComponent />
+                    </span>
+                    <span className="nav-label">{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
           ))}
         </nav>
       </div>

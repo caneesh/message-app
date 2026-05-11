@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Sidebar from './Sidebar'
 import MobileDrawer from './MobileDrawer'
+import { MenuIcon, SunIcon, MoonIcon, BellIcon, LogOutIcon, XIcon } from './icons'
 
 function AppShell({
   activeTab,
@@ -58,15 +59,17 @@ function AppShell({
       <div className="app-main">
         <header className="app-header">
           {isMobile && (
-            <button
-              className="hamburger-btn"
-              onClick={() => setDrawerOpen(true)}
-              aria-label="Open navigation menu"
-            >
-              ☰
-            </button>
+            <>
+              <button
+                className="hamburger-btn"
+                onClick={() => setDrawerOpen(true)}
+                aria-label="Open navigation menu"
+              >
+                <MenuIcon />
+              </button>
+              <h1 className="mobile-title">OneRoom</h1>
+            </>
           )}
-          {isMobile && <h1 className="mobile-title">OneRoom</h1>}
           <div className="header-actions">
             <div className="search-container" role="search">
               <input
@@ -84,7 +87,7 @@ function AppShell({
                   title="Clear search"
                   aria-label="Clear search"
                 >
-                  ×
+                  <XIcon />
                 </button>
               )}
             </div>
@@ -94,7 +97,7 @@ function AppShell({
               title={darkMode ? 'Light mode' : 'Dark mode'}
               aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              {darkMode ? '☀️' : '🌙'}
+              {darkMode ? <SunIcon /> : <MoonIcon />}
             </button>
             {showNotificationBtn && (
               <button
@@ -104,11 +107,12 @@ function AppShell({
                 title={notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
                 aria-label={notificationsEnabled ? 'Disable push notifications' : 'Enable push notifications'}
               >
-                {notificationStatus === 'requesting' ? '...' : notificationsEnabled ? '🔔' : '🔕'}
+                {notificationStatus === 'requesting' ? '...' : <BellIcon />}
               </button>
             )}
             <button className="logout-btn" onClick={onLogout} aria-label="Log out">
-              Log out
+              <LogOutIcon />
+              <span>Log out</span>
             </button>
           </div>
         </header>
