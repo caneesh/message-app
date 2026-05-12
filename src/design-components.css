@@ -91,41 +91,118 @@
   display: none;
 }
 
-.message-actions {
+/* ----------------------------------------
+   Floating Message Toolbar (Desktop)
+   ---------------------------------------- */
+.message-toolbar {
+  position: absolute;
+  top: -8px;
+  right: 8px;
   display: flex;
-  gap: var(--space-1);
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface-card);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
   opacity: 0;
-  transition: opacity var(--transition-fast);
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: all 0.15s ease;
+  z-index: 10;
 }
 
-.message:hover .message-actions {
+.message.other .message-toolbar {
+  right: auto;
+  left: 8px;
+}
+
+.message:hover .message-toolbar,
+.message:focus-within .message-toolbar {
   opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
-.message-actions button {
+.toolbar-btn {
   background: transparent;
   border: none;
-  color: inherit;
-  opacity: 0.6;
   cursor: pointer;
-  padding: var(--space-1);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  min-width: 28px;
-  min-height: 28px;
+  padding: 6px 8px;
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  line-height: 1;
+  min-width: 32px;
+  min-height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
+  transition: background 0.15s ease;
 }
 
-.message-actions button:hover {
+.toolbar-btn:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.toolbar-btn:focus {
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 1px;
+}
+
+.dark-mode .message-toolbar {
+  background: var(--color-bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+
+.dark-mode .toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Mobile More Button */
+.mobile-more-btn {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  font-size: 16px;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.message.other .mobile-more-btn {
+  right: auto;
+  left: 4px;
+}
+
+.mobile-more-btn:hover,
+.mobile-more-btn:active {
   opacity: 1;
-  background: rgba(0, 0, 0, 0.1);
 }
 
-.message.own .message-actions button:hover {
-  background: rgba(0, 0, 0, 0.08);
+/* Touch device detection */
+@media (hover: none) and (pointer: coarse) {
+  .message-toolbar {
+    display: none !important;
+  }
+
+  .mobile-more-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+/* Desktop: hide mobile button */
+@media (hover: hover) and (pointer: fine) {
+  .mobile-more-btn {
+    display: none !important;
+  }
 }
 
 .message-text {
@@ -346,6 +423,141 @@
 
 .more-menu button:hover {
   background: var(--color-bg-tertiary);
+}
+
+.more-menu-divider {
+  height: 1px;
+  background: var(--color-border-light);
+  margin: var(--space-2) 0;
+}
+
+/* ----------------------------------------
+   Mobile Action Sheet
+   ---------------------------------------- */
+.action-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.action-sheet {
+  width: 100%;
+  max-width: 500px;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  animation: slideUp 0.2s ease;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.action-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-md);
+}
+
+.action-sheet-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: var(--space-2);
+  opacity: 0.6;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-sheet-close:hover {
+  opacity: 1;
+}
+
+.action-sheet-content {
+  padding: var(--space-2);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.action-sheet-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4);
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-md);
+  transition: background 0.15s ease;
+  min-height: 48px;
+}
+
+.action-sheet-btn:hover,
+.action-sheet-btn:active {
+  background: var(--color-bg-tertiary);
+}
+
+.action-sheet-btn-danger {
+  color: var(--color-error);
+}
+
+.action-sheet-divider {
+  height: 1px;
+  background: var(--color-border-light);
+  margin: var(--space-2) var(--space-4);
+}
+
+.action-sheet-cancel {
+  display: block;
+  width: calc(100% - var(--space-4) * 2);
+  margin: var(--space-2) var(--space-4) var(--space-4);
+  padding: var(--space-4);
+  border: none;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  min-height: 48px;
+}
+
+.action-sheet-cancel:hover {
+  background: var(--color-bg-secondary);
+}
+
+.dark-mode .action-sheet {
+  background: var(--color-bg-secondary);
 }
 
 /* Emotional Receipts */

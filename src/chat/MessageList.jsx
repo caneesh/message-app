@@ -74,6 +74,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [showAiTaskExtract, setShowAiTaskExtract] = useState(null)
   const [highlightedMessageId, setHighlightedMessageId] = useState(null)
   const [replyNotFoundId, setReplyNotFoundId] = useState(null)
+  const [mobileActionSheet, setMobileActionSheet] = useState(null)
   const messagesEndRef = useRef(null)
   const messageRefs = useRef({})
 
@@ -504,6 +505,23 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     }
   }
 
+  const handleCopyMessage = async (message) => {
+    const textContent = message.type === 'file' && message.file
+      ? message.file.fileName
+      : message.text || ''
+    try {
+      await navigator.clipboard.writeText(textContent)
+    } catch (err) {
+      console.error('Copy failed:', err)
+    }
+    setShowMoreMenu(null)
+    setMobileActionSheet(null)
+  }
+
+  const closeMobileActionSheet = () => {
+    setMobileActionSheet(null)
+  }
+
   const scrollToMessage = (messageId) => {
     if (!messageId) return
 
@@ -658,6 +676,47 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
               className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''}`}
             >
+              {/* Floating toolbar - visible on hover/focus (desktop) */}
+              <div className="message-toolbar" role="toolbar" aria-label="Message actions">
+                <button
+                  className="toolbar-btn"
+                  onClick={() => setShowReactionPicker(showReactionPicker === message.id ? null : message.id)}
+                  aria-label="Add reaction"
+                >
+                  😊
+                </button>
+                <button
+                  className="toolbar-btn"
+                  onClick={() => handleReply(message)}
+                  aria-label="Reply to message"
+                >
+                  ↩
+                </button>
+                <button
+                  className="toolbar-btn"
+                  onClick={() => handlePin(message)}
+                  aria-label={isMessagePinned(message.id) ? 'Unpin message' : 'Pin message'}
+                >
+                  {isMessagePinned(message.id) ? '📌' : '📍'}
+                </button>
+                <button
+                  className="toolbar-btn"
+                  onClick={() => setShowMoreMenu(showMoreMenu === message.id ? null : message.id)}
+                  aria-label="More actions"
+                >
+                  ⋯
+                </button>
+              </div>
+
+              {/* Mobile more button - always visible on touch devices */}
+              <button
+                className="mobile-more-btn"
+                onClick={() => setMobileActionSheet({ message, isOwn, isFileMessage })}
+                aria-label="Message actions"
+              >
+                ⋯
+              </button>
+
               {replyTo && (
                 <div
                   className="reply-quote reply-quote-clickable"
@@ -677,85 +736,51 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
               )}
               <div className="message-header">
                 <span className="message-sender">{message.senderPhone}</span>
-                <div className="message-actions">
-                  <button
-                    className="react-btn"
-                    onClick={() => setShowReactionPicker(showReactionPicker === message.id ? null : message.id)}
-                    title="React"
-                  >
-                    😊
-                  </button>
-                  <button
-                    className="reply-btn"
-                    onClick={() => handleReply(message)}
-                    title="Reply"
-                  >
-                    ↩
-                  </button>
-                  <button
-                    className="pin-btn"
-                    onClick={() => handlePin(message)}
-                    title={isMessagePinned(message.id) ? 'Unpin' : 'Pin'}
-                  >
-                    {isMessagePinned(message.id) ? '📌' : '📍'}
-                  </button>
+              </div>
+              {showMoreMenu === message.id && (
+                <div className="more-menu" role="menu">
                   {isOwn && !isFileMessage && (
-                    <button
-                      className="edit-btn"
-                      onClick={() => handleEdit(message)}
-                      title="Edit message"
-                    >
-                      ✎
+                    <button role="menuitem" onClick={() => { setShowMoreMenu(null); handleEdit(message) }}>
+                      ✎ Edit
                     </button>
                   )}
                   {isOwn && (
-                    <button
-                      className="delete-btn"
-                      onClick={() => handleDelete(message)}
-                      disabled={deletingId === message.id}
-                      title="Delete message"
-                    >
-                      {deletingId === message.id ? '...' : '×'}
+                    <button role="menuitem" onClick={() => { setShowMoreMenu(null); handleDelete(message) }} disabled={deletingId === message.id}>
+                      🗑 Delete
                     </button>
                   )}
-                  <button
-                    className="more-btn"
-                    onClick={() => setShowMoreMenu(showMoreMenu === message.id ? null : message.id)}
-                    title="More actions"
-                  >
-                    ⋯
+                  <button role="menuitem" onClick={() => handleCopyMessage(message)}>
+                    📋 Copy
                   </button>
-                </div>
-              </div>
-              {showMoreMenu === message.id && (
-                <div className="more-menu">
-                  <button onClick={() => openConvertModal(message, 'reminder')}>
-                    Save as Reminder
+                  <div className="more-menu-divider" />
+                  <button role="menuitem" onClick={() => openConvertModal(message, 'reminder')}>
+                    ⏰ Save as Reminder
                   </button>
-                  <button onClick={() => openConvertModal(message, 'decision')}>
-                    Save as Decision
+                  <button role="menuitem" onClick={() => openConvertModal(message, 'decision')}>
+                    ⚖️ Save as Decision
                   </button>
-                  <button onClick={() => openConvertModal(message, 'memory')}>
-                    Save to Memories
+                  <button role="menuitem" onClick={() => openConvertModal(message, 'memory')}>
+                    💭 Save to Memories
                   </button>
-                  <button onClick={() => openConvertModal(message, 'promise')}>
-                    Track as Promise
+                  <button role="menuitem" onClick={() => openConvertModal(message, 'promise')}>
+                    🤝 Track as Promise
                   </button>
-                  <button onClick={() => {
+                  <div className="more-menu-divider" />
+                  <button role="menuitem" onClick={() => {
                     setShowMoreMenu(null)
                     setShowReceiptPicker(showReceiptPicker === message.id ? null : message.id)
                   }}>
-                    Send Receipt
+                    💌 Send Receipt
                   </button>
                   {capsules.length > 0 && (
-                    <button onClick={() => {
+                    <button role="menuitem" onClick={() => {
                       setShowMoreMenu(null)
                       setShowCapsulePicker(showCapsulePicker === message.id ? null : message.id)
                     }}>
-                      Add to Capsule
+                      📦 Add to Capsule
                     </button>
                   )}
-                  <button onClick={() => {
+                  <button role="menuitem" onClick={() => {
                     setShowMoreMenu(null)
                     setShowAiTaskExtract(showAiTaskExtract === message.id ? null : message.id)
                   }}>
@@ -917,6 +942,69 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                 {converting ? 'Saving...' : 'Save'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Mobile Action Sheet */}
+      {mobileActionSheet && (
+        <div className="action-sheet-overlay" onClick={closeMobileActionSheet}>
+          <div className="action-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Message actions">
+            <div className="action-sheet-header">
+              <span>Message Actions</span>
+              <button className="action-sheet-close" onClick={closeMobileActionSheet} aria-label="Close">×</button>
+            </div>
+            <div className="action-sheet-content">
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowReactionPicker(mobileActionSheet.message.id) }}>
+                😊 React
+              </button>
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); handleReply(mobileActionSheet.message) }}>
+                ↩ Reply
+              </button>
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); handlePin(mobileActionSheet.message) }}>
+                {isMessagePinned(mobileActionSheet.message.id) ? '📌 Unpin' : '📍 Pin'}
+              </button>
+              <button className="action-sheet-btn" onClick={() => handleCopyMessage(mobileActionSheet.message)}>
+                📋 Copy
+              </button>
+              {mobileActionSheet.isOwn && !mobileActionSheet.isFileMessage && (
+                <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); handleEdit(mobileActionSheet.message) }}>
+                  ✎ Edit
+                </button>
+              )}
+              {mobileActionSheet.isOwn && (
+                <button className="action-sheet-btn action-sheet-btn-danger" onClick={() => { closeMobileActionSheet(); handleDelete(mobileActionSheet.message) }}>
+                  🗑 Delete
+                </button>
+              )}
+              <div className="action-sheet-divider" />
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); openConvertModal(mobileActionSheet.message, 'reminder') }}>
+                ⏰ Save as Reminder
+              </button>
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); openConvertModal(mobileActionSheet.message, 'decision') }}>
+                ⚖️ Save as Decision
+              </button>
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); openConvertModal(mobileActionSheet.message, 'memory') }}>
+                💭 Save to Memories
+              </button>
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); openConvertModal(mobileActionSheet.message, 'promise') }}>
+                🤝 Track as Promise
+              </button>
+              <div className="action-sheet-divider" />
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowReceiptPicker(mobileActionSheet.message.id) }}>
+                💌 Send Receipt
+              </button>
+              {capsules.length > 0 && (
+                <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowCapsulePicker(mobileActionSheet.message.id) }}>
+                  📦 Add to Capsule
+                </button>
+              )}
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowAiTaskExtract(mobileActionSheet.message.id) }}>
+                ✨ AI Extract Tasks
+              </button>
+            </div>
+            <button className="action-sheet-cancel" onClick={closeMobileActionSheet}>
+              Cancel
+            </button>
           </div>
         </div>
       )}
