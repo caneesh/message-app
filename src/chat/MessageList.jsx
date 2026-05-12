@@ -72,7 +72,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [showCapsulePicker, setShowCapsulePicker] = useState(null)
   const [addingToCapsule, setAddingToCapsule] = useState(false)
   const [showAiTaskExtract, setShowAiTaskExtract] = useState(null)
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null)
+  const [replyNotFoundId, setReplyNotFoundId] = useState(null)
   const messagesEndRef = useRef(null)
+  const messageRefs = useRef({})
 
   useEffect(() => {
     setLoading(true)
@@ -501,6 +504,20 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     }
   }
 
+  const scrollToMessage = (messageId) => {
+    if (!messageId) return
+
+    const element = messageRefs.current[messageId]
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setHighlightedMessageId(messageId)
+      setTimeout(() => setHighlightedMessageId(null), 2000)
+    } else {
+      setReplyNotFoundId(messageId)
+      setTimeout(() => setReplyNotFoundId(null), 2000)
+    }
+  }
+
   const renderEmotionalReceipts = (messageId) => {
     const messageReceipts = emotionalReceipts[messageId] || []
     if (messageReceipts.length === 0) return null
@@ -638,14 +655,24 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
           return (
             <div
               key={message.id}
-              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''}`}
+              ref={(el) => { if (el) messageRefs.current[message.id] = el }}
+              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''}`}
             >
               {replyTo && (
-                <div className="reply-quote">
+                <div
+                  className="reply-quote reply-quote-clickable"
+                  onClick={() => scrollToMessage(replyTo.messageId)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(replyTo.messageId) }}
+                >
                   <span className="reply-quote-label">
                     {isReplyToOwn ? 'You' : 'Friend'}
                   </span>
                   <span className="reply-quote-text">{replyTo.textPreview}</span>
+                  {replyNotFoundId === replyTo.messageId && (
+                    <span className="reply-not-found">Original message is not loaded.</span>
+                  )}
                 </div>
               )}
               <div className="message-header">
