@@ -69,8 +69,24 @@
   border-bottom-right-radius: var(--radius-sm);
 }
 
+/* Dark Mode Bubbles - High-Contrast Noir */
 .dark-mode .message.other {
-  background: var(--bubble-incoming);
+  background: transparent;
+  border: none;
+  border-left: 2px solid var(--bubble-incoming-border);
+  border-radius: 0;
+  padding-left: var(--space-3);
+}
+
+.dark-mode .message.own {
+  background: var(--bubble-outgoing);
+  border: 1px solid var(--bubble-outgoing-border);
+  box-shadow: var(--shadow-inner-glow);
+}
+
+/* Noir timestamp styling */
+.dark-mode .message-time {
+  color: var(--color-text-muted);
 }
 
 .message-header {
