@@ -75,8 +75,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [highlightedMessageId, setHighlightedMessageId] = useState(null)
   const [replyNotFoundId, setReplyNotFoundId] = useState(null)
   const [mobileActionSheet, setMobileActionSheet] = useState(null)
+  const [customEmojiInput, setCustomEmojiInput] = useState(null)
+  const [customEmoji, setCustomEmoji] = useState('')
+  const [emojiError, setEmojiError] = useState('')
   const messagesEndRef = useRef(null)
   const messageRefs = useRef({})
+  const emojiInputRef = useRef(null)
 
   useEffect(() => {
     setLoading(true)
@@ -340,6 +344,9 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
 
   const handleReaction = async (messageId, emoji) => {
     setShowReactionPicker(null)
+    setCustomEmojiInput(null)
+    setCustomEmoji('')
+    setEmojiError('')
     const reactionRef = doc(db, 'chats', chatId, 'messages', messageId, 'reactions', currentUser.uid)
 
     const currentReactions = reactions[messageId] || []
@@ -360,6 +367,33 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     } catch (err) {
       console.error('Reaction error:', err)
     }
+  }
+
+  const isEmojiOnly = (str) => {
+    if (!str || str.length === 0 || str.length > 8) return false
+    const emojiPattern = /^[\p{Emoji}\p{Emoji_Presentation}\p{Extended_Pictographic}\u200d\ufe0f]+$/u
+    return emojiPattern.test(str)
+  }
+
+  const openCustomEmoji = (messageId) => {
+    setShowReactionPicker(null)
+    setCustomEmojiInput(messageId)
+    setCustomEmoji('')
+    setEmojiError('')
+    setTimeout(() => emojiInputRef.current?.focus(), 50)
+  }
+
+  const submitCustomEmoji = (messageId) => {
+    const trimmed = customEmoji.trim()
+    if (!trimmed) {
+      setEmojiError('Enter an emoji')
+      return
+    }
+    if (!isEmojiOnly(trimmed)) {
+      setEmojiError('Emoji only')
+      return
+    }
+    handleReaction(messageId, trimmed)
   }
 
   const openConvertModal = (message, type) => {
@@ -835,6 +869,33 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                       {emoji}
                     </button>
                   ))}
+                  <button
+                    className="reaction-option reaction-more-btn"
+                    onClick={() => openCustomEmoji(message.id)}
+                    title="More emojis"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+              {customEmojiInput === message.id && (
+                <div className="custom-emoji-picker">
+                  <input
+                    ref={emojiInputRef}
+                    type="text"
+                    className="custom-emoji-field"
+                    value={customEmoji}
+                    onChange={(e) => { setCustomEmoji(e.target.value); setEmojiError('') }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') submitCustomEmoji(message.id)
+                      if (e.key === 'Escape') { setCustomEmojiInput(null); setCustomEmoji(''); setEmojiError('') }
+                    }}
+                    placeholder="😀"
+                    maxLength={8}
+                  />
+                  <button className="custom-emoji-ok" onClick={() => submitCustomEmoji(message.id)}>✓</button>
+                  <button className="custom-emoji-close" onClick={() => { setCustomEmojiInput(null); setCustomEmoji(''); setEmojiError('') }}>✕</button>
+                  {emojiError && <span className="custom-emoji-error">{emojiError}</span>}
                 </div>
               )}
               {isFileMessage ? (
@@ -954,9 +1015,25 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
               <button className="action-sheet-close" onClick={closeMobileActionSheet} aria-label="Close">×</button>
             </div>
             <div className="action-sheet-content">
-              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowReactionPicker(mobileActionSheet.message.id) }}>
-                😊 React
-              </button>
+              {/* Quick Reactions */}
+              <div className="action-sheet-emoji-row">
+                {ALLOWED_REACTIONS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    className="action-sheet-emoji"
+                    onClick={() => { closeMobileActionSheet(); handleReaction(mobileActionSheet.message.id, emoji) }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+                <button
+                  className="action-sheet-emoji action-sheet-emoji-more"
+                  onClick={() => { closeMobileActionSheet(); openCustomEmoji(mobileActionSheet.message.id) }}
+                >
+                  +
+                </button>
+              </div>
+              <div className="action-sheet-divider" />
               <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); handleReply(mobileActionSheet.message) }}>
                 ↩ Reply
               </button>
