@@ -1,4 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <rect width="192" height="192" fill="#007bff"/>
-  <text x="96" y="110" font-family="Arial, sans-serif" font-size="80" fill="white" text-anchor="middle">M</text>
+  <defs>
+    <linearGradient id="brandGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0066CC"/>
+      <stop offset="100%" stop-color="#00B4A0"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="40" fill="white"/>
+  <!-- House roof -->
+  <path d="M96 32 L156 76 L156 68 L140 56 L140 44 L124 44 L124 64 L96 44 L36 88 L36 76 Z"
+        fill="url(#brandGradient)" stroke="none"/>
+  <!-- Chat bubble body -->
+  <path d="M44 80 L44 132 C44 140 50 146 58 146 L70 146 L58 164 L88 146 L134 146 C142 146 148 140 148 132 L148 80 C148 72 142 66 134 66 L58 66 C50 66 44 72 44 80 Z"
+        fill="url(#brandGradient)" stroke="none"/>
+  <!-- Three dots -->
+  <circle cx="72" cy="108" r="8" fill="white"/>
+  <circle cx="96" cy="108" r="8" fill="white"/>
+  <circle cx="120" cy="108" r="8" fill="white"/>
 </svg>

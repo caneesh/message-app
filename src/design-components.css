@@ -173,69 +173,58 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* Mobile More Button */
+/* Message Actions Button - Always visible */
 .mobile-more-btn {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: absolute;
   top: 4px;
   right: 4px;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.05);
   border: none;
   cursor: pointer;
   padding: 4px 8px;
   border-radius: var(--radius-full);
-  font-size: 16px;
-  opacity: 0.5;
-  transition: opacity 0.15s ease;
-}
-
-.message.other .mobile-more-btn {
-  right: auto;
-  left: 4px;
+  font-size: 14px;
+  opacity: 0.6;
+  transition: all 0.15s ease;
+  min-width: 28px;
+  min-height: 28px;
+  color: var(--color-text-tertiary);
 }
 
 .mobile-more-btn:hover,
 .mobile-more-btn:active {
   opacity: 1;
+  background: rgba(0, 0, 0, 0.1);
 }
 
-/* Dark mode: make button visible */
+/* Dark mode styling */
 .dark-mode .mobile-more-btn {
-  opacity: 1;
+  opacity: 0.8;
   color: var(--color-text-secondary);
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.1);
 }
 
+.dark-mode .mobile-more-btn:hover,
 .dark-mode .mobile-more-btn:active {
-  background: rgba(255, 255, 255, 0.25);
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
 }
 
-/* Fix positioning for other messages in dark mode */
-.dark-mode .message.other .mobile-more-btn {
-  left: auto;
-  right: 4px;
-  top: 4px;
-}
-
-/* Touch device detection */
+/* Touch devices: larger touch target */
 @media (hover: none) and (pointer: coarse) {
-  .message-toolbar {
-    display: none !important;
-  }
-
   .mobile-more-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     min-width: 36px;
     min-height: 36px;
+    opacity: 0.8;
   }
 }
 
-/* Desktop: hide mobile button */
-@media (hover: hover) and (pointer: fine) {
-  .mobile-more-btn {
+/* Hide floating toolbar on touch - use button instead */
+@media (hover: none) and (pointer: coarse) {
+  .message-toolbar {
     display: none !important;
   }
 }
@@ -961,7 +950,8 @@
   box-shadow: var(--shadow-float), 0 0 0 3px var(--color-accent-primary-light);
 }
 
-.message-input-container input[type="text"] {
+.message-input-container input[type="text"],
+.message-input-container textarea {
   flex: 1;
   border: none;
   background: transparent;
@@ -972,11 +962,22 @@
   min-height: 44px;
 }
 
-.message-input-container input[type="text"]::placeholder {
+.message-input-container textarea {
+  resize: none;
+  max-height: 150px;
+  overflow-y: auto;
+  line-height: 1.4;
+  font-family: inherit;
+  field-sizing: content;
+}
+
+.message-input-container input[type="text"]::placeholder,
+.message-input-container textarea::placeholder {
   color: var(--color-text-tertiary);
 }
 
-.message-input-container input[type="text"]:focus {
+.message-input-container input[type="text"]:focus,
+.message-input-container textarea:focus {
   outline: none;
 }
 
@@ -1005,6 +1006,40 @@
 .tone-btn:hover {
   background: var(--color-bg-secondary);
   color: var(--color-accent-primary);
+}
+
+/* Subtle Tone Button - less prominent */
+.tone-btn-subtle {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  min-width: 32px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.tone-btn-subtle:hover {
+  opacity: 1;
+  color: var(--color-accent-soft);
+}
+
+.dark-mode .tone-btn-subtle {
+  color: var(--color-text-muted);
+  opacity: 0.4;
+}
+
+.dark-mode .tone-btn-subtle:hover {
+  opacity: 0.8;
+  color: var(--color-accent-pop);
 }
 
 /* Send Button */
@@ -1605,7 +1640,8 @@
     font-size: var(--font-size-base);
   }
 
-  .message-input-container input[type="text"] {
+  .message-input-container input[type="text"],
+  .message-input-container textarea {
     min-height: 40px;
     padding: var(--space-1) var(--space-2);
   }

@@ -48,6 +48,18 @@ function Login() {
       <div id="recaptcha-container"></div>
       {step === 'phone' ? (
         <form className="auth-form" onSubmit={handleSendCode}>
+          <div className="auth-logo">
+            <img
+              src="/logo.svg"
+              alt="OneRoom"
+              className="auth-logo-img logo-light"
+            />
+            <img
+              src="/logo-dark.svg"
+              alt="OneRoom"
+              className="auth-logo-img logo-dark"
+            />
+          </div>
           <h2>Sign In</h2>
           {error && <p className="error-message">{error}</p>}
           <input

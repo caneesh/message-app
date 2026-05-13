@@ -425,16 +425,51 @@ input[type="submit"], input[type="button"] {
 }
 
 .sidebar-logo {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
   overflow: hidden;
-  letter-spacing: -0.02em;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.sidebar-logo .logo-full {
+  height: 32px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.sidebar-logo .logo-icon {
+  height: 32px;
+  width: 32px;
+  object-fit: contain;
 }
 
 .sidebar.collapsed .sidebar-logo {
-  font-size: var(--font-size-md);
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-logo .logo-icon {
+  height: 28px;
+  width: 28px;
+}
+
+/* Light/Dark logo toggle */
+.logo-light {
+  display: block;
+}
+
+.logo-dark {
+  display: none;
+}
+
+.dark-mode .logo-light {
+  display: none;
+}
+
+.dark-mode .logo-dark {
+  display: block;
 }
 
 .sidebar-collapse-btn {
@@ -653,6 +688,18 @@ input[type="submit"], input[type="button"] {
   letter-spacing: -0.02em;
 }
 
+.drawer-logo {
+  display: flex;
+  align-items: center;
+}
+
+.drawer-logo-img {
+  height: 28px;
+  width: auto;
+  max-width: 120px;
+  object-fit: contain;
+}
+
 .drawer-close-btn {
   background: transparent;
   border: none;
@@ -760,6 +807,19 @@ input[type="submit"], input[type="button"] {
   color: var(--color-text-primary);
   margin-right: auto;
   letter-spacing: -0.01em;
+}
+
+.mobile-logo {
+  display: flex;
+  align-items: center;
+  margin-right: auto;
+}
+
+.mobile-logo-img {
+  height: 24px;
+  width: auto;
+  max-width: 100px;
+  object-fit: contain;
 }
 
 /* ----------------------------------------

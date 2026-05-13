@@ -468,17 +468,6 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
         />
         <button
           type="button"
-          className="quick-toggle-btn"
-          onClick={() => setShowQuickActions(!showQuickActions)}
-          disabled={sending}
-          title="Quick actions"
-          aria-label="Quick actions"
-          aria-expanded={showQuickActions}
-        >
-          ⚡
-        </button>
-        <button
-          type="button"
           className="attach-btn"
           onClick={openFilePicker}
           disabled={sending}
@@ -491,13 +480,13 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           <>
             <button
               type="button"
-              className="tone-btn"
+              className="tone-btn-subtle"
               onClick={() => setShowToneOptions(!showToneOptions)}
               disabled={sending}
-              title="Soften tone (local)"
+              title="Soften tone"
               aria-label="Soften message tone"
             >
-              💝
+              ♡
             </button>
             <ToneRepairAiButton
               currentUser={currentUser}
@@ -508,13 +497,21 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
             />
           </>
         )}
-        <input
-          type="text"
+        <textarea
           placeholder="Type a message..."
           value={text}
           onChange={handleChange}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              if (trimmedText && !sending && !isOverLimit) {
+                handleSubmit(e)
+              }
+            }
+          }}
           disabled={sending}
           aria-label="Message input"
+          rows={1}
         />
         <button
           type="submit"

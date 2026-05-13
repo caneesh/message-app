@@ -67,7 +67,18 @@ function AppShell({
               >
                 <MenuIcon />
               </button>
-              <h1 className="mobile-title">OneRoom</h1>
+              <div className="mobile-logo">
+                <img
+                  src="/logo.svg"
+                  alt="OneRoom"
+                  className="mobile-logo-img logo-light"
+                />
+                <img
+                  src="/logo-dark.svg"
+                  alt="OneRoom"
+                  className="mobile-logo-img logo-dark"
+                />
+              </div>
             </>
           )}
           <div className="header-actions">

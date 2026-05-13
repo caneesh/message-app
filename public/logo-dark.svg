@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" width="200" height="48">
+  <defs>
+    <linearGradient id="logoGradientDark" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0088FF"/>
+      <stop offset="100%" stop-color="#00D4C4"/>
+    </linearGradient>
+  </defs>
+  <!-- House + Chat icon -->
+  <g transform="translate(0, 4) scale(0.42)">
+    <!-- House roof -->
+    <path d="M48 8 L88 40 L88 32 L76 24 L76 12 L64 12 L64 28 L48 16 L8 48 L8 40 Z"
+          fill="url(#logoGradientDark)"/>
+    <!-- Chat bubble -->
+    <path d="M12 44 L12 76 C12 82 16 86 22 86 L30 86 L22 98 L44 86 L74 86 C80 86 84 82 84 76 L84 44 C84 38 80 34 74 34 L22 34 C16 34 12 38 12 44 Z"
+          fill="url(#logoGradientDark)"/>
+    <!-- Dots -->
+    <circle cx="32" cy="60" r="5" fill="#0A0A0C"/>
+    <circle cx="48" cy="60" r="5" fill="#0A0A0C"/>
+    <circle cx="64" cy="60" r="5" fill="#0A0A0C"/>
+  </g>
+  <!-- OneRoom text -->
+  <text x="52" y="32" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="22" font-weight="600">
+    <tspan fill="#0088FF">One</tspan><tspan fill="rgba(255,255,255,0.9)">Room</tspan>
+  </text>
+</svg>

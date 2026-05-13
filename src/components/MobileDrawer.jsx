@@ -46,7 +46,18 @@ function MobileDrawer({ isOpen, onClose, activeTab, onTabChange }) {
         aria-label="Navigation menu"
       >
         <div className="drawer-header">
-          <h2>OneRoom</h2>
+          <div className="drawer-logo">
+            <img
+              src="/logo.svg"
+              alt="OneRoom"
+              className="drawer-logo-img logo-light"
+            />
+            <img
+              src="/logo-dark.svg"
+              alt="OneRoom"
+              className="drawer-logo-img logo-dark"
+            />
+          </div>
           <button
             className="drawer-close-btn"
             onClick={onClose}
