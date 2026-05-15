@@ -42,6 +42,13 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+function formatVoiceDuration(seconds) {
+  if (!seconds || isNaN(seconds)) return '0:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
 function isImageType(contentType) {
   return ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'].includes(contentType)
 }
@@ -257,6 +264,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
           console.warn('Failed to delete file from storage:', storageErr)
         }
       }
+
+      if (message.type === 'voice' && message.voice?.storagePath) {
+        try {
+          const storageRef = ref(storage, message.voice.storagePath)
+          await deleteObject(storageRef)
+        } catch (storageErr) {
+          console.warn('Failed to delete voice note from storage:', storageErr)
+        }
+      }
     } catch (err) {
       console.error('Delete error:', err)
       if (err.code === 'permission-denied') {
@@ -270,9 +286,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   }
 
   const handleReply = (message) => {
-    const previewText = message.type === 'file' && message.file
-      ? `📎 ${message.file.fileName}`
-      : message.text
+    let previewText = message.text
+    if (message.type === 'file' && message.file) {
+      previewText = `📎 ${message.file.fileName}`
+    } else if (message.type === 'voice' && message.voice) {
+      previewText = `🎤 Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
+    }
     onReply({
       messageId: message.id,
       senderId: message.senderId,
@@ -325,9 +344,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
       if (isPinned) {
         await deleteDoc(pinnedRef)
       } else {
-        const textPreview = message.type === 'file' && message.file
-          ? `📎 ${message.file.fileName}`
-          : truncateText(message.text)
+        let textPreview = truncateText(message.text)
+        if (message.type === 'file' && message.file) {
+          textPreview = `📎 ${message.file.fileName}`
+        } else if (message.type === 'voice' && message.voice) {
+          textPreview = `🎤 Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
+        }
         await setDoc(pinnedRef, {
           messageId: message.id,
           pinnedBy: currentUser.uid,
@@ -398,9 +420,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
 
   const openConvertModal = (message, type) => {
     setShowMoreMenu(null)
-    const textContent = message.type === 'file' && message.file
-      ? `📎 ${message.file.fileName}`
-      : message.text || ''
+    let textContent = message.text || ''
+    if (message.type === 'file' && message.file) {
+      textContent = `📎 ${message.file.fileName}`
+    } else if (message.type === 'voice' && message.voice) {
+      textContent = `🎤 Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
+    }
 
     setConvertTitle(truncateText(textContent, 200))
     setConvertBody(textContent)
@@ -519,9 +544,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     setShowMoreMenu(null)
     setAddingToCapsule(true)
 
-    const textContent = message.type === 'file' && message.file
-      ? `📎 ${message.file.fileName}`
-      : message.text || ''
+    let textContent = message.text || ''
+    if (message.type === 'file' && message.file) {
+      textContent = `📎 ${message.file.fileName}`
+    } else if (message.type === 'voice' && message.voice) {
+      textContent = `🎤 Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
+    }
 
     try {
       await addDoc(collection(db, 'chats', chatId, 'capsules', capsuleId, 'links'), {
@@ -540,9 +568,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   }
 
   const handleCopyMessage = async (message) => {
-    const textContent = message.type === 'file' && message.file
-      ? message.file.fileName
-      : message.text || ''
+    let textContent = message.text || ''
+    if (message.type === 'file' && message.file) {
+      textContent = message.file.fileName
+    } else if (message.type === 'voice' && message.voice) {
+      textContent = `Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
+    }
     try {
       await navigator.clipboard.writeText(textContent)
     } catch (err) {
@@ -642,6 +673,51 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     )
   }
 
+  const [voiceError, setVoiceError] = useState({})
+
+  const handleVoiceError = (messageId, e) => {
+    console.error('Voice playback error:', e)
+    setVoiceError(prev => ({ ...prev, [messageId]: true }))
+  }
+
+  const renderVoiceContent = (voice, messageId) => {
+    if (!voice || !voice.url) {
+      return <div className="voice-loading">Loading voice note...</div>
+    }
+
+    if (voiceError[messageId]) {
+      return (
+        <div className="voice-message voice-error-state">
+          <span className="voice-icon" aria-hidden="true">🎤</span>
+          <span className="voice-unsupported">
+            Cannot play on this device.
+            <a href={voice.url} target="_blank" rel="noopener noreferrer" className="voice-download-link">
+              Download
+            </a>
+          </span>
+          <span className="voice-duration">{formatVoiceDuration(voice.durationSeconds)}</span>
+        </div>
+      )
+    }
+
+    return (
+      <div className="voice-message">
+        <span className="voice-icon" aria-hidden="true">🎤</span>
+        <audio
+          src={voice.url}
+          controls
+          controlsList="nodownload"
+          className="voice-audio-player"
+          preload="auto"
+          playsInline
+          webkit-playsinline=""
+          onError={(e) => handleVoiceError(messageId, e)}
+        />
+        <span className="voice-duration">{formatVoiceDuration(voice.durationSeconds)}</span>
+      </div>
+    )
+  }
+
   // Filter messages by search query
   const filteredMessages = searchQuery.trim()
     ? messages.filter((msg) => {
@@ -703,12 +779,13 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
           const replyTo = message.replyTo
           const isReplyToOwn = replyTo?.senderId === currentUser.uid
           const isFileMessage = message.type === 'file'
+          const isVoiceMessage = message.type === 'voice'
 
           return (
             <div
               key={message.id}
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
-              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''}`}
+              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''}`}
             >
               {/* Floating toolbar - visible on hover/focus (desktop) */}
               <div className="message-toolbar" role="toolbar" aria-label="Message actions">
@@ -745,7 +822,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
               {/* Mobile more button - always visible on touch devices */}
               <button
                 className="mobile-more-btn"
-                onClick={() => setMobileActionSheet({ message, isOwn, isFileMessage })}
+                onClick={() => setMobileActionSheet({ message, isOwn, isFileMessage, isVoiceMessage })}
                 aria-label="Message actions"
               >
                 ⋯
@@ -773,7 +850,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
               </div>
               {showMoreMenu === message.id && (
                 <div className="more-menu" role="menu">
-                  {isOwn && !isFileMessage && (
+                  {isOwn && !isFileMessage && !isVoiceMessage && (
                     <button role="menuitem" onClick={() => { setShowMoreMenu(null); handleEdit(message) }}>
                       ✎ Edit
                     </button>
@@ -900,6 +977,8 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
               )}
               {isFileMessage ? (
                 renderFileContent(message.file)
+              ) : isVoiceMessage ? (
+                renderVoiceContent(message.voice, message.id)
               ) : editingId === message.id ? (
                 <div className="edit-container">
                   <input
@@ -1043,7 +1122,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
               <button className="action-sheet-btn" onClick={() => handleCopyMessage(mobileActionSheet.message)}>
                 📋 Copy
               </button>
-              {mobileActionSheet.isOwn && !mobileActionSheet.isFileMessage && (
+              {mobileActionSheet.isOwn && !mobileActionSheet.isFileMessage && !mobileActionSheet.isVoiceMessage && (
                 <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); handleEdit(mobileActionSheet.message) }}>
                   ✎ Edit
                 </button>

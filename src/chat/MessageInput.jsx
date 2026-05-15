@@ -3,6 +3,7 @@ import { db, storage } from '../firebase/firebaseConfig'
 import { collection, addDoc, doc, setDoc, deleteDoc, getDoc, query, where, orderBy, limit, getDocs, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import ToneRepairAiButton from './ToneRepairAiButton'
+import VoiceRecorder from './VoiceRecorder'
 
 const MAX_MESSAGE_LENGTH = 2000
 
@@ -87,6 +88,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   const [partnerMood, setPartnerMood] = useState(null)
   const [showMoodNudge, setShowMoodNudge] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false)
   const fileInputRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const isTypingRef = useRef(false)
@@ -458,7 +460,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           </button>
         </div>
       )}
-      <form className="message-input-container" onSubmit={handleSubmit}>
+      <form className={`message-input-container ${isVoiceRecording ? 'voice-active' : ''}`} onSubmit={handleSubmit}>
         <input
           type="file"
           ref={fileInputRef}
@@ -466,60 +468,75 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           accept={ALLOWED_TYPES.join(',')}
           style={{ display: 'none' }}
         />
-        <button
-          type="button"
-          className="attach-btn"
-          onClick={openFilePicker}
-          disabled={sending}
-          title="Attach file"
-          aria-label="Attach file"
-        >
-          📎
-        </button>
-        {trimmedText.length > 5 && (
+        {!isVoiceRecording && (
           <>
             <button
               type="button"
-              className="tone-btn-subtle"
-              onClick={() => setShowToneOptions(!showToneOptions)}
+              className="attach-btn"
+              onClick={openFilePicker}
               disabled={sending}
-              title="Soften tone"
-              aria-label="Soften message tone"
+              title="Attach file"
+              aria-label="Attach file"
             >
-              ♡
+              📎
             </button>
-            <ToneRepairAiButton
-              currentUser={currentUser}
-              chatId={chatId}
-              text={text}
-              onSuggestion={(suggestion) => setToneSuggestion(suggestion)}
+            {trimmedText.length > 5 && (
+              <>
+                <button
+                  type="button"
+                  className="tone-btn-subtle"
+                  onClick={() => setShowToneOptions(!showToneOptions)}
+                  disabled={sending}
+                  title="Soften tone"
+                  aria-label="Soften message tone"
+                >
+                  ♡
+                </button>
+                <ToneRepairAiButton
+                  currentUser={currentUser}
+                  chatId={chatId}
+                  text={text}
+                  onSuggestion={(suggestion) => setToneSuggestion(suggestion)}
+                  disabled={sending}
+                />
+              </>
+            )}
+            <textarea
+              placeholder="Type a message..."
+              value={text}
+              onChange={handleChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  if (trimmedText && !sending && !isOverLimit) {
+                    handleSubmit(e)
+                  }
+                }
+              }}
               disabled={sending}
+              aria-label="Message input"
+              rows={1}
             />
           </>
         )}
-        <textarea
-          placeholder="Type a message..."
-          value={text}
-          onChange={handleChange}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              if (trimmedText && !sending && !isOverLimit) {
-                handleSubmit(e)
-              }
-            }
-          }}
-          disabled={sending}
-          aria-label="Message input"
-          rows={1}
-        />
-        <button
-          type="submit"
-          disabled={sending || !trimmedText || isOverLimit}
-          aria-label={sending ? 'Sending message' : 'Send message'}
-        >
-          {sending ? 'Sending...' : 'Send'}
-        </button>
+        {trimmedText && !isVoiceRecording ? (
+          <button
+            type="submit"
+            disabled={sending || !trimmedText || isOverLimit}
+            aria-label={sending ? 'Sending message' : 'Send message'}
+          >
+            {sending ? 'Sending...' : 'Send'}
+          </button>
+        ) : (
+          <VoiceRecorder
+            currentUser={currentUser}
+            chatId={chatId}
+            activeReplyTo={activeReplyTo}
+            clearReply={clearReply}
+            disabled={sending}
+            onStateChange={setIsVoiceRecording}
+          />
+        )}
       </form>
     </div>
   )

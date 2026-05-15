@@ -888,12 +888,29 @@
 
 .edit-input {
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
+  border: 2px solid var(--color-accent-primary);
   border-radius: var(--radius-md);
   font-size: var(--font-size-base);
-  background: var(--color-bg-secondary);
+  background: var(--color-bg-primary);
   color: var(--color-text-primary);
   min-height: 40px;
+  width: 100%;
+}
+
+.edit-input:focus {
+  outline: none;
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 0 0 3px var(--color-accent-primary-light);
+}
+
+.dark-mode .edit-input {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-accent-pop);
+}
+
+.dark-mode .edit-input:focus {
+  border-color: var(--color-accent-pop);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
 }
 
 .edit-actions {
@@ -1066,6 +1083,305 @@
   background: var(--color-bg-tertiary);
   color: var(--color-text-tertiary);
   cursor: not-allowed;
+}
+
+/* ----------------------------------------
+   Voice Recorder
+   ---------------------------------------- */
+.voice-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-lg);
+  min-width: 40px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.voice-btn:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-accent-primary);
+}
+
+.voice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.voice-error {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  padding: var(--space-2) var(--space-3);
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-2);
+}
+
+.voice-recorder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  padding: var(--space-2);
+}
+
+.voice-recorder.recording {
+  background: rgba(239, 68, 68, 0.05);
+  border-radius: var(--radius-lg);
+}
+
+.voice-recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.voice-recording-dot {
+  width: 12px;
+  height: 12px;
+  background: var(--color-error);
+  border-radius: 50%;
+  animation: voicePulse 1s infinite;
+}
+
+@keyframes voicePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.voice-recording-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-error);
+}
+
+.voice-duration {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-max-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.voice-recording-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.voice-cancel-btn,
+.voice-stop-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.voice-cancel-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.voice-stop-btn {
+  background: var(--color-error);
+  border-color: var(--color-error);
+  color: white;
+}
+
+.voice-stop-btn:hover {
+  background: #dc2626;
+}
+
+.voice-recorder.preview {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.voice-preview-player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.voice-audio-preview {
+  flex: 1;
+  height: 40px;
+  max-width: 100%;
+}
+
+.voice-preview-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.voice-discard-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.voice-discard-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.voice-send-btn {
+  background: var(--color-accent-primary);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  transition: all var(--transition-fast);
+}
+
+.voice-send-btn:hover {
+  background: var(--color-accent-primary-hover);
+}
+
+.voice-recorder.uploading {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+}
+
+.voice-upload-progress {
+  position: relative;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
+  height: 24px;
+  overflow: hidden;
+}
+
+.voice-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--color-accent-primary);
+  transition: width 0.2s ease;
+}
+
+.voice-progress-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+/* Voice active state hides text input */
+.message-input-container.voice-active {
+  justify-content: center;
+}
+
+/* ----------------------------------------
+   Voice Message Bubble
+   ---------------------------------------- */
+.voice-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.voice-icon {
+  font-size: var(--font-size-lg);
+  flex-shrink: 0;
+}
+
+.voice-audio-player {
+  height: 36px;
+  max-width: 200px;
+  flex: 1;
+}
+
+.voice-loading {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+}
+
+.voice-error-state {
+  flex-wrap: wrap;
+}
+
+.voice-unsupported {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.voice-download-link {
+  color: var(--color-accent-primary);
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+}
+
+.voice-download-link:hover {
+  text-decoration: underline;
+}
+
+.message.voice-message {
+  min-width: 180px;
+}
+
+/* Dark mode voice styles */
+.dark-mode .voice-recorder.recording {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.dark-mode .voice-recorder.preview,
+.dark-mode .voice-recorder.uploading {
+  background: var(--color-bg-elevated);
+}
+
+.dark-mode .voice-upload-progress {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* Reply Preview */

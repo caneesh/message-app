@@ -7,8 +7,8 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Helper: Allowed content types
-    function isAllowedContentType() {
+    // Helper: Allowed file content types
+    function isAllowedFileContentType() {
       return request.resource.contentType in [
         'image/jpeg',
         'image/png',
@@ -18,6 +18,16 @@ service firebase.storage {
         'image/avif',
         'application/pdf',
         'text/plain'
+      ];
+    }
+
+    // Helper: Allowed voice content types
+    function isAllowedVoiceContentType() {
+      return request.resource.contentType in [
+        'audio/webm',
+        'audio/mp4',
+        'audio/mpeg',
+        'audio/aac'
       ];
     }
 
@@ -33,7 +43,21 @@ service firebase.storage {
 
       // Write: authenticated users with valid file type and size
       allow write: if isAuthenticated()
-                   && isAllowedContentType()
+                   && isAllowedFileContentType()
+                   && isWithinSizeLimit();
+
+      // Delete: any authenticated user
+      allow delete: if isAuthenticated();
+    }
+
+    // Chat voice notes path: chatVoice/{chatId}/{messageId}/{fileName}
+    match /chatVoice/{chatId}/{messageId}/{fileName} {
+      // Read: any authenticated user (Firestore rules protect message access)
+      allow read: if isAuthenticated();
+
+      // Write: authenticated users with valid audio type and size
+      allow write: if isAuthenticated()
+                   && isAllowedVoiceContentType()
                    && isWithinSizeLimit();
 
       // Delete: any authenticated user

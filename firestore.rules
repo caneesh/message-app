@@ -14,7 +14,7 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'edited', 'editedAt']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt']);
     }
 
     // Helper: Validate message edit (only text/edited/editedAt can change)
@@ -40,7 +40,7 @@ service cloud.firestore {
     function isValidBaseMessage() {
       let data = request.resource.data;
       return data.senderId == request.auth.uid
-          && data.type in ['text', 'file']
+          && data.type in ['text', 'file', 'voice']
           && data.text is string
           && data.text.size() <= 2000;
     }
@@ -64,6 +64,23 @@ service cloud.firestore {
           && data.file.contentType in ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif', 'application/pdf', 'text/plain']
           && data.file.size is number
           && data.file.size <= 5 * 1024 * 1024;
+    }
+
+    // Helper: Validate voice message
+    function isValidVoiceMessage() {
+      let data = request.resource.data;
+      return data.type == 'voice'
+          && data.text == ''
+          && 'voice' in data
+          && data.voice is map
+          && data.voice.keys().hasOnly(['storagePath', 'contentType', 'size', 'durationSeconds', 'url'])
+          && data.voice.storagePath is string
+          && data.voice.contentType is string
+          && data.voice.contentType in ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/aac']
+          && data.voice.size is number
+          && data.voice.size <= 5 * 1024 * 1024
+          && data.voice.durationSeconds is number
+          && data.voice.durationSeconds <= 60;
     }
 
     // Helper: Validate optional replyTo field
@@ -116,7 +133,7 @@ service cloud.firestore {
                       && isChatMember(chatId)
                       && hasOnlyAllowedFields()
                       && isValidBaseMessage()
-                      && (isValidTextMessage() || isValidFileMessage())
+                      && (isValidTextMessage() || isValidFileMessage() || isValidVoiceMessage())
                       && isValidReplyTo();
         allow update: if isAuthenticated()
                       && isChatMember(chatId)
@@ -178,7 +195,7 @@ service cloud.firestore {
                       && request.resource.data.messageId is string
                       && request.resource.data.textPreview is string
                       && request.resource.data.senderId is string
-                      && request.resource.data.type in ['text', 'file'];
+                      && request.resource.data.type in ['text', 'file', 'voice'];
         allow delete: if isAuthenticated() && isChatMember(chatId);
       }
 
