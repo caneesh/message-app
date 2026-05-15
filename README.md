@@ -24,13 +24,15 @@ More than just a chat app - this is a complete private space for couples, close 
 - Real-time messaging
 - Reply to messages
 - Edit and delete messages
-- Message reactions (emoji)
+- Message reactions (emoji) including intense love (❤️‍🔥) with special glow effect
 - Pin important messages
 - Typing indicators
 - Read receipts
 - Photo and file sharing (up to 5MB)
+- Voice notes (up to 60 seconds)
 - Quick status buttons (Reached safely, On the way, Call me, etc.)
 - Search messages
+- Love-style messages: Messages with heart emojis display with a soft pink background and heart watermark
 
 ### Dashboard
 - Today's overview at a glance
@@ -77,6 +79,14 @@ More than just a chat app - this is a complete private space for couples, close 
 - See how your partner is feeling
 - Optional notes
 
+### Love Heat Map
+- Visual calendar showing warm moments over time
+- Detects heart emojis, love phrases, and reactions
+- Color intensity based on daily warmth score
+- Click any day to see warm messages from that day
+- Date range selector (30/90 days, this year)
+- Soft pink/red color palette
+
 ### Other Features
 - Dark mode
 - Push notifications
@@ -95,6 +105,7 @@ src/
     ChatPage.jsx
     MessageList.jsx
     MessageInput.jsx
+    VoiceRecorder.jsx
     Dashboard.jsx
     Reminders.jsx
     Decisions.jsx
@@ -104,8 +115,10 @@ src/
     Lists.jsx
     Notes.jsx
     CheckIn.jsx
+    LoveHeatMap.jsx
     Settings.jsx
     Devices.jsx
+  components/     # Shared components (Sidebar, icons, etc.)
   layout/         # Layout components
   App.jsx         # Main app component
   main.jsx        # Entry point
