@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { db } from '../firebase/firebaseConfig'
-import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore'
+import { collection, query, orderBy, getDocs, limit } from 'firebase/firestore'
 
 const HEART_EMOJI_PATTERN = /[\u2764\u2765\u2763\u{1F493}-\u{1F49F}\u{1FA75}-\u{1FA77}\u{1F90D}\u{1F90E}\u{1F9E1}\u{2764}\u{1FAC0}]/u
 const INTENSE_LOVE_EMOJI = '\u2764\uFE0F\u200D\u{1F525}'
@@ -138,22 +138,39 @@ function LoveHeatMap({ currentUser, chatId }) {
 
       try {
         const messagesRef = collection(db, 'chats', chatId, 'messages')
+        // Query recent messages, ordered by createdAt descending, limited to avoid loading too many
         const q = query(
           messagesRef,
-          where('createdAt', '>=', Timestamp.fromDate(dateRangeStart)),
-          orderBy('createdAt', 'asc')
+          orderBy('createdAt', 'desc'),
+          limit(500)
         )
 
         const snapshot = await getDocs(q)
-        const messageList = snapshot.docs.map(doc => ({
+        const allMessages = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }))
 
+        // Filter on client side by date range
+        const messageList = allMessages.filter(msg => {
+          if (!msg.createdAt) return false
+          const msgDate = msg.createdAt.toDate ? msg.createdAt.toDate() : new Date(msg.createdAt)
+          return msgDate >= dateRangeStart
+        })
+
         setMessages(messageList)
 
+        // Fetch reactions for warm messages only (to reduce queries)
         const reactionsMap = {}
-        for (const msg of messageList) {
+        const warmMessages = messageList.filter(msg => {
+          const text = msg.text || ''
+          return HEART_EMOJI_PATTERN.test(text) ||
+                 INTENSE_LOVE_PATTERN.test(text) ||
+                 msg.style === 'love' ||
+                 WARM_PHRASES.some(p => p.test(text))
+        })
+
+        for (const msg of warmMessages.slice(0, 100)) {
           try {
             const reactionsRef = collection(db, 'chats', chatId, 'messages', msg.id, 'reactions')
             const reactionsSnap = await getDocs(reactionsRef)
@@ -161,7 +178,7 @@ function LoveHeatMap({ currentUser, chatId }) {
               reactionsMap[msg.id] = reactionsSnap.docs.map(d => d.data())
             }
           } catch {
-            // Reactions may not exist for all messages
+            // Reactions may not exist
           }
         }
         setReactions(reactionsMap)
@@ -169,7 +186,7 @@ function LoveHeatMap({ currentUser, chatId }) {
         setLoading(false)
       } catch (err) {
         console.error('Error fetching messages for heat map:', err)
-        setError('Failed to load warmth data')
+        setError('Failed to load warmth data. Please try again.')
         setLoading(false)
       }
     }
