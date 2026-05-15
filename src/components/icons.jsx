@@ -230,3 +230,11 @@ export const SparklesIcon = () => (
     <path d="M19 5l.5 1.5L21 7l-1.5.5L19 9l-.5-1.5L17 7l1.5-.5L19 5z" />
   </svg>
 )
+
+export const WarmthIcon = () => (
+  <svg {...iconProps} viewBox="0 0 24 24">
+    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+    <path d="M12 8v4" />
+    <path d="M12 16v.01" />
+  </svg>
+)

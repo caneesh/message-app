@@ -18,6 +18,7 @@ import {
   SettingsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  WarmthIcon,
 } from './icons'
 
 const navCategories = [
@@ -59,6 +60,7 @@ const navCategories = [
       { id: 'misunderstandings', icon: DoveIcon, label: 'Clear the Air' },
       { id: 'checkin', icon: HeartIcon, label: 'Check-in' },
       { id: 'care', icon: HeartPulseIcon, label: 'Care Mode' },
+      { id: 'lovemap', icon: WarmthIcon, label: 'Love Map' },
     ],
   },
   {

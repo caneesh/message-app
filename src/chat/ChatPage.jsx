@@ -23,6 +23,7 @@ import CareMode from './CareMode'
 import Misunderstandings from './Misunderstandings'
 import Capsules from './Capsules'
 import FollowUps from './FollowUps'
+import LoveHeatMap from './LoveHeatMap'
 
 const STALE_TYPING_MS = 5000
 
@@ -240,6 +241,8 @@ function ChatPage() {
         return <CheckIn currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       case 'care':
         return <CareMode currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+      case 'lovemap':
+        return <LoveHeatMap currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       case 'memories':
         return <Memories currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
       case 'devices':

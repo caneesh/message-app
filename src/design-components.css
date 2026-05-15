@@ -2128,3 +2128,351 @@
     min-height: 36px;
   }
 }
+
+/* ----------------------------------------
+   Love Heat Map - Warmth Calendar
+   ---------------------------------------- */
+.love-heatmap-container {
+  padding: var(--space-5);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.love-heatmap-container.loading,
+.love-heatmap-container.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--color-text-secondary);
+}
+
+.love-heatmap-header {
+  text-align: center;
+  margin-bottom: var(--space-5);
+}
+
+.love-heatmap-header h2 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.love-heatmap-subtitle {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.love-heatmap-controls {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.love-heatmap-range-select {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.love-heatmap-calendar {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.love-heatmap-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.love-heatmap-month-nav button {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.love-heatmap-month-nav button:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+.love-heatmap-month-label {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.love-heatmap-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.love-heatmap-weekday {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  padding: var(--space-1);
+}
+
+.love-heatmap-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1);
+}
+
+.love-heatmap-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-fast);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.love-heatmap-day.empty {
+  background: transparent;
+  cursor: default;
+}
+
+.love-heatmap-day.out-of-range {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.love-heatmap-day:not(.empty):not(.out-of-range):hover {
+  transform: scale(1.1);
+  z-index: 1;
+}
+
+.love-heatmap-day.today {
+  box-shadow: inset 0 0 0 2px var(--color-accent-primary);
+}
+
+.love-heatmap-day.selected {
+  box-shadow: 0 0 0 2px var(--color-accent-primary);
+}
+
+/* Heat levels - soft pinks */
+.love-heatmap-day.heat-0 {
+  background: var(--color-bg-tertiary);
+}
+
+.love-heatmap-day.heat-1 {
+  background: rgba(255, 182, 193, 0.4);
+  color: var(--color-text-primary);
+}
+
+.love-heatmap-day.heat-2 {
+  background: rgba(255, 145, 164, 0.5);
+  color: var(--color-text-primary);
+}
+
+.love-heatmap-day.heat-3 {
+  background: rgba(255, 105, 135, 0.6);
+  color: white;
+}
+
+.love-heatmap-day.heat-4 {
+  background: rgba(220, 53, 89, 0.75);
+  color: white;
+}
+
+/* Dark mode heat colors */
+.dark-mode .love-heatmap-day.heat-1 {
+  background: rgba(255, 182, 193, 0.2);
+}
+
+.dark-mode .love-heatmap-day.heat-2 {
+  background: rgba(255, 145, 164, 0.3);
+}
+
+.dark-mode .love-heatmap-day.heat-3 {
+  background: rgba(255, 105, 135, 0.4);
+}
+
+.dark-mode .love-heatmap-day.heat-4 {
+  background: rgba(220, 53, 89, 0.55);
+}
+
+/* Legend */
+.love-heatmap-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.legend-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.legend-item {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+}
+
+.legend-item.heat-0 {
+  background: var(--color-bg-tertiary);
+}
+
+.legend-item.heat-1 {
+  background: rgba(255, 182, 193, 0.4);
+}
+
+.legend-item.heat-2 {
+  background: rgba(255, 145, 164, 0.5);
+}
+
+.legend-item.heat-3 {
+  background: rgba(255, 105, 135, 0.6);
+}
+
+.legend-item.heat-4 {
+  background: rgba(220, 53, 89, 0.75);
+}
+
+/* Day detail panel */
+.love-heatmap-detail {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.detail-header h3 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.detail-label {
+  font-size: var(--font-size-sm);
+  color: rgba(220, 53, 89, 0.9);
+  background: rgba(255, 182, 193, 0.2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full);
+}
+
+.detail-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.detail-message {
+  padding: var(--space-2);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.detail-message-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+
+.detail-sender {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.detail-time {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.detail-message-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+.detail-reactions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.detail-reaction {
+  font-size: var(--font-size-sm);
+}
+
+.detail-empty {
+  text-align: center;
+  color: var(--color-text-tertiary);
+  padding: var(--space-4);
+  margin: 0;
+}
+
+.detail-close {
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  background: var(--color-bg-tertiary);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.detail-close:hover {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .love-heatmap-container {
+    padding: var(--space-3);
+  }
+
+  .love-heatmap-calendar {
+    padding: var(--space-3);
+  }
+
+  .love-heatmap-day {
+    font-size: var(--font-size-xs);
+  }
+
+  .detail-messages {
+    max-height: 250px;
+  }
+}
