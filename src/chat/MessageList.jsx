@@ -19,7 +19,8 @@ import MessageToTaskAiAction from './MessageToTaskAiAction'
 
 const PREVIEW_MAX_LENGTH = 80
 const MESSAGE_LIMIT = 100
-const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+const ALLOWED_REACTIONS = ['👍', '❤️', '❤️‍🔥', '😂', '😮', '😢', '🙏']
+const INTENSE_LOVE_EMOJI = '❤️‍🔥'
 const CONVERSION_TYPES = ['reminder', 'decision', 'memory', 'promise']
 const EMOTIONAL_RECEIPTS = [
   { value: 'understood', label: 'I understood' },
@@ -369,6 +370,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     setCustomEmojiInput(null)
     setCustomEmoji('')
     setEmojiError('')
+    setMobileActionSheet(null)
     const reactionRef = doc(db, 'chats', chatId, 'messages', messageId, 'reactions', currentUser.uid)
 
     const currentReactions = reactions[messageId] || []
@@ -385,6 +387,11 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
           emoji,
           createdAt: serverTimestamp(),
         })
+        // Trigger animation for intense love reaction
+        if (emoji === INTENSE_LOVE_EMOJI) {
+          setIntenseLoveAnimation(messageId)
+          setTimeout(() => setIntenseLoveAnimation(null), 1000)
+        }
       }
     } catch (err) {
       console.error('Reaction error:', err)
@@ -634,15 +641,20 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
 
     return (
       <div className="reactions-display">
-        {Object.entries(grouped).map(([emoji, uids]) => (
-          <span
-            key={emoji}
-            className={`reaction-chip ${uids.includes(currentUser.uid) ? 'own' : ''}`}
-            onClick={() => handleReaction(messageId, emoji)}
-          >
-            {emoji} {uids.length > 1 && uids.length}
-          </span>
-        ))}
+        {Object.entries(grouped).map(([emoji, uids]) => {
+          const isIntenseLove = emoji === INTENSE_LOVE_EMOJI
+          const isOwn = uids.includes(currentUser.uid)
+          return (
+            <span
+              key={emoji}
+              className={`reaction-chip ${isOwn ? 'own' : ''} ${isIntenseLove ? 'intense-love' : ''}`}
+              onClick={() => handleReaction(messageId, emoji)}
+              title={isIntenseLove ? 'Intense love' : undefined}
+            >
+              {emoji} {uids.length > 1 && uids.length}
+            </span>
+          )
+        })}
       </div>
     )
   }
@@ -674,6 +686,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   }
 
   const [voiceError, setVoiceError] = useState({})
+  const [intenseLoveAnimation, setIntenseLoveAnimation] = useState(null)
 
   const handleVoiceError = (messageId, e) => {
     console.error('Voice playback error:', e)
@@ -780,12 +793,14 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
           const isReplyToOwn = replyTo?.senderId === currentUser.uid
           const isFileMessage = message.type === 'file'
           const isVoiceMessage = message.type === 'voice'
+          const hasHeartEmoji = message.text && /[\u2764\u2765\u2763\u{1F493}-\u{1F49F}\u{1FA75}-\u{1FA77}\u{1F90D}\u{1F90E}\u{1F9E1}\u{2764}\u{1FAC0}]/u.test(message.text)
+          const isLoveStyle = hasHeartEmoji
 
           return (
             <div
               key={message.id}
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
-              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''}`}
+              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''}`}
             >
               {/* Floating toolbar - visible on hover/focus (desktop) */}
               <div className="message-toolbar" role="toolbar" aria-label="Message actions">
@@ -940,8 +955,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                   {ALLOWED_REACTIONS.map((emoji) => (
                     <button
                       key={emoji}
-                      className="reaction-option"
+                      className={`reaction-option ${emoji === INTENSE_LOVE_EMOJI ? 'intense-love' : ''}`}
                       onClick={() => handleReaction(message.id, emoji)}
+                      aria-label={emoji === INTENSE_LOVE_EMOJI ? 'Intense love' : undefined}
+                      title={emoji === INTENSE_LOVE_EMOJI ? 'Intense love' : undefined}
                     >
                       {emoji}
                     </button>
@@ -1099,8 +1116,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                 {ALLOWED_REACTIONS.map((emoji) => (
                   <button
                     key={emoji}
-                    className="action-sheet-emoji"
-                    onClick={() => { closeMobileActionSheet(); handleReaction(mobileActionSheet.message.id, emoji) }}
+                    className={`action-sheet-emoji ${emoji === INTENSE_LOVE_EMOJI ? 'intense-love' : ''}`}
+                    onClick={() => handleReaction(mobileActionSheet.message.id, emoji)}
+                    aria-label={emoji === INTENSE_LOVE_EMOJI ? 'Intense love' : undefined}
+                    title={emoji === INTENSE_LOVE_EMOJI ? 'Intense love' : undefined}
                   >
                     {emoji}
                   </button>

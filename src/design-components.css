@@ -89,6 +89,63 @@
   color: var(--color-text-muted);
 }
 
+/* ----------------------------------------
+   Love Style Messages - Romantic Watermark
+   ---------------------------------------- */
+.message.message--love {
+  background: linear-gradient(135deg, #fff0f4 0%, #ffe3ec 100%);
+}
+
+.message.message--love.own {
+  background: linear-gradient(135deg, #ffe3ec 0%, #ffd6e0 100%);
+}
+
+.message.message--love::after {
+  content: "♥";
+  position: absolute;
+  right: 8px;
+  bottom: 2px;
+  font-size: 48px;
+  color: rgba(220, 38, 38, 0.08);
+  pointer-events: none;
+  z-index: 0;
+  line-height: 1;
+}
+
+.message.message--love .message-text {
+  position: relative;
+  z-index: 1;
+}
+
+.message.message--love .message-time {
+  position: relative;
+  z-index: 1;
+}
+
+/* Dark mode love style */
+.dark-mode .message.message--love {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.12) 0%, rgba(190, 24, 93, 0.08) 100%);
+  border-left: 2px solid rgba(220, 38, 38, 0.35);
+}
+
+.dark-mode .message.message--love.own {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(190, 24, 93, 0.1) 100%);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.dark-mode .message.message--love::after {
+  color: rgba(248, 113, 113, 0.1);
+}
+
+/* Mobile: smaller watermark */
+@media (max-width: 480px) {
+  .message.message--love::after {
+    font-size: 36px;
+    right: 6px;
+    bottom: 0;
+  }
+}
+
 .message-header {
   display: flex;
   justify-content: space-between;
@@ -369,6 +426,54 @@
 
 .reaction-chip:hover {
   transform: scale(1.1);
+}
+
+/* Intense Love Reaction - Special Styling */
+.reaction-chip.intense-love {
+  background: linear-gradient(135deg, rgba(255, 69, 100, 0.25), rgba(255, 105, 135, 0.25));
+  box-shadow: 0 0 8px rgba(255, 69, 100, 0.4), 0 0 16px rgba(255, 105, 135, 0.2);
+  animation: intenseLoveGlow 2s ease-in-out infinite;
+}
+
+@keyframes intenseLoveGlow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(255, 69, 100, 0.4), 0 0 16px rgba(255, 105, 135, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(255, 69, 100, 0.6), 0 0 24px rgba(255, 105, 135, 0.35);
+  }
+}
+
+/* Intense Love Message Animation - Triggered on reaction */
+.message.intense-love-animation {
+  animation: intenseLovePulse 800ms ease-out;
+}
+
+@keyframes intenseLovePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 69, 100, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 20px 10px rgba(255, 105, 135, 0.3);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 69, 100, 0);
+    transform: scale(1);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .reaction-chip.intense-love {
+    animation: none;
+    box-shadow: 0 0 8px rgba(255, 69, 100, 0.4);
+  }
+
+  .message.intense-love-animation {
+    animation: none;
+  }
 }
 
 /* Reaction Picker */
@@ -1057,6 +1162,51 @@
 .dark-mode .tone-btn-subtle:hover {
   opacity: 0.8;
   color: var(--color-accent-pop);
+}
+
+/* Love Style Button */
+.love-style-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  min-width: 32px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.love-style-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.love-style-btn.active {
+  opacity: 1;
+  animation: loveStylePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loveStylePulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .love-style-btn.active {
+    animation: none;
+    transform: scale(1.1);
+  }
 }
 
 /* Send Button */
