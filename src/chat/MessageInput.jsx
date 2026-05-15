@@ -90,6 +90,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [isVoiceRecording, setIsVoiceRecording] = useState(false)
   const fileInputRef = useRef(null)
+  const textareaRef = useRef(null)
   const typingTimeoutRef = useRef(null)
   const isTypingRef = useRef(false)
 
@@ -189,6 +190,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
         clearTimeout(typingTimeoutRef.current)
       }
       setTypingStatus(false)
+      textareaRef.current?.focus()
     } catch (err) {
       console.error('Failed to send message:', err)
       if (err.code === 'permission-denied') {
@@ -502,6 +504,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
               </>
             )}
             <textarea
+              ref={textareaRef}
               placeholder="Type a message..."
               value={text}
               onChange={handleChange}
