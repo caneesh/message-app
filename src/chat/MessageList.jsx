@@ -86,6 +86,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
   const [customEmojiInput, setCustomEmojiInput] = useState(null)
   const [customEmoji, setCustomEmoji] = useState('')
   const [emojiError, setEmojiError] = useState('')
+  const [revealedMessages, setRevealedMessages] = useState({})
   const messagesEndRef = useRef(null)
   const messageRefs = useRef({})
   const emojiInputRef = useRef(null)
@@ -731,6 +732,138 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     )
   }
 
+  const handleReveal = (messageId) => {
+    setRevealedMessages(prev => ({ ...prev, [messageId]: true }))
+  }
+
+  const isMessageExpired = (message) => {
+    if (!message.expiresAt) return false
+    const expiresAt = message.expiresAt.toDate ? message.expiresAt.toDate() : new Date(message.expiresAt)
+    return new Date() > expiresAt
+  }
+
+  const isMessageLocked = (message) => {
+    if (!message.unlockAt) return false
+    const unlockAt = message.unlockAt.toDate ? message.unlockAt.toDate() : new Date(message.unlockAt)
+    return new Date() < unlockAt
+  }
+
+  const formatUnlockDate = (timestamp) => {
+    if (!timestamp) return ''
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  }
+
+  const formatExpiresIn = (timestamp) => {
+    if (!timestamp) return ''
+    const expiresAt = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    const now = new Date()
+    const diffMs = expiresAt - now
+    if (diffMs <= 0) return 'Expired'
+    const hours = Math.floor(diffMs / (1000 * 60 * 60))
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+    if (hours > 0) return `${hours}h ${minutes}m`
+    return `${minutes}m`
+  }
+
+  const renderSpecialMessage = (message) => {
+    const isOwn = message.senderId === currentUser.uid
+    const specialType = message.specialType
+
+    if (specialType === 'letter') {
+      return (
+        <div className="special-letter">
+          {message.title && <div className="special-letter-title">{message.title}</div>}
+          <div className="special-letter-body">{message.text}</div>
+          <div className="special-letter-signature">
+            {isOwn ? 'With love' : 'From your love'}
+          </div>
+        </div>
+      )
+    }
+
+    if (specialType === 'hold_reveal') {
+      const isRevealed = revealedMessages[message.id]
+      if (!isRevealed) {
+        return (
+          <div className="special-hold-reveal">
+            <div className="special-hidden-content">
+              <span className="special-hidden-icon">🙈</span>
+              <span className="special-hidden-text">Hidden message</span>
+            </div>
+            <button
+              className="special-reveal-btn"
+              onClick={() => handleReveal(message.id)}
+              onMouseDown={(e) => {
+                const timer = setTimeout(() => handleReveal(message.id), 500)
+                e.currentTarget.dataset.timer = timer
+              }}
+              onMouseUp={(e) => {
+                clearTimeout(e.currentTarget.dataset.timer)
+              }}
+              onMouseLeave={(e) => {
+                clearTimeout(e.currentTarget.dataset.timer)
+              }}
+              aria-label="Hold or tap to reveal message"
+            >
+              Hold to reveal
+            </button>
+          </div>
+        )
+      }
+      return (
+        <div className="special-revealed">
+          <div className="special-revealed-label">Revealed</div>
+          <div className="special-revealed-text">{message.text}</div>
+        </div>
+      )
+    }
+
+    if (specialType === 'timed_unlock') {
+      const locked = isMessageLocked(message)
+      if (locked) {
+        return (
+          <div className="special-locked">
+            <span className="special-locked-icon">🔒</span>
+            <span className="special-locked-text">A special message awaits...</span>
+            <span className="special-unlock-date">Opens {formatUnlockDate(message.unlockAt)}</span>
+          </div>
+        )
+      }
+      return (
+        <div className="special-unlocked">
+          <span className="special-unlocked-icon">🔓</span>
+          {message.title && <div className="special-unlocked-title">{message.title}</div>}
+          <div className="special-unlocked-text">{message.text}</div>
+        </div>
+      )
+    }
+
+    if (specialType === 'disappearing') {
+      const expired = isMessageExpired(message)
+      if (expired) {
+        return (
+          <div className="special-disappeared">
+            <span className="special-disappeared-icon">✨</span>
+            <span className="special-disappeared-text">This note has faded away</span>
+          </div>
+        )
+      }
+      return (
+        <div className="special-disappearing">
+          <div className="special-disappearing-text">{message.text}</div>
+          {message.expiresAt && (
+            <div className="special-expires">
+              Disappears in {formatExpiresIn(message.expiresAt)}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return <div className="message-text">{message.text}</div>
+  }
+
   // Filter messages by search query
   const filteredMessages = searchQuery.trim()
     ? messages.filter((msg) => {
@@ -793,14 +926,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
           const isReplyToOwn = replyTo?.senderId === currentUser.uid
           const isFileMessage = message.type === 'file'
           const isVoiceMessage = message.type === 'voice'
+          const isSpecialMessage = message.type === 'special'
           const hasHeartEmoji = message.text && /[\u2764\u2765\u2763\u{1F493}-\u{1F49F}\u{1FA75}-\u{1FA77}\u{1F90D}\u{1F90E}\u{1F9E1}\u{2764}\u{1FAC0}]/u.test(message.text)
-          const isLoveStyle = hasHeartEmoji
+          const isLoveStyle = hasHeartEmoji && !isSpecialMessage
 
           return (
             <div
               key={message.id}
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
-              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''}`}
+              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''}`}
             >
               {/* Floating toolbar - visible on hover/focus (desktop) */}
               <div className="message-toolbar" role="toolbar" aria-label="Message actions">
@@ -992,7 +1126,9 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                   {emojiError && <span className="custom-emoji-error">{emojiError}</span>}
                 </div>
               )}
-              {isFileMessage ? (
+              {isSpecialMessage ? (
+                renderSpecialMessage(message)
+              ) : isFileMessage ? (
                 renderFileContent(message.file)
               ) : isVoiceMessage ? (
                 renderVoiceContent(message.voice, message.id)

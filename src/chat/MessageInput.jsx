@@ -4,6 +4,7 @@ import { collection, addDoc, doc, setDoc, deleteDoc, getDoc, query, where, order
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import ToneRepairAiButton from './ToneRepairAiButton'
 import VoiceRecorder from './VoiceRecorder'
+import SpecialMessageComposer from './SpecialMessageComposer'
 
 const MAX_MESSAGE_LENGTH = 2000
 
@@ -89,6 +90,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   const [showMoodNudge, setShowMoodNudge] = useState(false)
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [isVoiceRecording, setIsVoiceRecording] = useState(false)
+  const [showSpecialComposer, setShowSpecialComposer] = useState(false)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -394,6 +396,14 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
 
   return (
     <div className="message-input-wrapper">
+      {showSpecialComposer && (
+        <SpecialMessageComposer
+          currentUser={currentUser}
+          chatId={chatId}
+          onClose={() => setShowSpecialComposer(false)}
+          onSent={() => textareaRef.current?.focus()}
+        />
+      )}
       {error && <div className="input-error">{error}</div>}
       {isOverLimit && (
         <div className="input-error">
@@ -481,6 +491,16 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
               aria-label="Attach file"
             >
               📎
+            </button>
+            <button
+              type="button"
+              className="special-msg-btn"
+              onClick={() => setShowSpecialComposer(true)}
+              disabled={sending}
+              title="Special message"
+              aria-label="Send special message"
+            >
+              💝
             </button>
             {trimmedText.length > 5 && (
               <>

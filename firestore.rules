@@ -14,7 +14,7 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView']);
     }
 
     // Helper: Validate message edit (only text/edited/editedAt can change)
@@ -40,9 +40,24 @@ service cloud.firestore {
     function isValidBaseMessage() {
       let data = request.resource.data;
       return data.senderId == request.auth.uid
-          && data.type in ['text', 'file', 'voice']
+          && data.type in ['text', 'file', 'voice', 'special']
           && data.text is string
-          && data.text.size() <= 2000;
+          && data.text.size() <= 5000;
+    }
+
+    // Helper: Validate special message
+    function isValidSpecialMessage() {
+      let data = request.resource.data;
+      return data.type == 'special'
+          && data.specialType in ['letter', 'hold_reveal', 'timed_unlock', 'disappearing']
+          && data.text.size() > 0
+          && (!('title' in data) || (data.title is string && data.title.size() <= 120))
+          && (!('style' in data) || data.style in ['letter', 'love', 'soft'])
+          && (!('unlockAt' in data) || data.unlockAt is timestamp)
+          && (!('expiresAt' in data) || data.expiresAt is timestamp)
+          && (!('isLocked' in data) || data.isLocked is bool)
+          && (!('requiresReveal' in data) || data.requiresReveal is bool)
+          && (!('expiresOnView' in data) || data.expiresOnView is bool);
     }
 
     // Helper: Validate text message
@@ -133,7 +148,7 @@ service cloud.firestore {
                       && isChatMember(chatId)
                       && hasOnlyAllowedFields()
                       && isValidBaseMessage()
-                      && (isValidTextMessage() || isValidFileMessage() || isValidVoiceMessage())
+                      && (isValidTextMessage() || isValidFileMessage() || isValidVoiceMessage() || isValidSpecialMessage())
                       && isValidReplyTo();
         allow update: if isAuthenticated()
                       && isChatMember(chatId)
