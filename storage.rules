@@ -27,7 +27,9 @@ service firebase.storage {
         'audio/webm',
         'audio/mp4',
         'audio/mpeg',
-        'audio/aac'
+        'audio/aac',
+        'audio/x-m4a',
+        'audio/mp4a-latm'
       ];
     }
 

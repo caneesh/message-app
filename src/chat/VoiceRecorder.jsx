@@ -1,24 +1,60 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { db, storage } from '../firebase/firebaseConfig'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytesResumable } from 'firebase/storage'
 
 const MAX_DURATION_SECONDS = 60
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 
-const SUPPORTED_MIME_TYPES = [
-  'audio/webm;codecs=opus',
-  'audio/webm',
-  'audio/mp4',
-  'audio/mpeg',
-]
+const isDev = import.meta.env.DEV
+
+function isIOS() {
+  if (typeof navigator === 'undefined') return false
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+}
+
+function isSafari() {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  return /^((?!chrome|android).)*safari/i.test(ua)
+}
 
 function getSupportedMimeType() {
   if (typeof MediaRecorder === 'undefined') return null
-  for (const mimeType of SUPPORTED_MIME_TYPES) {
+
+  // Prioritize MP4/AAC on iOS/Safari since they don't support WebM
+  const preferredTypes = (isIOS() || isSafari())
+    ? [
+        'audio/mp4',
+        'audio/aac',
+        'audio/mpeg',
+        'audio/webm;codecs=opus',
+        'audio/webm',
+      ]
+    : [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/aac',
+        'audio/mpeg',
+      ]
+
+  for (const mimeType of preferredTypes) {
     if (MediaRecorder.isTypeSupported(mimeType)) {
+      if (isDev) {
+        console.log('[VoiceRecorder] Selected MIME type:', mimeType, {
+          isIOS: isIOS(),
+          isSafari: isSafari(),
+          userAgent: navigator.userAgent,
+        })
+      }
       return mimeType
     }
+  }
+
+  if (isDev) {
+    console.warn('[VoiceRecorder] No supported MIME type found')
   }
   return null
 }
@@ -26,6 +62,7 @@ function getSupportedMimeType() {
 function getFileExtension(mimeType) {
   if (mimeType.includes('webm')) return 'webm'
   if (mimeType.includes('mp4')) return 'm4a'
+  if (mimeType.includes('aac')) return 'aac'
   if (mimeType.includes('mpeg')) return 'mp3'
   return 'audio'
 }
@@ -129,7 +166,19 @@ function VoiceRecorder({ currentUser, chatId, activeReplyTo, clearReply, disable
           return
         }
 
-        const blob = new Blob(chunksRef.current, { type: mimeType })
+        // Use the actual MIME type from the recorder
+        const actualMimeType = mediaRecorder.mimeType || mimeType
+        const blob = new Blob(chunksRef.current, { type: actualMimeType })
+
+        if (isDev) {
+          console.log('[VoiceRecorder] Recording complete:', {
+            requestedMimeType: mimeType,
+            actualMimeType: mediaRecorder.mimeType,
+            blobType: blob.type,
+            blobSize: blob.size,
+            chunks: chunksRef.current.length,
+          })
+        }
 
         if (blob.size === 0) {
           setError('Recording was empty. Please try again.')
@@ -139,6 +188,8 @@ function VoiceRecorder({ currentUser, chatId, activeReplyTo, clearReply, disable
         }
 
         audioBlobRef.current = blob
+        // Update mimeTypeRef to actual type used
+        mimeTypeRef.current = actualMimeType
 
         if (blob.size > MAX_FILE_SIZE) {
           setError('Recording too large. Please record a shorter message.')
@@ -269,8 +320,6 @@ function VoiceRecorder({ currentUser, chatId, activeReplyTo, clearReply, disable
         },
         async () => {
           try {
-            const downloadURL = await getDownloadURL(storageRef)
-
             const messageData = {
               type: 'voice',
               text: '',
@@ -282,8 +331,16 @@ function VoiceRecorder({ currentUser, chatId, activeReplyTo, clearReply, disable
                 contentType: baseMimeType,
                 size: blobSize,
                 durationSeconds: finalDurationRef.current || duration,
-                url: downloadURL,
               },
+            }
+
+            if (isDev) {
+              console.log('[VoiceRecorder] Uploading voice note:', {
+                storagePath,
+                contentType: baseMimeType,
+                size: blobSize,
+                extension: ext,
+              })
             }
 
             if (activeReplyTo) {
@@ -374,6 +431,8 @@ function VoiceRecorder({ currentUser, chatId, activeReplyTo, clearReply, disable
             ref={previewAudioRef}
             src={audioUrl}
             controls
+            playsInline
+            preload="metadata"
             className="voice-audio-preview"
           />
           <span className="voice-duration">{formatDuration(duration)}</span>

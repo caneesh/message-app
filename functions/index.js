@@ -118,6 +118,10 @@ exports.sendNewMessageNotification = onDocumentCreated(
   }
 );
 
+// Auto-delete disabled - messages are kept forever
+// To re-enable, uncomment the cleanupOldMessages function below
+
+/*
 const DURATION_MS = {
   1: 24 * 60 * 60 * 1000,
   7: 7 * 24 * 60 * 60 * 1000,
@@ -189,11 +193,79 @@ exports.cleanupOldMessages = onSchedule('every 6 hours', async () => {
     logger.error('Error in cleanupOldMessages:', err);
   }
 });
+*/
 
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 
 const aiApiKey = defineSecret('AI_API_KEY');
+
+// ============================================
+// SECURE FILE ACCESS
+// ============================================
+
+exports.getSecureFileUrl = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be logged in');
+  }
+
+  const { chatId, storagePath } = request.data;
+
+  if (!chatId || typeof chatId !== 'string') {
+    throw new HttpsError('invalid-argument', 'chatId is required');
+  }
+  if (!storagePath || typeof storagePath !== 'string') {
+    throw new HttpsError('invalid-argument', 'storagePath is required');
+  }
+
+  // Validate storage path format and matches chatId
+  const pathMatch = storagePath.match(/^(chatFiles|chatVoice)\/([^/]+)\/[^/]+\/[^/]+$/);
+  if (!pathMatch) {
+    throw new HttpsError('invalid-argument', 'Invalid storage path format');
+  }
+
+  const pathChatId = pathMatch[2];
+  if (pathChatId !== chatId) {
+    throw new HttpsError('permission-denied', 'Storage path does not match chat');
+  }
+
+  const uid = request.auth.uid;
+
+  // Verify user is a member of the chat
+  const chatDoc = await db.collection('chats').doc(chatId).get();
+  if (!chatDoc.exists) {
+    throw new HttpsError('not-found', 'Chat not found');
+  }
+
+  const chatData = chatDoc.data();
+  if (!chatData.members?.includes(uid)) {
+    throw new HttpsError('permission-denied', 'Not a member of this chat');
+  }
+
+  // Generate a signed URL that expires in 15 minutes
+  try {
+    const bucket = storage.bucket();
+    const file = bucket.file(storagePath);
+
+    // Check if file exists
+    const [exists] = await file.exists();
+    if (!exists) {
+      throw new HttpsError('not-found', 'File not found');
+    }
+
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+    });
+
+    logger.info('Generated secure URL for:', storagePath, 'user:', uid);
+    return { url: signedUrl, expiresIn: 15 * 60 };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('Error generating signed URL:', err);
+    throw new HttpsError('internal', 'Failed to generate secure URL');
+  }
+});
 const crypto = require('crypto');
 
 function generateInviteCode() {
