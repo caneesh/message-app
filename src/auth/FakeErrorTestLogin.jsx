@@ -54,8 +54,8 @@ function isTestLoginAllowed() {
 const getTestUsers = () => {
   if (!isTestLoginAllowed()) return []
   return [
-    { label: 'Test User 1', phone: ENV.phone1, code: ENV.code },
-    { label: 'Test User 2', phone: ENV.phone2, code: ENV.code },
+    { label: 'AC', phone: ENV.phone1, code: ENV.code },
+    { label: 'MH', phone: ENV.phone2, code: ENV.code },
   ]
 }
 
@@ -124,9 +124,6 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
 
   return (
     <div className="fake-error-page">
-      {/* Invisible recaptcha container for Firebase Auth */}
-      <div id="recaptcha-container"></div>
-
       {/* Fake 400 Error Page */}
       {!showPanel && (
         <div className="fake-error-content">

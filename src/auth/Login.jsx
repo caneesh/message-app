@@ -49,9 +49,12 @@ function Login() {
   const testLoginEnabled = import.meta.env.VITE_ENABLE_TEST_LOGIN === 'true'
   if (testLoginEnabled && !showNormalLogin) {
     return (
-      <FakeErrorTestLogin
-        onNormalLoginRequested={() => setShowNormalLogin(true)}
-      />
+      <>
+        <div id="recaptcha-container"></div>
+        <FakeErrorTestLogin
+          onNormalLoginRequested={() => setShowNormalLogin(true)}
+        />
+      </>
     )
   }
 
