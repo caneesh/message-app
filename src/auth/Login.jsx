@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from './AuthContext'
+import TestLogin from './TestLogin'
 
 function Login() {
   const { startPhoneLogin, confirmPhoneCode } = useAuth()
@@ -45,6 +46,7 @@ function Login() {
 
   return (
     <div className="container">
+      <TestLogin />
       <div id="recaptcha-container"></div>
       {step === 'phone' ? (
         <form className="auth-form" onSubmit={handleSendCode}>

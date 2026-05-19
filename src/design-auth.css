@@ -904,6 +904,114 @@
 }
 
 /* ----------------------------------------
+   Test Login (Dev/Staging Only)
+   ---------------------------------------- */
+.test-login-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.test-login-panel {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  max-width: 320px;
+  width: 90%;
+  box-shadow: var(--shadow-xl);
+}
+
+.test-login-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.test-login-header h3 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.test-login-close {
+  background: none;
+  border: none;
+  font-size: var(--font-size-2xl);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.test-login-close:hover {
+  color: var(--color-text-primary);
+}
+
+.test-login-error {
+  background: var(--color-error-light);
+  color: var(--color-error);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.test-login-status {
+  background: var(--color-accent-primary-light);
+  color: var(--color-accent-primary);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.test-login-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.test-login-btn {
+  padding: var(--space-4);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.test-login-btn:hover:not(:disabled) {
+  border-color: var(--color-accent-primary);
+  background: var(--color-accent-primary-light);
+}
+
+.test-login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.test-login-hint {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+/* ----------------------------------------
    Reduced Motion
    ---------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
