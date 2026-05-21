@@ -138,16 +138,6 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
           </div>
           <div className="fake-error-title">Page not found</div>
           <div className="fake-error-subtitle">Something went wrong</div>
-
-          {/* Normal login link - visible in dev only */}
-          {onNormalLoginRequested && (
-            <button
-              className="fake-error-normal-login"
-              onClick={onNormalLoginRequested}
-            >
-              Normal login
-            </button>
-          )}
         </div>
       )}
 
