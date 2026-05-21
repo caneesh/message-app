@@ -155,11 +155,6 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
       {showPanel && (
         <div className="fake-error-panel-overlay" onClick={handleClosePanel}>
           <div className="fake-error-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="fake-error-panel-header">
-              <h3>Test Login</h3>
-              <span className="fake-error-panel-badge">Dev/Staging only</span>
-            </div>
-
             {error && <div className="fake-error-panel-error">{error}</div>}
             {status && <div className="fake-error-panel-status">{status}</div>}
 
