@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from './AuthContext'
+import FakeErrorTestLogin from './FakeErrorTestLogin'
 
 function Login() {
   const { startPhoneLogin, confirmPhoneCode } = useAuth()
@@ -8,6 +9,7 @@ function Login() {
   const [step, setStep] = useState('phone') // 'phone' or 'code'
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showNormalLogin, setShowNormalLogin] = useState(false)
 
   const handleSendCode = async (e) => {
     e.preventDefault()
@@ -43,6 +45,20 @@ function Login() {
     setError('')
   }
 
+  // If test login is enabled and user hasn't requested normal login, show fake error page
+  const testLoginEnabled = import.meta.env.VITE_ENABLE_TEST_LOGIN === 'true'
+  if (testLoginEnabled && !showNormalLogin) {
+    return (
+      <>
+        <div id="recaptcha-container"></div>
+        <FakeErrorTestLogin
+          onNormalLoginRequested={() => setShowNormalLogin(true)}
+        />
+      </>
+    )
+  }
+
+  // Normal login flow
   return (
     <div className="container">
       <div id="recaptcha-container"></div>
@@ -72,6 +88,12 @@ function Login() {
           <button type="submit" disabled={loading}>
             {loading ? 'Sending...' : 'Send Verification Code'}
           </button>
+          {/* Back to test login - visible only in dev/test mode */}
+          {testLoginEnabled && (
+            <p>
+              <a onClick={() => setShowNormalLogin(false)}>Back to test login</a>
+            </p>
+          )}
         </form>
       ) : (
         <form className="auth-form" onSubmit={handleVerifyCode}>
