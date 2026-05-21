@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
   <defs>
-    <linearGradient id="brandGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0066CC"/>
-      <stop offset="100%" stop-color="#00B4A0"/>
+    <linearGradient id="coffeeIconGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6F4E37"/>
+      <stop offset="100%" stop-color="#A67B5B"/>
     </linearGradient>
   </defs>
-  <rect width="192" height="192" rx="40" fill="white"/>
-  <!-- House roof -->
-  <path d="M96 32 L156 76 L156 68 L140 56 L140 44 L124 44 L124 64 L96 44 L36 88 L36 76 Z"
-        fill="url(#brandGradient)" stroke="none"/>
-  <!-- Chat bubble body -->
-  <path d="M44 80 L44 132 C44 140 50 146 58 146 L70 146 L58 164 L88 146 L134 146 C142 146 148 140 148 132 L148 80 C148 72 142 66 134 66 L58 66 C50 66 44 72 44 80 Z"
-        fill="url(#brandGradient)" stroke="none"/>
-  <!-- Three dots -->
-  <circle cx="72" cy="108" r="8" fill="white"/>
-  <circle cx="96" cy="108" r="8" fill="white"/>
-  <circle cx="120" cy="108" r="8" fill="white"/>
+  <rect width="192" height="192" rx="40" fill="#FFF8F0"/>
+  <!-- Steam lines -->
+  <path d="M60 24 Q68 40 60 56" stroke="#A67B5B" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M96 16 Q104 36 96 56" stroke="#A67B5B" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M132 24 Q140 40 132 56" stroke="#A67B5B" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Cup body -->
+  <path d="M36 68 L48 156 C48 164 56 172 72 172 L120 172 C136 172 144 164 144 156 L156 68 Z" fill="url(#coffeeIconGradient)"/>
+  <!-- Cup handle -->
+  <path d="M156 84 Q180 84 180 112 Q180 140 156 140" stroke="url(#coffeeIconGradient)" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <!-- Coffee surface -->
+  <ellipse cx="96" cy="68" rx="60" ry="12" fill="#5D4037"/>
 </svg>

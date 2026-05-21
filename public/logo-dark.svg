@@ -1,25 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" width="200" height="48">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 48" width="220" height="48">
   <defs>
-    <linearGradient id="logoGradientDark" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#0088FF"/>
-      <stop offset="100%" stop-color="#00D4C4"/>
+    <linearGradient id="coffeeGradientDark" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#C4A484"/>
+      <stop offset="100%" stop-color="#DBC1AC"/>
     </linearGradient>
   </defs>
-  <!-- House + Chat icon -->
-  <g transform="translate(0, 4) scale(0.42)">
-    <!-- House roof -->
-    <path d="M48 8 L88 40 L88 32 L76 24 L76 12 L64 12 L64 28 L48 16 L8 48 L8 40 Z"
-          fill="url(#logoGradientDark)"/>
-    <!-- Chat bubble -->
-    <path d="M12 44 L12 76 C12 82 16 86 22 86 L30 86 L22 98 L44 86 L74 86 C80 86 84 82 84 76 L84 44 C84 38 80 34 74 34 L22 34 C16 34 12 38 12 44 Z"
-          fill="url(#logoGradientDark)"/>
-    <!-- Dots -->
-    <circle cx="32" cy="60" r="5" fill="#0A0A0C"/>
-    <circle cx="48" cy="60" r="5" fill="#0A0A0C"/>
-    <circle cx="64" cy="60" r="5" fill="#0A0A0C"/>
+  <!-- Coffee Cup -->
+  <g transform="translate(4, 4)">
+    <!-- Steam lines -->
+    <path d="M12 2 Q14 6 12 10" stroke="#DBC1AC" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M20 0 Q22 5 20 10" stroke="#DBC1AC" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M28 2 Q30 6 28 10" stroke="#DBC1AC" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <!-- Cup body -->
+    <path d="M4 14 L8 38 C8 40 10 42 14 42 L26 42 C30 42 32 40 32 38 L36 14 Z" fill="url(#coffeeGradientDark)"/>
+    <!-- Cup handle -->
+    <path d="M36 18 Q44 18 44 26 Q44 34 36 34" stroke="url(#coffeeGradientDark)" stroke-width="4" fill="none" stroke-linecap="round"/>
   </g>
-  <!-- OneRoom text -->
-  <text x="52" y="32" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="22" font-weight="600">
-    <tspan fill="#0088FF">One</tspan><tspan fill="rgba(255,255,255,0.9)">Room</tspan>
+  <!-- Coffee Club text -->
+  <text x="56" y="32" font-family="Inter, -apple-system, system-ui, sans-serif" font-size="22" font-weight="600">
+    <tspan fill="#C4A484">Coffee</tspan><tspan fill="#e0e0e0"> Club</tspan>
   </text>
 </svg>

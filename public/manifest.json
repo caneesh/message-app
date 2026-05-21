@@ -4,8 +4,8 @@
   "description": "Our private space",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0066CC",
+  "background_color": "#FFF8F0",
+  "theme_color": "#6F4E37",
   "icons": [
     {
       "src": "/icon-192.svg",
