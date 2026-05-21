@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { db, storage } from '../firebase/firebaseConfig'
 import { collection, addDoc, doc, setDoc, deleteDoc, getDoc, query, where, orderBy, limit, getDocs, serverTimestamp } from 'firebase/firestore'
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytesResumable } from 'firebase/storage'
 import ToneRepairAiButton from './ToneRepairAiButton'
 import VoiceRecorder from './VoiceRecorder'
 import SpecialMessageComposer from './SpecialMessageComposer'
@@ -344,10 +344,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           setUploadProgress(null)
         },
         async () => {
-          // Upload complete - get download URL and create message
           try {
-            const downloadURL = await getDownloadURL(storageRef)
-
             const messageData = {
               type: 'file',
               text: '',
@@ -359,7 +356,6 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
                 fileName: file.name,
                 contentType: file.type,
                 size: file.size,
-                url: downloadURL,
               },
             }
 

@@ -4,7 +4,14 @@ import { collection, doc, getDocs, setDoc, getDoc, deleteDoc, orderBy, query, se
 import { httpsCallable } from 'firebase/functions'
 import AiSettingsPanel from './AiSettingsPanel'
 
-function Settings({ currentUser, chatId, onChatJoined }) {
+const AUTO_LOCK_OPTIONS = [
+  { value: 2, label: '2 minutes' },
+  { value: 5, label: '5 minutes' },
+  { value: 15, label: '15 minutes' },
+  { value: 'never', label: 'Never' },
+]
+
+function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLockTimeoutChange, onLockNow }) {
   const [pinEnabled, setPinEnabled] = useState(() => {
     return localStorage.getItem('appPinEnabled') === 'true'
   })
@@ -285,9 +292,36 @@ function Settings({ currentUser, chatId, onChatJoined }) {
       <h2>Settings</h2>
 
       <div className="settings-section">
-        <h3>App Lock</h3>
+        <h3>Auto-Lock</h3>
         <p className="settings-note">
-          Local PIN lock for casual privacy. This is stored in your browser only and is not strong security.
+          Automatically lock the app after a period of inactivity to protect your privacy.
+        </p>
+        <div className="settings-row">
+          <label htmlFor="auto-lock-timeout">Lock after</label>
+          <select
+            id="auto-lock-timeout"
+            className="settings-select"
+            value={autoLockTimeout || 5}
+            onChange={(e) => onAutoLockTimeoutChange?.(e.target.value === 'never' ? 'never' : parseInt(e.target.value, 10))}
+          >
+            {AUTO_LOCK_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        {onLockNow && (
+          <button className="settings-btn" onClick={onLockNow}>
+            Lock Now
+          </button>
+        )}
+      </div>
+
+      <div className="settings-section">
+        <h3>PIN Lock</h3>
+        <p className="settings-note">
+          Optional PIN for additional security. This is stored in your browser only.
         </p>
         {pinEnabled ? (
           <button className="settings-btn danger" onClick={handleDisablePin}>

@@ -1,7 +1,7 @@
 {
-  "name": "OneRoom",
-  "short_name": "OneRoom",
-  "description": "Connecting spaces, simply",
+  "name": "Coffee Club",
+  "short_name": "Coffee Club",
+  "description": "Our private space",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

@@ -16,6 +16,8 @@ import {
 } from 'firebase/firestore'
 import { ref, deleteObject } from 'firebase/storage'
 import MessageToTaskAiAction from './MessageToTaskAiAction'
+import SecureFileContent from './SecureFileContent'
+import SecureVoiceContent from './SecureVoiceContent'
 
 const PREVIEW_MAX_LENGTH = 80
 const MESSAGE_LIMIT = 100
@@ -37,21 +39,11 @@ function truncateText(text, maxLength = PREVIEW_MAX_LENGTH) {
   return text.slice(0, maxLength) + '...'
 }
 
-function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-}
-
 function formatVoiceDuration(seconds) {
   if (!seconds || isNaN(seconds)) return '0:00'
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
   return `${mins}:${secs.toString().padStart(2, '0')}`
-}
-
-function isImageType(contentType) {
-  return ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'].includes(contentType)
 }
 
 function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
@@ -660,77 +652,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     )
   }
 
-  const renderFileContent = (file) => {
-    if (!file || !file.url) {
-      return <div className="file-loading">Loading file...</div>
-    }
-
-    if (isImageType(file.contentType)) {
-      return (
-        <a href={file.url} target="_blank" rel="noopener noreferrer" className="file-image-link">
-          <img src={file.url} alt={file.fileName} className="file-image" />
-        </a>
-      )
-    }
-
-    return (
-      <a href={file.url} target="_blank" rel="noopener noreferrer" className="file-card">
-        <span className="file-icon">
-          {file.contentType === 'application/pdf' ? '📄' : '📝'}
-        </span>
-        <div className="file-info">
-          <span className="file-name">{file.fileName}</span>
-          <span className="file-size">{formatFileSize(file.size)}</span>
-        </div>
-      </a>
-    )
-  }
-
-  const [voiceError, setVoiceError] = useState({})
   const [intenseLoveAnimation, setIntenseLoveAnimation] = useState(null)
-
-  const handleVoiceError = (messageId, e) => {
-    console.error('Voice playback error:', e)
-    setVoiceError(prev => ({ ...prev, [messageId]: true }))
-  }
-
-  const renderVoiceContent = (voice, messageId) => {
-    if (!voice || !voice.url) {
-      return <div className="voice-loading">Loading voice note...</div>
-    }
-
-    if (voiceError[messageId]) {
-      return (
-        <div className="voice-message voice-error-state">
-          <span className="voice-icon" aria-hidden="true">🎤</span>
-          <span className="voice-unsupported">
-            Cannot play on this device.
-            <a href={voice.url} target="_blank" rel="noopener noreferrer" className="voice-download-link">
-              Download
-            </a>
-          </span>
-          <span className="voice-duration">{formatVoiceDuration(voice.durationSeconds)}</span>
-        </div>
-      )
-    }
-
-    return (
-      <div className="voice-message">
-        <span className="voice-icon" aria-hidden="true">🎤</span>
-        <audio
-          src={voice.url}
-          controls
-          controlsList="nodownload"
-          className="voice-audio-player"
-          preload="auto"
-          playsInline
-          webkit-playsinline=""
-          onError={(e) => handleVoiceError(messageId, e)}
-        />
-        <span className="voice-duration">{formatVoiceDuration(voice.durationSeconds)}</span>
-      </div>
-    )
-  }
 
   const handleReveal = (messageId) => {
     setRevealedMessages(prev => ({ ...prev, [messageId]: true }))
@@ -1129,9 +1051,9 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
               {isSpecialMessage ? (
                 renderSpecialMessage(message)
               ) : isFileMessage ? (
-                renderFileContent(message.file)
+                <SecureFileContent chatId={chatId} file={message.file} />
               ) : isVoiceMessage ? (
-                renderVoiceContent(message.voice, message.id)
+                <SecureVoiceContent chatId={chatId} voice={message.voice} />
               ) : editingId === message.id ? (
                 <div className="edit-container">
                   <input

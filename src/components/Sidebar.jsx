@@ -78,23 +78,23 @@ function Sidebar({ activeTab, onTabChange, collapsed, onToggleCollapse }) {
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
-        <div className="sidebar-logo" title="OneRoom">
+        <div className="sidebar-logo" title="Coffee Club">
           {collapsed ? (
             <img
               src="/icon-192.svg"
-              alt="OneRoom"
+              alt="Coffee Club"
               className="logo-icon"
             />
           ) : (
             <>
               <img
                 src="/logo.svg"
-                alt="OneRoom"
+                alt="Coffee Club"
                 className="logo-full logo-light"
               />
               <img
                 src="/logo-dark.svg"
-                alt="OneRoom"
+                alt="Coffee Club"
                 className="logo-full logo-dark"
               />
             </>

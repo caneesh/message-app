@@ -11,6 +11,7 @@ import ImportantDates from './ImportantDates'
 import Lists from './Lists'
 import Settings from './Settings'
 import LockScreen from './LockScreen'
+import { useInactivityLock } from '../hooks/useInactivityLock'
 import CheckIn from './CheckIn'
 import Memories from './Memories'
 import Events from './Events'
@@ -40,11 +41,23 @@ function ChatPage() {
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true'
   })
-  const [isLocked, setIsLocked] = useState(() => {
-    const pinEnabled = localStorage.getItem('appPinEnabled') === 'true'
+
+  const pinEnabled = localStorage.getItem('appPinEnabled') === 'true'
+
+  const {
+    isLocked: inactivityLocked,
+    unlock: inactivityUnlock,
+    lockNow,
+    timeoutMinutes,
+    setTimeoutMinutes,
+  } = useInactivityLock({ enabled: true })
+
+  const [pinLocked, setPinLocked] = useState(() => {
     const wasLocked = localStorage.getItem('appLocked') !== 'false'
     return pinEnabled && wasLocked
   })
+
+  const isLocked = pinLocked || inactivityLocked
 
   const getDeviceLabel = () => {
     const ua = navigator.userAgent
@@ -189,8 +202,14 @@ function ChatPage() {
 
   const clearReply = () => setActiveReplyTo(null)
 
+  const handleUnlock = () => {
+    setPinLocked(false)
+    localStorage.setItem('appLocked', 'false')
+    inactivityUnlock()
+  }
+
   if (isLocked) {
-    return <LockScreen onUnlock={() => setIsLocked(false)} />
+    return <LockScreen onUnlock={handleUnlock} requirePin={pinEnabled} />
   }
 
   const renderContent = () => {
@@ -248,7 +267,15 @@ function ChatPage() {
       case 'devices':
         return <Devices currentUser={currentUser} />
       case 'settings':
-        return <Settings currentUser={currentUser} chatId={PRIVATE_CHAT_ID} />
+        return (
+          <Settings
+            currentUser={currentUser}
+            chatId={PRIVATE_CHAT_ID}
+            autoLockTimeout={timeoutMinutes}
+            onAutoLockTimeoutChange={setTimeoutMinutes}
+            onLockNow={lockNow}
+          />
+        )
       default:
         return <Dashboard currentUser={currentUser} chatId={PRIVATE_CHAT_ID} onNavigate={setActiveTab} />
     }

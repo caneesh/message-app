@@ -67,12 +67,12 @@ function Login() {
           <div className="auth-logo">
             <img
               src="/logo.svg"
-              alt="OneRoom"
+              alt="Coffee Club"
               className="auth-logo-img logo-light"
             />
             <img
               src="/logo-dark.svg"
-              alt="OneRoom"
+              alt="Coffee Club"
               className="auth-logo-img logo-dark"
             />
           </div>

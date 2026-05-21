@@ -49,12 +49,12 @@ function MobileDrawer({ isOpen, onClose, activeTab, onTabChange }) {
           <div className="drawer-logo">
             <img
               src="/logo.svg"
-              alt="OneRoom"
+              alt="Coffee Club"
               className="drawer-logo-img logo-light"
             />
             <img
               src="/logo-dark.svg"
-              alt="OneRoom"
+              alt="Coffee Club"
               className="drawer-logo-img logo-dark"
             />
           </div>
