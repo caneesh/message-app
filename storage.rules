@@ -2,6 +2,12 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // BACKUP FILES - No client access allowed
+    // Backups are created and managed by Admin SDK only
+    match /backups/{allPaths=**} {
+      allow read, write: if false;
+    }
+
     // Helper: Check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;

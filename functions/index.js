@@ -999,3 +999,393 @@ exports.aiMisunderstandingHelper = onCall({ secrets: [aiApiKey] }, async (reques
     },
   };
 });
+
+// ============================================
+// SCHEDULED CHAT BACKUP
+// ============================================
+
+const zlib = require('zlib');
+const { promisify } = require('util');
+const gzip = promisify(zlib.gzip);
+
+const BACKUP_CONFIG = {
+  // Subcollections to include in backup
+  SUBCOLLECTIONS: [
+    'messages',
+    'reminders',
+    'notes',
+    'promises',
+    'decisions',
+    'memories',
+    'pinnedMessages',
+    'reactions',
+    'checkIns',
+    'specialMessages',
+    'importantDates',
+    'lists',
+    'events',
+    'capsules',
+    'followUps',
+    'misunderstandings',
+  ],
+  // Subcollections to exclude (audit/cost metadata)
+  EXCLUDED_SUBCOLLECTIONS: ['aiRuns'],
+  // Default values
+  DEFAULT_RETENTION_DAYS: 30,
+  DEFAULT_MESSAGE_DAYS: 90,
+  BACKUP_VERSION: '1.0.0',
+};
+
+function isBackupEnabled() {
+  const enabled = process.env.CHAT_BACKUP_ENABLED;
+  return enabled === 'true' || enabled === '1';
+}
+
+function getBackupRetentionDays() {
+  const days = parseInt(process.env.CHAT_BACKUP_RETENTION_DAYS, 10);
+  return isNaN(days) ? BACKUP_CONFIG.DEFAULT_RETENTION_DAYS : days;
+}
+
+function getBackupMessageDays() {
+  const days = parseInt(process.env.CHAT_BACKUP_MESSAGE_DAYS, 10);
+  return isNaN(days) ? BACKUP_CONFIG.DEFAULT_MESSAGE_DAYS : days;
+}
+
+function getBackupBucket() {
+  return process.env.CHAT_BACKUP_BUCKET || null;
+}
+
+function formatBackupPath(chatId, date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hour = String(date.getUTCHours()).padStart(2, '0');
+  return `backups/chats/${year}/${month}/${day}/${hour}/chat-${chatId}.json.gz`;
+}
+
+function formatManifestPath(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hour = String(date.getUTCHours()).padStart(2, '0');
+  return `backups/chats/${year}/${month}/${day}/${hour}/manifest.json`;
+}
+
+async function backupSubcollection(chatId, subcollectionName, messageDays) {
+  const docs = [];
+  let query = db.collection(`chats/${chatId}/${subcollectionName}`);
+
+  // For messages, only get last N days to avoid huge backups
+  if (subcollectionName === 'messages' && messageDays > 0) {
+    const cutoffDate = new Date(Date.now() - messageDays * 24 * 60 * 60 * 1000);
+    query = query.where('createdAt', '>=', cutoffDate);
+  }
+
+  try {
+    const snapshot = await query.get();
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      // Convert Firestore timestamps to ISO strings for JSON serialization
+      const serializedData = serializeFirestoreData(data);
+      docs.push({
+        id: doc.id,
+        ...serializedData,
+      });
+    });
+  } catch (err) {
+    // Subcollection might not exist, which is fine
+    if (err.code !== 5) { // NOT_FOUND
+      logger.warn(`Error reading subcollection ${subcollectionName} for chat ${chatId}:`, err.message);
+    }
+  }
+
+  return docs;
+}
+
+function serializeFirestoreData(data) {
+  if (data === null || data === undefined) {
+    return data;
+  }
+
+  if (data.toDate && typeof data.toDate === 'function') {
+    // Firestore Timestamp
+    return data.toDate().toISOString();
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(serializeFirestoreData);
+  }
+
+  if (typeof data === 'object') {
+    const result = {};
+    for (const [key, value] of Object.entries(data)) {
+      result[key] = serializeFirestoreData(value);
+    }
+    return result;
+  }
+
+  return data;
+}
+
+async function backupSingleChat(chatId, bucket, backupDate, messageDays) {
+  const startTime = Date.now();
+  const result = {
+    chatId,
+    path: null,
+    messageCount: 0,
+    status: 'success',
+    error: null,
+    subcollectionCounts: {},
+  };
+
+  try {
+    // Get chat document
+    const chatDoc = await db.collection('chats').doc(chatId).get();
+    if (!chatDoc.exists) {
+      result.status = 'skipped';
+      result.error = 'Chat document not found';
+      return result;
+    }
+
+    const chatData = serializeFirestoreData(chatDoc.data());
+
+    // Build backup object
+    const backupData = {
+      backupVersion: BACKUP_CONFIG.BACKUP_VERSION,
+      backupCreatedAt: backupDate.toISOString(),
+      chatId,
+      chatMetadata: chatData,
+      subcollections: {},
+    };
+
+    // Backup each subcollection
+    for (const subcollection of BACKUP_CONFIG.SUBCOLLECTIONS) {
+      const docs = await backupSubcollection(chatId, subcollection, messageDays);
+      backupData.subcollections[subcollection] = docs;
+      result.subcollectionCounts[subcollection] = docs.length;
+
+      if (subcollection === 'messages') {
+        result.messageCount = docs.length;
+      }
+    }
+
+    // For lists, also backup list items
+    if (backupData.subcollections.lists && backupData.subcollections.lists.length > 0) {
+      for (const list of backupData.subcollections.lists) {
+        try {
+          const itemsSnapshot = await db
+            .collection(`chats/${chatId}/lists/${list.id}/items`)
+            .get();
+          list.items = itemsSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...serializeFirestoreData(doc.data()),
+          }));
+        } catch (err) {
+          list.items = [];
+        }
+      }
+    }
+
+    // Compress and upload
+    const jsonString = JSON.stringify(backupData);
+    const compressed = await gzip(Buffer.from(jsonString, 'utf8'));
+
+    const backupPath = formatBackupPath(chatId, backupDate);
+    const file = bucket.file(backupPath);
+
+    await file.save(compressed, {
+      metadata: {
+        contentType: 'application/gzip',
+        contentEncoding: 'gzip',
+        metadata: {
+          backupVersion: BACKUP_CONFIG.BACKUP_VERSION,
+          chatId,
+          messageCount: String(result.messageCount),
+          createdAt: backupDate.toISOString(),
+        },
+      },
+    });
+
+    result.path = backupPath;
+    result.durationMs = Date.now() - startTime;
+
+    // Log only metadata, not content
+    logger.info('Chat backup completed', {
+      chatId,
+      path: backupPath,
+      messageCount: result.messageCount,
+      durationMs: result.durationMs,
+    });
+
+  } catch (err) {
+    result.status = 'failed';
+    result.error = err.message;
+    logger.error('Chat backup failed', { chatId, error: err.message });
+  }
+
+  return result;
+}
+
+exports.scheduledChatBackup = onSchedule(
+  {
+    schedule: process.env.CHAT_BACKUP_SCHEDULE || 'every 6 hours',
+    timeoutSeconds: 540, // 9 minutes max
+    memory: '1GiB',
+  },
+  async () => {
+    const startedAt = new Date();
+
+    // Check if backup is enabled
+    if (!isBackupEnabled()) {
+      logger.info('Chat backup disabled');
+      return;
+    }
+
+    const bucketName = getBackupBucket();
+    if (!bucketName) {
+      logger.error('CHAT_BACKUP_BUCKET not configured');
+      return;
+    }
+
+    const messageDays = getBackupMessageDays();
+    logger.info('Starting scheduled chat backup', {
+      messageDays,
+      backupVersion: BACKUP_CONFIG.BACKUP_VERSION,
+    });
+
+    const bucket = storage.bucket(bucketName);
+    const backupResults = [];
+
+    try {
+      // Get all chats
+      const chatsSnapshot = await db.collection('chats').get();
+      const chatCount = chatsSnapshot.size;
+
+      logger.info(`Found ${chatCount} chats to backup`);
+
+      // Backup each chat
+      for (const chatDoc of chatsSnapshot.docs) {
+        const result = await backupSingleChat(
+          chatDoc.id,
+          bucket,
+          startedAt,
+          messageDays
+        );
+        backupResults.push(result);
+      }
+
+      // Create manifest
+      const completedAt = new Date();
+      const successCount = backupResults.filter((r) => r.status === 'success').length;
+      const failureCount = backupResults.filter((r) => r.status === 'failed').length;
+
+      const manifest = {
+        backupVersion: BACKUP_CONFIG.BACKUP_VERSION,
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt - startedAt,
+        chatCount,
+        successCount,
+        failureCount,
+        skippedCount: chatCount - successCount - failureCount,
+        messageDaysIncluded: messageDays,
+        backupFiles: backupResults.map((r) => ({
+          chatId: r.chatId,
+          path: r.path,
+          messageCount: r.messageCount,
+          status: r.status,
+          error: r.error,
+          subcollectionCounts: r.subcollectionCounts,
+        })),
+      };
+
+      // Upload manifest
+      const manifestPath = formatManifestPath(startedAt);
+      const manifestFile = bucket.file(manifestPath);
+      await manifestFile.save(JSON.stringify(manifest, null, 2), {
+        metadata: {
+          contentType: 'application/json',
+        },
+      });
+
+      logger.info('Chat backup completed', {
+        manifestPath,
+        chatCount,
+        successCount,
+        failureCount,
+        durationMs: manifest.durationMs,
+      });
+
+    } catch (err) {
+      logger.error('Scheduled chat backup failed', { error: err.message });
+    }
+  }
+);
+
+exports.cleanupOldChatBackups = onSchedule(
+  {
+    schedule: 'every 24 hours',
+    timeoutSeconds: 300, // 5 minutes max
+    memory: '512MiB',
+  },
+  async () => {
+    // Check if backup is enabled
+    if (!isBackupEnabled()) {
+      logger.info('Chat backup disabled, skipping cleanup');
+      return;
+    }
+
+    const bucketName = getBackupBucket();
+    if (!bucketName) {
+      logger.error('CHAT_BACKUP_BUCKET not configured');
+      return;
+    }
+
+    const retentionDays = getBackupRetentionDays();
+    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+
+    logger.info('Starting backup cleanup', {
+      retentionDays,
+      cutoffDate: cutoffDate.toISOString(),
+    });
+
+    const bucket = storage.bucket(bucketName);
+    let deletedCount = 0;
+    let errorCount = 0;
+
+    try {
+      // List all files in backups/chats/
+      const [files] = await bucket.getFiles({
+        prefix: 'backups/chats/',
+      });
+
+      for (const file of files) {
+        try {
+          // Get file metadata
+          const [metadata] = await file.getMetadata();
+          const createdAt = metadata.timeCreated ? new Date(metadata.timeCreated) : null;
+
+          if (createdAt && createdAt < cutoffDate) {
+            await file.delete();
+            deletedCount++;
+          }
+        } catch (err) {
+          errorCount++;
+          logger.warn('Failed to process backup file', {
+            file: file.name,
+            error: err.message,
+          });
+        }
+      }
+
+      logger.info('Backup cleanup completed', {
+        deletedCount,
+        errorCount,
+        totalFilesChecked: files.length,
+      });
+
+    } catch (err) {
+      logger.error('Backup cleanup failed', { error: err.message });
+    }
+  }
+);
