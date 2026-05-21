@@ -63,8 +63,6 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
   const { startPhoneLogin, confirmPhoneCode } = useAuth()
   const [showPanel, setShowPanel] = useState(false)
   const [loading, setLoading] = useState(null)
-  const [error, setError] = useState('')
-  const [status, setStatus] = useState('')
   const [clickSequence, setClickSequence] = useState([])
   const [clickCount400, setClickCount400] = useState(0)
 
@@ -79,36 +77,31 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
     if (!isTestLoginAllowed()) return
 
     setLoading(user.phone)
-    setError('')
-    setStatus('Sending verification code...')
+    console.log('Sending verification code...')
 
     const startResult = await startPhoneLogin(user.phone)
 
     if (!startResult.success) {
-      setError(startResult.error)
-      setStatus('')
+      console.error('Login error:', startResult.error)
       setLoading(null)
       return
     }
 
-    setStatus('Verifying code...')
+    console.log('Verifying code...')
 
     const confirmResult = await confirmPhoneCode(user.code)
 
     if (!confirmResult.success) {
-      setError(confirmResult.error)
-      setStatus('')
+      console.error('Verification error:', confirmResult.error)
       setLoading(null)
       return
     }
 
-    setStatus('Success!')
+    console.log('Success!')
   }
 
   const handleClosePanel = () => {
     setShowPanel(false)
-    setError('')
-    setStatus('')
     setLoading(null)
   }
 
@@ -194,9 +187,6 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
       {showPanel && (
         <div className="fake-error-panel-overlay" onClick={handleClosePanel}>
           <div className="fake-error-panel" onClick={(e) => e.stopPropagation()}>
-            {error && <div className="fake-error-panel-error">{error}</div>}
-            {status && <div className="fake-error-panel-status">{status}</div>}
-
             <div className="fake-error-panel-buttons">
               {testUsers.map((user) => (
                 <button
