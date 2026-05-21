@@ -54,8 +54,8 @@ function isTestLoginAllowed() {
 const getTestUsers = () => {
   if (!isTestLoginAllowed()) return []
   return [
-    { label: 'AC', phone: ENV.phone1, code: ENV.code },
-    { label: 'MH', phone: ENV.phone2, code: ENV.code },
+    { label: 'HCSC', phone: ENV.phone1, code: ENV.code },
+    { label: 'HCL', phone: ENV.phone2, code: ENV.code },
   ]
 }
 
