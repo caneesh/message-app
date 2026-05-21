@@ -65,6 +65,8 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
   const [loading, setLoading] = useState(null)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
+  const [clickSequence, setClickSequence] = useState([])
+  const [clickCount400, setClickCount400] = useState(0)
 
   // Log warning in dev only
   useEffect(() => {
@@ -110,9 +112,49 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
     setLoading(null)
   }
 
-  const handleTriggerClick = () => {
+  const handleElementClick = (element) => {
     if (!isTestLoginAllowed()) return
-    setShowPanel(true)
+
+    // Option 1: Click 400 three times
+    if (element === '400') {
+      const newCount = clickCount400 + 1
+      setClickCount400(newCount)
+      if (newCount >= 3) {
+        setShowPanel(true)
+        setClickCount400(0)
+        setClickSequence([])
+        return
+      }
+    }
+
+    // Option 2: Click sequence - "Page not found" → "Something went wrong" → "400"
+    const expectedSequence = ['title', 'subtitle', '400']
+    const newSequence = [...clickSequence, element]
+
+    // Check if sequence matches so far
+    let matches = true
+    for (let i = 0; i < newSequence.length; i++) {
+      if (newSequence[i] !== expectedSequence[i]) {
+        matches = false
+        break
+      }
+    }
+
+    if (matches) {
+      if (newSequence.length === expectedSequence.length) {
+        setShowPanel(true)
+        setClickSequence([])
+        setClickCount400(0)
+      } else {
+        setClickSequence(newSequence)
+      }
+    } else {
+      // Reset sequence if wrong order
+      setClickSequence(element === 'title' ? ['title'] : [])
+    }
+
+    // Reset 400 count after timeout
+    setTimeout(() => setClickCount400(0), 2000)
   }
 
   // If test login is not allowed, return null (fall back to normal login)
@@ -129,15 +171,22 @@ function FakeErrorTestLogin({ onNormalLoginRequested }) {
         <div className="fake-error-content">
           <div
             className="fake-error-code"
-            onClick={handleTriggerClick}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleTriggerClick() }}
+            onClick={() => handleElementClick('400')}
           >
             400
           </div>
-          <div className="fake-error-title">Page not found</div>
-          <div className="fake-error-subtitle">Something went wrong</div>
+          <div
+            className="fake-error-title"
+            onClick={() => handleElementClick('title')}
+          >
+            Page not found
+          </div>
+          <div
+            className="fake-error-subtitle"
+            onClick={() => handleElementClick('subtitle')}
+          >
+            Something went wrong
+          </div>
         </div>
       )}
 
