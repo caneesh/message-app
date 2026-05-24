@@ -1816,6 +1816,17 @@ body.dark-mode .settings-select {
   background: #c82333;
 }
 
+.export-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.export-buttons .settings-btn {
+  flex: 1;
+  min-width: 140px;
+}
+
 .settings-section.danger-zone {
   border-color: #dc3545;
   margin-top: 30px;

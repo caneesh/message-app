@@ -20,6 +20,7 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
   const [confirmPin, setConfirmPin] = useState('')
   const [pinError, setPinError] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [fullExporting, setFullExporting] = useState(false)
 
   const [inviteCode, setInviteCode] = useState('')
   const [generatedInvite, setGeneratedInvite] = useState(null)
@@ -287,6 +288,42 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
     }
   }
 
+  const handleFullExport = async () => {
+    if (!chatId) {
+      alert('No chat selected')
+      return
+    }
+    setFullExporting(true)
+    try {
+      const exportChatHistory = httpsCallable(functions, 'exportChatHistory')
+      const result = await exportChatHistory({ chatId, includeBackups: true })
+
+      console.log('Export result:', result)
+      const data = result.data
+
+      if (data && data.htmlContent) {
+        // Create blob and download
+        const blob = new Blob([data.htmlContent], { type: 'text/html' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `chat-export-${new Date().toISOString().split('T')[0]}.html`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } else {
+        console.error('Unexpected response:', data)
+        alert('Export failed. Unexpected response format.')
+      }
+    } catch (err) {
+      console.error('Full export error:', err)
+      alert('Failed to export data: ' + (err.message || 'Unknown error'))
+    } finally {
+      setFullExporting(false)
+    }
+  }
+
   return (
     <div className="settings-container">
       <h2>Settings</h2>
@@ -375,11 +412,24 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
       <div className="settings-section">
         <h3>Export Data</h3>
         <p className="settings-note">
-          Download all your messages, notes, reminders, dates, and lists as a JSON file.
+          Download all your messages, notes, reminders, dates, and lists.
         </p>
-        <button className="settings-btn" onClick={handleExport} disabled={exporting}>
-          {exporting ? 'Exporting...' : 'Export Chat Data'}
-        </button>
+        <div className="export-buttons">
+          <button className="settings-btn" onClick={handleExport} disabled={exporting}>
+            {exporting ? 'Exporting...' : 'Quick Export (JSON)'}
+          </button>
+          <button
+            className="settings-btn"
+            onClick={handleFullExport}
+            disabled={fullExporting || !chatId}
+            title="Includes deleted messages from backups"
+          >
+            {fullExporting ? 'Generating...' : 'Full Export (HTML)'}
+          </button>
+        </div>
+        <p className="settings-note" style={{ marginTop: '8px', fontSize: '0.85em' }}>
+          Full Export includes deleted data from backups in a readable HTML format.
+        </p>
       </div>
 
       {chatId && (
