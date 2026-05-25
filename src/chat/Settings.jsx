@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { db, functions } from '../firebase/firebaseConfig'
 import { collection, doc, getDocs, setDoc, getDoc, deleteDoc, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
@@ -21,6 +21,30 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
   const [pinError, setPinError] = useState('')
   const [exporting, setExporting] = useState(false)
   const [fullExporting, setFullExporting] = useState(false)
+  const [exportUnlocked, setExportUnlocked] = useState(false)
+  const [exportCodeBuffer, setExportCodeBuffer] = useState('')
+
+  const EXPORT_CODE = '335042249'
+
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+
+      const key = e.key
+      if (/^\d$/.test(key)) {
+        setExportCodeBuffer((prev) => {
+          const newBuffer = (prev + key).slice(-EXPORT_CODE.length)
+          if (newBuffer === EXPORT_CODE) {
+            setExportUnlocked(true)
+          }
+          return newBuffer
+        })
+      }
+    }
+
+    window.addEventListener('keypress', handleKeyPress)
+    return () => window.removeEventListener('keypress', handleKeyPress)
+  }, [])
 
   const [inviteCode, setInviteCode] = useState('')
   const [generatedInvite, setGeneratedInvite] = useState(null)
@@ -409,28 +433,30 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
 
       <AiSettingsPanel currentUser={currentUser} />
 
-      <div className="settings-section">
-        <h3>Export Data</h3>
-        <p className="settings-note">
-          Download all your messages, notes, reminders, dates, and lists.
-        </p>
-        <div className="export-buttons">
-          <button className="settings-btn" onClick={handleExport} disabled={exporting}>
-            {exporting ? 'Exporting...' : 'Quick Export (JSON)'}
-          </button>
-          <button
-            className="settings-btn"
-            onClick={handleFullExport}
-            disabled={fullExporting || !chatId}
-            title="Includes deleted messages from backups"
-          >
-            {fullExporting ? 'Generating...' : 'Full Export (HTML)'}
-          </button>
+      {exportUnlocked && (
+        <div className="settings-section">
+          <h3>Export Data</h3>
+          <p className="settings-note">
+            Download all your messages, notes, reminders, dates, and lists.
+          </p>
+          <div className="export-buttons">
+            <button className="settings-btn" onClick={handleExport} disabled={exporting}>
+              {exporting ? 'Exporting...' : 'Quick Export (JSON)'}
+            </button>
+            <button
+              className="settings-btn"
+              onClick={handleFullExport}
+              disabled={fullExporting || !chatId}
+              title="Includes deleted messages from backups"
+            >
+              {fullExporting ? 'Generating...' : 'Full Export (HTML)'}
+            </button>
+          </div>
+          <p className="settings-note" style={{ marginTop: '8px', fontSize: '0.85em' }}>
+            Full Export includes deleted data from backups in a readable HTML format.
+          </p>
         </div>
-        <p className="settings-note" style={{ marginTop: '8px', fontSize: '0.85em' }}>
-          Full Export includes deleted data from backups in a readable HTML format.
-        </p>
-      </div>
+      )}
 
       {chatId && (
         <div className="settings-section">
