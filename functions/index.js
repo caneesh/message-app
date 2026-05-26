@@ -199,6 +199,8 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 
 const aiApiKey = defineSecret('AI_API_KEY');
+const chatBackupEnabled = defineSecret('CHAT_BACKUP_ENABLED');
+const chatBackupBucket = defineSecret('CHAT_BACKUP_BUCKET');
 
 // ============================================
 // SECURE FILE ACCESS
@@ -1231,17 +1233,19 @@ exports.scheduledChatBackup = onSchedule(
     schedule: process.env.CHAT_BACKUP_SCHEDULE || 'every 6 hours',
     timeoutSeconds: 540, // 9 minutes max
     memory: '1GiB',
+    secrets: [chatBackupEnabled, chatBackupBucket],
   },
   async () => {
     const startedAt = new Date();
 
     // Check if backup is enabled
-    if (!isBackupEnabled()) {
-      logger.info('Chat backup disabled');
+    const enabled = chatBackupEnabled.value();
+    if (enabled !== 'true' && enabled !== '1') {
+      logger.info('Chat backup disabled', { enabled });
       return;
     }
 
-    const bucketName = getBackupBucket();
+    const bucketName = chatBackupBucket.value();
     if (!bucketName) {
       logger.error('CHAT_BACKUP_BUCKET not configured');
       return;
@@ -1327,15 +1331,17 @@ exports.cleanupOldChatBackups = onSchedule(
     schedule: 'every 24 hours',
     timeoutSeconds: 300, // 5 minutes max
     memory: '512MiB',
+    secrets: [chatBackupEnabled, chatBackupBucket],
   },
   async () => {
     // Check if backup is enabled
-    if (!isBackupEnabled()) {
+    const enabled = chatBackupEnabled.value();
+    if (enabled !== 'true' && enabled !== '1') {
       logger.info('Chat backup disabled, skipping cleanup');
       return;
     }
 
-    const bucketName = getBackupBucket();
+    const bucketName = chatBackupBucket.value();
     if (!bucketName) {
       logger.error('CHAT_BACKUP_BUCKET not configured');
       return;
