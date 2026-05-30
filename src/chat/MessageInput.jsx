@@ -52,6 +52,7 @@ const softenMessage = (text) => {
 
 const STRESSED_MOODS = ['😟', '😴']
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50 MB
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
@@ -62,6 +63,13 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'text/plain',
 ]
+const VIDEO_TYPES = [
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/x-m4v',
+]
+const ALL_ALLOWED_TYPES = [...ALLOWED_TYPES, ...VIDEO_TYPES]
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
@@ -318,15 +326,18 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
     // Reset input
     e.target.value = ''
 
+    const isVideo = VIDEO_TYPES.includes(file.type)
+
     // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setError('Unsupported file type. Allowed: JPG, PNG, WebP, PDF, TXT')
+    if (!ALL_ALLOWED_TYPES.includes(file.type)) {
+      setError('Unsupported file type. Allowed: JPG, PNG, WebP, PDF, TXT, MP4, WebM, MOV')
       return
     }
 
     // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      setError('File too large. Maximum size is 5 MB.')
+    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_FILE_SIZE
+    if (file.size > maxSize) {
+      setError(`File too large. Maximum size is ${isVideo ? '50' : '5'} MB.`)
       return
     }
 
@@ -361,7 +372,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
         async () => {
           try {
             const messageData = {
-              type: 'file',
+              type: isVideo ? 'video' : 'file',
               text: '',
               senderId: currentUser.uid,
               senderPhone: currentUser.phoneNumber,
@@ -530,7 +541,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           type="file"
           ref={fileInputRef}
           onChange={handleFileSelect}
-          accept={ALLOWED_TYPES.join(',')}
+          accept={ALL_ALLOWED_TYPES.join(',')}
           style={{ display: 'none' }}
         />
         {!isVoiceRecording && (

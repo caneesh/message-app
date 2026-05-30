@@ -7599,3 +7599,56 @@ body.dark-mode .preview-text {
 body.dark-mode .preview-more {
   color: #888;
 }
+
+/* Video Messages */
+.video-message {
+  max-width: 320px;
+}
+
+.video-container {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+
+.file-video {
+  width: 100%;
+  max-width: 320px;
+  max-height: 400px;
+  display: block;
+  border-radius: 8px;
+}
+
+.video-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  margin-top: -4px;
+}
+
+.video-info .file-name {
+  color: #fff;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.video-info .file-size {
+  color: #aaa;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* Dark mode video styles */
+body.dark-mode .video-container {
+  background: #111;
+}
+
+body.dark-mode .video-info {
+  background: rgba(0, 0, 0, 0.8);
+}

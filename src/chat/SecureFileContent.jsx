@@ -10,6 +10,10 @@ function isImageType(contentType) {
   return ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'].includes(contentType)
 }
 
+function isVideoType(contentType) {
+  return ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'].includes(contentType)
+}
+
 function SecureFileContent({ chatId, file }) {
   // Use stored URL for old messages, secure URL for new ones
   const needsSecureUrl = !file?.url && file?.storagePath
@@ -37,6 +41,26 @@ function SecureFileContent({ chatId, file }) {
       <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="file-image-link">
         <img src={fileUrl} alt={file.fileName} className="file-image" />
       </a>
+    )
+  }
+
+  if (isVideoType(file.contentType)) {
+    return (
+      <div className="video-container">
+        <video
+          src={fileUrl}
+          controls
+          playsInline
+          preload="metadata"
+          className="file-video"
+        >
+          Your browser does not support video playback.
+        </video>
+        <div className="video-info">
+          <span className="file-name">{file.fileName}</span>
+          <span className="file-size">{formatFileSize(file.size)}</span>
+        </div>
+      </div>
     )
   }
 

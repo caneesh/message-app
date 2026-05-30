@@ -327,6 +327,8 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     let previewText = message.text
     if (message.type === 'file' && message.file) {
       previewText = `📎 ${message.file.fileName}`
+    } else if (message.type === 'video' && message.file) {
+      previewText = `🎬 ${message.file.fileName}`
     } else if (message.type === 'voice' && message.voice) {
       previewText = `🎤 Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
     }
@@ -385,6 +387,8 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
         let textPreview = truncateText(message.text)
         if (message.type === 'file' && message.file) {
           textPreview = `📎 ${message.file.fileName}`
+        } else if (message.type === 'video' && message.file) {
+          textPreview = `🎬 ${message.file.fileName}`
         } else if (message.type === 'voice' && message.voice) {
           textPreview = `🎤 Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
         }
@@ -891,6 +895,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           const replyTo = message.replyTo
           const isReplyToOwn = replyTo?.senderId === currentUser.uid
           const isFileMessage = message.type === 'file'
+          const isVideoMessage = message.type === 'video'
           const isVoiceMessage = message.type === 'voice'
           const isSpecialMessage = message.type === 'special'
           const hasHeartEmoji = message.text && /[\u2764\u2765\u2763\u{1F493}-\u{1F49F}\u{1FA75}-\u{1FA77}\u{1F90D}\u{1F90E}\u{1F9E1}\u{2764}\u{1FAC0}]/u.test(message.text)
@@ -900,7 +905,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
             <div
               key={message.id}
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
-              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''}`}
+              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVideoMessage ? 'video-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''}`}
             >
               {/* Floating toolbar - visible on hover/focus (desktop) */}
               <div className="message-toolbar" role="toolbar" aria-label="Message actions">
@@ -1094,7 +1099,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               )}
               {isSpecialMessage ? (
                 renderSpecialMessage(message)
-              ) : isFileMessage ? (
+              ) : isFileMessage || isVideoMessage ? (
                 <SecureFileContent chatId={chatId} file={message.file} />
               ) : isVoiceMessage ? (
                 <SecureVoiceContent chatId={chatId} voice={message.voice} />
