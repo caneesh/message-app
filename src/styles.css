@@ -7652,3 +7652,28 @@ body.dark-mode .video-container {
 body.dark-mode .video-info {
   background: rgba(0, 0, 0, 0.8);
 }
+
+/* Reply Thumbnail */
+.reply-thumbnail {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.reply-thumbnail-video {
+  background: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reply-thumbnail-icon {
+  font-size: 1.2rem;
+}
+
+body.dark-mode .reply-thumbnail-video {
+  background: #444;
+}

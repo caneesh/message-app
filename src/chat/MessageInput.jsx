@@ -5,6 +5,30 @@ import { ref, uploadBytesResumable } from 'firebase/storage'
 import ToneRepairAiButton from './ToneRepairAiButton'
 import VoiceRecorder from './VoiceRecorder'
 import SpecialMessageComposer from './SpecialMessageComposer'
+import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
+
+function ReplyThumbnail({ chatId, fileInfo }) {
+  const { url, loading } = useSecureFileUrl(
+    fileInfo?.storagePath ? chatId : null,
+    fileInfo?.storagePath
+  )
+
+  if (!fileInfo || loading || !url) return null
+
+  if (fileInfo.type === 'image') {
+    return <img src={url} alt="" className="reply-thumbnail" />
+  }
+
+  if (fileInfo.type === 'video') {
+    return (
+      <div className="reply-thumbnail reply-thumbnail-video">
+        <span className="reply-thumbnail-icon">🎬</span>
+      </div>
+    )
+  }
+
+  return null
+}
 
 const MAX_MESSAGE_LENGTH = 2000
 
@@ -528,6 +552,9 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
       )}
       {activeReplyTo && (
         <div className="reply-preview">
+          {activeReplyTo.fileInfo && (
+            <ReplyThumbnail chatId={chatId} fileInfo={activeReplyTo.fileInfo} />
+          )}
           <div className="reply-preview-content">
             <span className="reply-preview-label">
               Replying to {isReplyToOwn ? 'yourself' : 'friend'}

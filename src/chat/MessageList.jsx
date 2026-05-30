@@ -325,17 +325,33 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
 
   const handleReply = (message) => {
     let previewText = message.text
+    let fileInfo = null
+
     if (message.type === 'file' && message.file) {
       previewText = `📎 ${message.file.fileName}`
+      if (['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'].includes(message.file.contentType)) {
+        fileInfo = {
+          storagePath: message.file.storagePath,
+          contentType: message.file.contentType,
+          type: 'image'
+        }
+      }
     } else if (message.type === 'video' && message.file) {
       previewText = `🎬 ${message.file.fileName}`
+      fileInfo = {
+        storagePath: message.file.storagePath,
+        contentType: message.file.contentType,
+        type: 'video'
+      }
     } else if (message.type === 'voice' && message.voice) {
       previewText = `🎤 Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
     }
+
     onReply({
       messageId: message.id,
       senderId: message.senderId,
       textPreview: truncateText(previewText),
+      fileInfo,
     })
   }
 
