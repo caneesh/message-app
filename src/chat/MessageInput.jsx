@@ -52,7 +52,7 @@ const softenMessage = (text) => {
 
 const STRESSED_MOODS = ['😟', '😴']
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50 MB
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100 MB
 const ALLOWED_TYPES = [
   'image/jpeg',
   'image/png',
@@ -337,7 +337,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
     // Validate file size
     const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_FILE_SIZE
     if (file.size > maxSize) {
-      setError(`File too large. Maximum size is ${isVideo ? '50' : '5'} MB.`)
+      setError(`File too large. Maximum size is ${isVideo ? '100' : '5'} MB.`)
       return
     }
 
