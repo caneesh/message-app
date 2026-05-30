@@ -413,7 +413,10 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   }
 
   const openFilePicker = () => {
-    fileInputRef.current?.click()
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
   }
 
   const insertEmoji = (emoji) => {
@@ -541,8 +544,18 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           type="file"
           ref={fileInputRef}
           onChange={handleFileSelect}
-          accept={ALL_ALLOWED_TYPES.join(',')}
-          style={{ display: 'none' }}
+          accept="image/*,video/*,.pdf,.txt"
+          style={{
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            padding: 0,
+            margin: '-1px',
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            whiteSpace: 'nowrap',
+            border: 0
+          }}
         />
         {!isVoiceRecording && (
           <>
