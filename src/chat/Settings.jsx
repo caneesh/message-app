@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { db, functions } from '../firebase/firebaseConfig'
 import { collection, doc, getDocs, setDoc, getDoc, deleteDoc, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
@@ -25,6 +25,7 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
   const [exportCodeBuffer, setExportCodeBuffer] = useState('')
 
   const EXPORT_CODE = '335042249'
+  const longPressTimer = useRef(null)
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -45,6 +46,19 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
     window.addEventListener('keypress', handleKeyPress)
     return () => window.removeEventListener('keypress', handleKeyPress)
   }, [])
+
+  const handleLongPressStart = () => {
+    longPressTimer.current = setTimeout(() => {
+      setExportUnlocked(true)
+    }, 3000)
+  }
+
+  const handleLongPressEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
 
   const [inviteCode, setInviteCode] = useState('')
   const [generatedInvite, setGeneratedInvite] = useState(null)
@@ -350,7 +364,17 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
 
   return (
     <div className="settings-container">
-      <h2>Settings</h2>
+      <h2
+        onTouchStart={handleLongPressStart}
+        onTouchEnd={handleLongPressEnd}
+        onTouchCancel={handleLongPressEnd}
+        onMouseDown={handleLongPressStart}
+        onMouseUp={handleLongPressEnd}
+        onMouseLeave={handleLongPressEnd}
+        style={{ userSelect: 'none' }}
+      >
+        Settings
+      </h2>
 
       <div className="settings-section">
         <h3>Auto-Lock</h3>

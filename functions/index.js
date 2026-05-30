@@ -1238,14 +1238,14 @@ exports.scheduledChatBackup = onSchedule(
   async () => {
     const startedAt = new Date();
 
-    // Check if backup is enabled
-    const enabled = chatBackupEnabled.value();
+    // Check if backup is enabled (trim to handle newlines in secrets)
+    const enabled = (chatBackupEnabled.value() || '').trim();
     if (enabled !== 'true' && enabled !== '1') {
       logger.info('Chat backup disabled', { enabled });
       return;
     }
 
-    const bucketName = chatBackupBucket.value();
+    const bucketName = (chatBackupBucket.value() || '').trim();
     if (!bucketName) {
       logger.error('CHAT_BACKUP_BUCKET not configured');
       return;
@@ -1334,14 +1334,14 @@ exports.cleanupOldChatBackups = onSchedule(
     secrets: [chatBackupEnabled, chatBackupBucket],
   },
   async () => {
-    // Check if backup is enabled
-    const enabled = chatBackupEnabled.value();
+    // Check if backup is enabled (trim to handle newlines in secrets)
+    const enabled = (chatBackupEnabled.value() || '').trim();
     if (enabled !== 'true' && enabled !== '1') {
       logger.info('Chat backup disabled, skipping cleanup');
       return;
     }
 
-    const bucketName = chatBackupBucket.value();
+    const bucketName = (chatBackupBucket.value() || '').trim();
     if (!bucketName) {
       logger.error('CHAT_BACKUP_BUCKET not configured');
       return;

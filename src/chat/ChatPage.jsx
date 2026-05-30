@@ -25,6 +25,7 @@ import Misunderstandings from './Misunderstandings'
 import Capsules from './Capsules'
 import FollowUps from './FollowUps'
 import LoveHeatMap from './LoveHeatMap'
+import MessageCalendar from './MessageCalendar'
 
 const STALE_TYPING_MS = 5000
 
@@ -41,6 +42,8 @@ function ChatPage() {
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true'
   })
+  const [showCalendar, setShowCalendar] = useState(false)
+  const [dateFilter, setDateFilter] = useState(null)
 
   const pinEnabled = localStorage.getItem('appPinEnabled') === 'true'
 
@@ -219,11 +222,34 @@ function ChatPage() {
       case 'chat':
         return (
           <>
+            {dateFilter && (
+              <div className="date-filter-banner">
+                <span>
+                  Showing messages from {dateFilter.startDate.toLocaleDateString()}
+                  {dateFilter.endDate && dateFilter.endDate.toDateString() !== dateFilter.startDate.toDateString()
+                    ? ` - ${dateFilter.endDate.toLocaleDateString()}`
+                    : ''}
+                </span>
+                <button className="clear-filter-btn" onClick={() => setDateFilter(null)}>
+                  Clear Filter
+                </button>
+              </div>
+            )}
+            <div className="chat-toolbar">
+              <button
+                className="calendar-btn"
+                onClick={() => setShowCalendar(true)}
+                title="Browse by date"
+              >
+                📅
+              </button>
+            </div>
             <MessageList
               currentUser={currentUser}
               chatId={PRIVATE_CHAT_ID}
               onReply={setActiveReplyTo}
               searchQuery={searchQuery}
+              dateFilter={dateFilter}
             />
             {friendTyping && (
               <div className="typing-indicator">Friend is typing...</div>
@@ -234,6 +260,17 @@ function ChatPage() {
               activeReplyTo={activeReplyTo}
               clearReply={clearReply}
             />
+            {showCalendar && (
+              <MessageCalendar
+                currentUser={currentUser}
+                chatId={PRIVATE_CHAT_ID}
+                onSelectDate={(filter) => {
+                  setDateFilter(filter)
+                  setShowCalendar(false)
+                }}
+                onClose={() => setShowCalendar(false)}
+              />
+            )}
           </>
         )
       case 'reminders':

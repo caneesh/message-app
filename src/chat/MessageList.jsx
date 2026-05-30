@@ -13,6 +13,8 @@ import {
   addDoc,
   serverTimestamp,
   limitToLast,
+  where,
+  Timestamp,
 } from 'firebase/firestore'
 import { ref, deleteObject } from 'firebase/storage'
 import MessageToTaskAiAction from './MessageToTaskAiAction'
@@ -46,7 +48,32 @@ function formatVoiceDuration(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
+function linkifyText(text) {
+  if (!text) return null
+  const urlRegex = /(https?:\/\/[^\s<]+[^\s<.,;:!?"')\]])/g
+  const parts = text.split(urlRegex)
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="message-link"
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
+
+function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilter = null }) {
   const [messages, setMessages] = useState([])
   const [reactions, setReactions] = useState({})
   const [pinnedMessages, setPinnedMessages] = useState([])
@@ -88,7 +115,24 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     setError(null)
 
     const messagesRef = collection(db, 'chats', chatId, 'messages')
-    const q = query(messagesRef, orderBy('createdAt', 'asc'), limitToLast(MESSAGE_LIMIT))
+    let q
+
+    if (dateFilter && dateFilter.startDate) {
+      const startOfDay = new Date(dateFilter.startDate)
+      startOfDay.setHours(0, 0, 0, 0)
+
+      const endOfDay = new Date(dateFilter.endDate || dateFilter.startDate)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      q = query(
+        messagesRef,
+        where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
+        where('createdAt', '<=', Timestamp.fromDate(endOfDay)),
+        orderBy('createdAt', 'asc')
+      )
+    } else {
+      q = query(messagesRef, orderBy('createdAt', 'asc'), limitToLast(MESSAGE_LIMIT))
+    }
 
     const unsubscribe = onSnapshot(
       q,
@@ -118,7 +162,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
     )
 
     return unsubscribe
-  }, [chatId])
+  }, [chatId, dateFilter])
 
   const reactionUnsubscribes = useRef({})
   const receiptUnsubscribes = useRef({})
@@ -783,7 +827,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
       )
     }
 
-    return <div className="message-text">{message.text}</div>
+    return <div className="message-text">{linkifyText(message.text)}</div>
   }
 
   // Filter messages by search query
@@ -1075,7 +1119,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '' }) {
                 </div>
               ) : (
                 <>
-                  <div className="message-text">{message.text}</div>
+                  <div className="message-text">{linkifyText(message.text)}</div>
                   {message.edited && <span className="edited-label">edited</span>}
                 </>
               )}

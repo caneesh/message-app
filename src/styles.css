@@ -2211,6 +2211,20 @@ body.dark-mode .device-meta {
   white-space: pre-wrap;
 }
 
+.message-link {
+  color: #1a73e8;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.message.own .message-link {
+  color: #90caf9;
+}
+
+.message-link:hover {
+  opacity: 0.8;
+}
+
 .message-time {
   font-size: 10px;
   opacity: 0.6;
@@ -2265,12 +2279,98 @@ body.dark-mode .device-meta {
   cursor: not-allowed;
 }
 
+/* Emoji Button */
+.emoji-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+
+.emoji-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* Emoji Picker */
+.emoji-picker {
+  position: absolute;
+  bottom: 100%;
+  left: 50px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 320px;
+  max-height: 300px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.emoji-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  font-weight: 500;
+  color: #666;
+}
+
+.emoji-picker-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #999;
+  padding: 0 4px;
+}
+
+.emoji-picker-close:hover {
+  color: #333;
+}
+
+.emoji-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.emoji-picker-item {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.emoji-picker-item:hover {
+  background: #f0f0f0;
+}
+
 /* Mobile message input adjustments */
 @media (max-width: 480px) {
   .message-input-container {
     padding: 8px 10px;
     padding-bottom: max(8px, env(safe-area-inset-bottom));
     gap: 6px;
+  }
+
+  .emoji-picker {
+    left: 10px;
+    right: 10px;
+    width: auto;
+  }
+
+  .emoji-picker-grid {
+    grid-template-columns: repeat(7, 1fr);
   }
 
   .message-input-container input {
@@ -2370,6 +2470,7 @@ body.dark-mode .device-meta {
 .message-input-wrapper {
   flex-shrink: 0;
   background: white;
+  position: relative;
 }
 
 .input-error {
@@ -7007,4 +7108,494 @@ body.dark-mode .ai-task-dismiss,
 body.dark-mode .ai-task-cancel {
   background: #444;
   color: #e0e0e0;
+}
+
+/* Chat Toolbar */
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 12px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+}
+
+.calendar-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  min-height: 36px;
+  min-width: 36px;
+  transition: background 0.2s;
+}
+
+.calendar-btn:hover {
+  background: #f0f0f0;
+}
+
+/* Date Filter Banner */
+.date-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #e8f4fd;
+  border-bottom: 1px solid #b3d7f5;
+  font-size: 0.9rem;
+  color: #1976d2;
+}
+
+.clear-filter-btn {
+  background: #1976d2;
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  min-height: 28px;
+  min-width: auto;
+}
+
+.clear-filter-btn:hover {
+  background: #1565c0;
+}
+
+/* Message Calendar */
+.calendar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.calendar-modal {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.calendar-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.calendar-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  min-height: 32px;
+  min-width: 32px;
+}
+
+.calendar-controls {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.calendar-mode-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #ddd;
+  background: #f9f9f9;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  min-height: 36px;
+}
+
+.mode-btn.active {
+  background: #1976d2;
+  color: white;
+  border-color: #1976d2;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  gap: 12px;
+}
+
+.nav-btn {
+  background: none;
+  border: 1px solid #ddd;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  min-height: 32px;
+  min-width: 32px;
+}
+
+.nav-btn:hover {
+  background: #f0f0f0;
+}
+
+.today-btn {
+  margin-left: auto;
+}
+
+.calendar-month-label {
+  font-weight: 600;
+  font-size: 1rem;
+  min-width: 140px;
+  text-align: center;
+}
+
+.calendar-grid {
+  padding: 0 16px 16px;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 0.8rem;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.weekday {
+  padding: 8px 0;
+}
+
+.calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  border: none;
+  background: #f9f9f9;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  min-height: 36px;
+  min-width: 36px;
+}
+
+.calendar-day.empty {
+  background: transparent;
+  cursor: default;
+}
+
+.calendar-day:not(.empty):hover {
+  background: #e3f2fd;
+}
+
+.calendar-day.has-messages {
+  background: #e8f5e9;
+  font-weight: 600;
+}
+
+.calendar-day.today {
+  border: 2px solid #1976d2;
+}
+
+.calendar-day.selected {
+  background: #1976d2;
+  color: white;
+}
+
+.calendar-day.in-range {
+  background: #bbdefb;
+  border-radius: 0;
+}
+
+.calendar-day.selected.end {
+  border-radius: 0 8px 8px 0;
+}
+
+.calendar-day.selected:not(.end) {
+  border-radius: 8px 0 0 8px;
+}
+
+.message-dot {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background: #4caf50;
+  border-radius: 50%;
+}
+
+.calendar-day.selected .message-dot {
+  background: white;
+}
+
+.calendar-loading,
+.calendar-messages-loading {
+  padding: 16px;
+  text-align: center;
+  color: #666;
+}
+
+.calendar-selection {
+  padding: 12px 16px;
+  background: #f5f5f5;
+  text-align: center;
+}
+
+.selection-header {
+  font-weight: 600;
+  color: #333;
+}
+
+.selection-hint {
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 4px;
+}
+
+.calendar-messages {
+  padding: 16px;
+  border-top: 1px solid #eee;
+}
+
+.messages-count {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.messages-preview {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-message {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.preview-message.own {
+  background: #e3f2fd;
+  align-self: flex-end;
+  margin-left: 20%;
+}
+
+.preview-message.other {
+  background: #f5f5f5;
+  align-self: flex-start;
+  margin-right: 20%;
+}
+
+.preview-time {
+  font-size: 0.75rem;
+  color: #888;
+  margin-right: 8px;
+}
+
+.preview-text {
+  color: #333;
+}
+
+.preview-more {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #666;
+  padding: 8px;
+}
+
+.view-in-chat-btn {
+  width: 100%;
+  padding: 12px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-top: 12px;
+}
+
+.view-in-chat-btn:hover {
+  background: #1565c0;
+}
+
+.calendar-no-messages {
+  padding: 16px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+/* Dark mode calendar styles */
+body.dark-mode .chat-toolbar {
+  background: #1e1e1e;
+  border-bottom-color: #333;
+}
+
+body.dark-mode .calendar-btn:hover {
+  background: #333;
+}
+
+body.dark-mode .date-filter-banner {
+  background: #1e3a5f;
+  border-bottom-color: #2d5a8a;
+  color: #90caf9;
+}
+
+body.dark-mode .clear-filter-btn {
+  background: #2196f3;
+}
+
+body.dark-mode .calendar-modal {
+  background: #1e1e1e;
+}
+
+body.dark-mode .calendar-header {
+  border-bottom-color: #333;
+}
+
+body.dark-mode .calendar-header h3 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .calendar-close {
+  color: #aaa;
+}
+
+body.dark-mode .calendar-controls {
+  border-bottom-color: #333;
+}
+
+body.dark-mode .mode-btn {
+  background: #2a2a2a;
+  border-color: #444;
+  color: #e0e0e0;
+}
+
+body.dark-mode .mode-btn.active {
+  background: #1976d2;
+  border-color: #1976d2;
+}
+
+body.dark-mode .nav-btn {
+  border-color: #444;
+  color: #e0e0e0;
+}
+
+body.dark-mode .nav-btn:hover {
+  background: #333;
+}
+
+body.dark-mode .calendar-month-label {
+  color: #e0e0e0;
+}
+
+body.dark-mode .weekday {
+  color: #888;
+}
+
+body.dark-mode .calendar-day {
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+body.dark-mode .calendar-day:not(.empty):hover {
+  background: #3a3a3a;
+}
+
+body.dark-mode .calendar-day.has-messages {
+  background: #1e3a1e;
+}
+
+body.dark-mode .calendar-day.today {
+  border-color: #2196f3;
+}
+
+body.dark-mode .calendar-day.selected {
+  background: #1976d2;
+}
+
+body.dark-mode .calendar-day.in-range {
+  background: #1e3a5f;
+}
+
+body.dark-mode .calendar-loading,
+body.dark-mode .calendar-messages-loading,
+body.dark-mode .calendar-no-messages {
+  color: #888;
+}
+
+body.dark-mode .calendar-selection {
+  background: #252525;
+}
+
+body.dark-mode .selection-header {
+  color: #e0e0e0;
+}
+
+body.dark-mode .selection-hint {
+  color: #888;
+}
+
+body.dark-mode .calendar-messages {
+  border-top-color: #333;
+}
+
+body.dark-mode .messages-count {
+  color: #888;
+}
+
+body.dark-mode .preview-message.own {
+  background: #1e3a5f;
+}
+
+body.dark-mode .preview-message.other {
+  background: #333;
+}
+
+body.dark-mode .preview-text {
+  color: #e0e0e0;
+}
+
+body.dark-mode .preview-more {
+  color: #888;
 }

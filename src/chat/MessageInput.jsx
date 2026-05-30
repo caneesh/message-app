@@ -78,6 +78,20 @@ const QUICK_ACTIONS = [
   { key: 'busy_now', text: '🔇 Busy now', priority: false },
 ]
 
+const EMOJI_LIST = [
+  // Romantic & Love
+  '❤️', '🥰', '😍', '😘', '💕', '💖', '💗', '💓',
+  '💞', '💘', '💝', '❤️‍🔥', '💋', '😻', '🫶', '🤗',
+  '🥺', '😊', '☺️', '🫠', '💑', '💏', '👩‍❤️‍👨', '💐',
+  '🌹', '🌷', '🌸', '💮', '🏵️', '🌺', '🌻', '🌼',
+  // Hearts
+  '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎',
+  '💟', '❣️', '💌', '♥️', '😽', '😚', '😙', '🫂',
+  // Sweet expressions
+  '😇', '🙂', '😉', '😌', '🤭', '😏', '✨', '🌟',
+  '⭐', '🔥', '💫', '🎀', '🎁', '🍫', '🍰', '🧁',
+]
+
 function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -91,6 +105,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
   const [nudgeDismissed, setNudgeDismissed] = useState(false)
   const [isVoiceRecording, setIsVoiceRecording] = useState(false)
   const [showSpecialComposer, setShowSpecialComposer] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -390,6 +405,25 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
     fileInputRef.current?.click()
   }
 
+  const insertEmoji = (emoji) => {
+    const textarea = textareaRef.current
+    if (!textarea) {
+      setText((prev) => prev + emoji)
+      return
+    }
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const newText = text.slice(0, start) + emoji + text.slice(end)
+    setText(newText)
+
+    // Set cursor position after emoji
+    setTimeout(() => {
+      textarea.selectionStart = textarea.selectionEnd = start + emoji.length
+      textarea.focus()
+    }, 0)
+  }
+
   return (
     <div className="message-input-wrapper">
       {showSpecialComposer && (
@@ -455,6 +489,29 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           <button onClick={() => setShowToneOptions(false)}>Cancel</button>
         </div>
       )}
+      {showEmojiPicker && (
+        <div className="emoji-picker">
+          <div className="emoji-picker-header">
+            <span>Emoji</span>
+            <button className="emoji-picker-close" onClick={() => setShowEmojiPicker(false)}>×</button>
+          </div>
+          <div className="emoji-picker-grid">
+            {EMOJI_LIST.map((emoji, index) => (
+              <button
+                key={index}
+                type="button"
+                className="emoji-picker-item"
+                onClick={() => {
+                  insertEmoji(emoji)
+                  setShowEmojiPicker(false)
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {activeReplyTo && (
         <div className="reply-preview">
           <div className="reply-preview-content">
@@ -497,6 +554,16 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
               aria-label="Send special message"
             >
               💝
+            </button>
+            <button
+              type="button"
+              className="emoji-btn"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              disabled={sending}
+              title="Add emoji"
+              aria-label="Add emoji"
+            >
+              😊
             </button>
             {trimmedText.length > 5 && (
               <>
