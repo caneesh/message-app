@@ -350,11 +350,14 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
     // Reset input
     e.target.value = ''
 
-    const isVideo = VIDEO_TYPES.includes(file.type)
+    const fileType = file.type || ''
+    const isImage = fileType.startsWith('image/')
+    const isVideo = fileType.startsWith('video/')
+    const isDocument = ['application/pdf', 'text/plain'].includes(fileType)
 
-    // Validate file type
-    if (!ALL_ALLOWED_TYPES.includes(file.type)) {
-      setError('Unsupported file type. Allowed: JPG, PNG, WebP, PDF, TXT, MP4, WebM, MOV')
+    // Validate file type - be permissive with image/* and video/*
+    if (!isImage && !isVideo && !isDocument) {
+      setError('Unsupported file type. Allowed: Images, Videos, PDF, TXT')
       return
     }
 

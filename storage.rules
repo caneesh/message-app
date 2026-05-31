@@ -13,33 +13,27 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Helper: Allowed image/document content types
-    function isAllowedImageContentType() {
+    // Helper: Check if content type is an image
+    function isImageContentType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    // Helper: Check if content type is a video
+    function isVideoContentType() {
+      return request.resource.contentType.matches('video/.*');
+    }
+
+    // Helper: Allowed document content types
+    function isDocumentContentType() {
       return request.resource.contentType in [
-        'image/jpeg',
-        'image/png',
-        'image/webp',
-        'image/heic',
-        'image/heif',
-        'image/avif',
         'application/pdf',
         'text/plain'
       ];
     }
 
-    // Helper: Allowed video content types
-    function isAllowedVideoContentType() {
-      return request.resource.contentType in [
-        'video/mp4',
-        'video/webm',
-        'video/quicktime',
-        'video/x-m4v'
-      ];
-    }
-
-    // Helper: Combined file types
+    // Helper: Combined file types (images, videos, documents)
     function isAllowedFileContentType() {
-      return isAllowedImageContentType() || isAllowedVideoContentType();
+      return isImageContentType() || isVideoContentType() || isDocumentContentType();
     }
 
     // Helper: Allowed voice content types
@@ -70,8 +64,8 @@ service firebase.storage {
 
       // Write: authenticated users with valid file type and size
       allow write: if isAuthenticated()
-                   && ((isAllowedImageContentType() && isWithinSizeLimit())
-                       || (isAllowedVideoContentType() && isWithinVideoSizeLimit()));
+                   && (((isImageContentType() || isDocumentContentType()) && isWithinSizeLimit())
+                       || (isVideoContentType() && isWithinVideoSizeLimit()));
 
       // Delete: any authenticated user
       allow delete: if isAuthenticated();

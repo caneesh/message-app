@@ -1,7 +1,7 @@
 [
   {
-    "origin": ["https://message-app-40a70.web.app", "http://localhost:5173"],
-    "method": ["GET", "HEAD"],
+    "origin": ["https://ctask-manager.web.app", "https://message-app-40a70.web.app", "http://localhost:5173", "http://localhost:5174"],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE"],
     "maxAgeSeconds": 3600,
     "responseHeader": ["Content-Type", "Content-Range", "Accept-Ranges", "Content-Length"]
   }
