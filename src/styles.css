@@ -7710,3 +7710,66 @@ body.dark-mode .reply-thumbnail-video {
 body.dark-mode .reply-quote-thumbnail-video {
   background: #444;
 }
+
+/* Floating Scroll Buttons */
+.scroll-fab {
+  position: sticky;
+  z-index: 100;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(25, 118, 210, 0.9);
+  color: white;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s, transform 0.2s;
+  min-height: 40px;
+  min-width: 40px;
+}
+
+.scroll-fab:hover {
+  transform: scale(1.1);
+  background: rgba(25, 118, 210, 1);
+}
+
+.scroll-fab:active {
+  transform: scale(0.95);
+}
+
+.scroll-fab-top {
+  top: 12px;
+  left: calc(50% - 50px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.scroll-fab-bottom {
+  bottom: 12px;
+  left: calc(50% + 10px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Position buttons on the right side on larger screens */
+@media (min-width: 500px) {
+  .scroll-fab-top,
+  .scroll-fab-bottom {
+    left: auto;
+    right: 16px;
+  }
+}
+
+/* Dark mode */
+body.dark-mode .scroll-fab {
+  background: rgba(66, 165, 245, 0.9);
+}
+
+body.dark-mode .scroll-fab:hover {
+  background: rgba(66, 165, 245, 1);
+}

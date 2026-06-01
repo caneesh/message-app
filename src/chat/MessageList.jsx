@@ -130,7 +130,11 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const [customEmoji, setCustomEmoji] = useState('')
   const [emojiError, setEmojiError] = useState('')
   const [revealedMessages, setRevealedMessages] = useState({})
+  const [showScrollTop, setShowScrollTop] = useState(false)
+  const [showScrollBottom, setShowScrollBottom] = useState(false)
   const messagesEndRef = useRef(null)
+  const messagesStartRef = useRef(null)
+  const messageListRef = useRef(null)
   const messageRefs = useRef({})
   const emojiInputRef = useRef(null)
 
@@ -248,6 +252,36 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Handle scroll position to show/hide floating buttons
+  useEffect(() => {
+    const container = messageListRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container
+      const distanceFromTop = scrollTop
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+      // Show "go to top" button when scrolled down more than 200px
+      setShowScrollTop(distanceFromTop > 200)
+      // Show "go to bottom" button when scrolled up more than 200px from bottom
+      setShowScrollBottom(distanceFromBottom > 200)
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll() // Check initial position
+
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [messages])
+
+  const scrollToTop = () => {
+    messagesStartRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   // Subscribe to chat document for lastReadAt
   useEffect(() => {
@@ -897,7 +931,29 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   }
 
   return (
-    <div className="message-list">
+    <div className="message-list" ref={messageListRef}>
+      <div ref={messagesStartRef} />
+
+      {/* Floating scroll buttons */}
+      {showScrollTop && (
+        <button
+          className="scroll-fab scroll-fab-top"
+          onClick={scrollToTop}
+          aria-label="Go to first message"
+        >
+          ↑
+        </button>
+      )}
+      {showScrollBottom && (
+        <button
+          className="scroll-fab scroll-fab-bottom"
+          onClick={scrollToBottom}
+          aria-label="Go to latest message"
+        >
+          ↓
+        </button>
+      )}
+
       {pinnedMessages.length > 0 && (
         <div className="pinned-panel">
           <button
