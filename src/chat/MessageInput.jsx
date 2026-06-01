@@ -230,6 +230,9 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
           senderId: activeReplyTo.senderId,
           textPreview: activeReplyTo.textPreview,
         }
+        if (activeReplyTo.fileInfo) {
+          messageData.replyTo.fileInfo = activeReplyTo.fileInfo
+        }
       }
 
       await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
@@ -417,6 +420,9 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
                 messageId: activeReplyTo.messageId,
                 senderId: activeReplyTo.senderId,
                 textPreview: activeReplyTo.textPreview,
+              }
+              if (activeReplyTo.fileInfo) {
+                messageData.replyTo.fileInfo = activeReplyTo.fileInfo
               }
             }
 

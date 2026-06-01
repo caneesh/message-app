@@ -20,6 +20,30 @@ import { ref, deleteObject } from 'firebase/storage'
 import MessageToTaskAiAction from './MessageToTaskAiAction'
 import SecureFileContent from './SecureFileContent'
 import SecureVoiceContent from './SecureVoiceContent'
+import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
+
+function ReplyQuoteThumbnail({ chatId, fileInfo }) {
+  const { url, loading } = useSecureFileUrl(
+    fileInfo?.storagePath ? chatId : null,
+    fileInfo?.storagePath
+  )
+
+  if (!fileInfo || loading || !url) return null
+
+  if (fileInfo.type === 'image') {
+    return <img src={url} alt="" className="reply-quote-thumbnail" />
+  }
+
+  if (fileInfo.type === 'video') {
+    return (
+      <div className="reply-quote-thumbnail reply-quote-thumbnail-video">
+        <span>🎬</span>
+      </div>
+    )
+  }
+
+  return null
+}
 
 const PREVIEW_MAX_LENGTH = 80
 const MESSAGE_LIMIT = 100
@@ -972,10 +996,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                   tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter') scrollToMessage(replyTo.messageId) }}
                 >
-                  <span className="reply-quote-label">
-                    {isReplyToOwn ? 'You' : 'Friend'}
-                  </span>
-                  <span className="reply-quote-text">{replyTo.textPreview}</span>
+                  {replyTo.fileInfo && (
+                    <ReplyQuoteThumbnail chatId={chatId} fileInfo={replyTo.fileInfo} />
+                  )}
+                  <div className="reply-quote-content">
+                    <span className="reply-quote-label">
+                      {isReplyToOwn ? 'You' : 'Friend'}
+                    </span>
+                    <span className="reply-quote-text">{replyTo.textPreview}</span>
+                  </div>
                   {replyNotFoundId === replyTo.messageId && (
                     <span className="reply-not-found">Original message is not loaded.</span>
                   )}
