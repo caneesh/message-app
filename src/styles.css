@@ -7773,3 +7773,67 @@ body.dark-mode .scroll-fab {
 body.dark-mode .scroll-fab:hover {
   background: rgba(66, 165, 245, 1);
 }
+
+/* Message Toolbar (quick actions) */
+.message {
+  position: relative;
+}
+
+.message-toolbar {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  display: none;
+  gap: 2px;
+  background: white;
+  border-radius: 20px;
+  padding: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.message:hover .message-toolbar,
+.message:focus-within .message-toolbar {
+  display: flex;
+}
+
+.message.own .message-toolbar {
+  right: auto;
+  left: 8px;
+}
+
+.toolbar-btn {
+  background: none;
+  border: none;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  border-radius: 50%;
+  min-height: 32px;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.toolbar-btn:hover {
+  background: #f0f0f0;
+}
+
+/* Dark mode toolbar */
+body.dark-mode .message-toolbar {
+  background: #2a2a2a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+body.dark-mode .toolbar-btn:hover {
+  background: #3a3a3a;
+}
+
+/* Show toolbar on touch devices via tap */
+@media (hover: none) {
+  .message-toolbar {
+    display: none !important;
+  }
+}
