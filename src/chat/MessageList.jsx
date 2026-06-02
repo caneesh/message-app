@@ -97,7 +97,7 @@ function linkifyText(text) {
   })
 }
 
-function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilter = null }) {
+function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilter = null, scrollToMessageId = null, onScrollComplete = null }) {
   const [messages, setMessages] = useState([])
   const [reactions, setReactions] = useState({})
   const [pinnedMessages, setPinnedMessages] = useState([])
@@ -282,6 +282,22 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
+
+  // Handle external scroll-to-message request (from SharedMedia)
+  useEffect(() => {
+    if (scrollToMessageId && messageRefs.current[scrollToMessageId]) {
+      const element = messageRefs.current[scrollToMessageId]
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setHighlightedMessageId(scrollToMessageId)
+      setTimeout(() => {
+        setHighlightedMessageId(null)
+        if (onScrollComplete) onScrollComplete()
+      }, 2000)
+    } else if (scrollToMessageId && onScrollComplete) {
+      // Message not found in current loaded messages
+      setTimeout(() => onScrollComplete(), 100)
+    }
+  }, [scrollToMessageId, onScrollComplete])
 
   // Subscribe to chat document for lastReadAt
   useEffect(() => {

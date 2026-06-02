@@ -26,6 +26,7 @@ import Capsules from './Capsules'
 import FollowUps from './FollowUps'
 import LoveHeatMap from './LoveHeatMap'
 import MessageCalendar from './MessageCalendar'
+import SharedMedia from './SharedMedia'
 
 const STALE_TYPING_MS = 5000
 
@@ -44,6 +45,8 @@ function ChatPage() {
   })
   const [showCalendar, setShowCalendar] = useState(false)
   const [dateFilter, setDateFilter] = useState(null)
+  const [showSharedMedia, setShowSharedMedia] = useState(false)
+  const [scrollToMessageId, setScrollToMessageId] = useState(null)
 
   const pinEnabled = localStorage.getItem('appPinEnabled') === 'true'
 
@@ -243,6 +246,13 @@ function ChatPage() {
               >
                 📅
               </button>
+              <button
+                className="media-btn"
+                onClick={() => setShowSharedMedia(true)}
+                title="Shared media"
+              >
+                🖼️
+              </button>
             </div>
             <MessageList
               currentUser={currentUser}
@@ -250,6 +260,8 @@ function ChatPage() {
               onReply={setActiveReplyTo}
               searchQuery={searchQuery}
               dateFilter={dateFilter}
+              scrollToMessageId={scrollToMessageId}
+              onScrollComplete={() => setScrollToMessageId(null)}
             />
             {friendTyping && (
               <div className="typing-indicator">Friend is typing...</div>
@@ -269,6 +281,16 @@ function ChatPage() {
                   setShowCalendar(false)
                 }}
                 onClose={() => setShowCalendar(false)}
+              />
+            )}
+            {showSharedMedia && (
+              <SharedMedia
+                currentUser={currentUser}
+                chatId={PRIVATE_CHAT_ID}
+                onClose={() => setShowSharedMedia(false)}
+                onViewInChat={(messageId) => {
+                  setScrollToMessageId(messageId)
+                }}
               />
             )}
           </>
