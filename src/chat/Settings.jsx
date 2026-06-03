@@ -398,7 +398,7 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
       <div className="settings-section">
         <h3>Auto-Logout</h3>
         <p className="settings-note">
-          Automatically log out after a period of inactivity to protect your privacy.
+          Automatically signs you out if you haven't used the app for a while. If someone picks up your unlocked phone, they won't be able to read your messages without logging in again.
         </p>
         <div className="settings-row">
           <label htmlFor="auto-logout-timeout">Logout after</label>
