@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { db } from '../firebase/firebaseConfig'
-import { collection, query, orderBy, limit, getDocs, startAfter } from 'firebase/firestore'
+import { collection, query, orderBy, limit, getDocs, startAfter, where } from 'firebase/firestore'
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
 import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
 import {
@@ -14,8 +14,8 @@ import {
   truncateText
 } from '../utils/messageExtractors'
 
-const BATCH_SIZE = 100
-const MAX_MESSAGES = 500
+const MEDIA_BATCH_SIZE = 50
+const MAX_ITEMS = 500
 
 function MediaThumbnail({ chatId, file, onClick, onDeleteForMe }) {
   const { url, loading, error } = useSecureFileUrl(chatId, file?.storagePath)
@@ -283,14 +283,29 @@ function LinkItem({ message, link, onViewInChat, onDeleteForMe }) {
 }
 
 function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
-  const [messages, setMessages] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [lastDoc, setLastDoc] = useState(null)
   const [activeTab, setActiveTab] = useState('media')
   const [previewMessage, setPreviewMessage] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Separate state for each tab
+  const [mediaItems, setMediaItems] = useState([])
+  const [mediaLoading, setMediaLoading] = useState(true)
+  const [mediaLoadingMore, setMediaLoadingMore] = useState(false)
+  const [mediaHasMore, setMediaHasMore] = useState(true)
+  const [mediaLastDoc, setMediaLastDoc] = useState(null)
+
+  const [voiceItems, setVoiceItems] = useState([])
+  const [voiceLoading, setVoiceLoading] = useState(true)
+  const [voiceLoadingMore, setVoiceLoadingMore] = useState(false)
+  const [voiceHasMore, setVoiceHasMore] = useState(true)
+  const [voiceLastDoc, setVoiceLastDoc] = useState(null)
+
+  const [textMessages, setTextMessages] = useState([])
+  const [textLoading, setTextLoading] = useState(true)
+  const [textLoadingMore, setTextLoadingMore] = useState(false)
+  const [textHasMore, setTextHasMore] = useState(true)
+  const [textLastDoc, setTextLastDoc] = useState(null)
+
   const { isDeletedForMe, deleteForMe } = useDeletedMediaForMe(chatId, currentUser?.uid)
 
   const handleDeleteForMe = useCallback(async (message) => {
@@ -331,81 +346,200 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
     await deleteForMe(message.id, 'voice')
   }, [deleteForMe])
 
-  // Load messages
-  const loadMessages = useCallback(async (isInitial = true) => {
+  // Load media (photos & videos) - type 'file' or 'video'
+  const loadMedia = useCallback(async (isInitial = true) => {
     if (!chatId) return
 
     if (isInitial) {
-      setLoading(true)
+      setMediaLoading(true)
     } else {
-      setLoadingMore(true)
+      setMediaLoadingMore(true)
     }
 
     try {
       const messagesRef = collection(db, 'chats', chatId, 'messages')
-      let q
 
-      if (isInitial || !lastDoc) {
-        q = query(messagesRef, orderBy('createdAt', 'desc'), limit(BATCH_SIZE))
+      // Query for file and video types
+      let q
+      if (isInitial || !mediaLastDoc) {
+        q = query(
+          messagesRef,
+          where('type', 'in', ['file', 'video']),
+          orderBy('createdAt', 'desc'),
+          limit(MEDIA_BATCH_SIZE)
+        )
       } else {
-        q = query(messagesRef, orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(BATCH_SIZE))
+        q = query(
+          messagesRef,
+          where('type', 'in', ['file', 'video']),
+          orderBy('createdAt', 'desc'),
+          startAfter(mediaLastDoc),
+          limit(MEDIA_BATCH_SIZE)
+        )
       }
 
       const snapshot = await getDocs(q)
-      const newMessages = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
+      const newItems = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(msg => {
+          // Only include images and videos, not documents
+          const contentType = msg.file?.contentType || ''
+          return isImageContentType(contentType) || isVideoContentType(contentType)
+        })
+
+      const gotFullBatch = snapshot.docs.length === MEDIA_BATCH_SIZE
 
       if (isInitial) {
-        setMessages(newMessages)
+        setMediaItems(newItems)
       } else {
-        setMessages(prev => [...prev, ...newMessages])
+        setMediaItems(prev => [...prev, ...newItems])
       }
 
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null)
-      setHasMore(snapshot.docs.length === BATCH_SIZE && messages.length + newMessages.length < MAX_MESSAGES)
+      setMediaLastDoc(snapshot.docs[snapshot.docs.length - 1] || null)
+      setMediaHasMore(gotFullBatch)
     } catch (err) {
-      console.error('Error loading messages:', err)
+      console.error('Error loading media:', err)
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
+      setMediaLoading(false)
+      setMediaLoadingMore(false)
     }
-  }, [chatId, lastDoc, messages.length])
+  }, [chatId, mediaLastDoc])
 
+  // Load voice notes
+  const loadVoice = useCallback(async (isInitial = true) => {
+    if (!chatId) return
+
+    if (isInitial) {
+      setVoiceLoading(true)
+    } else {
+      setVoiceLoadingMore(true)
+    }
+
+    try {
+      const messagesRef = collection(db, 'chats', chatId, 'messages')
+
+      let q
+      if (isInitial || !voiceLastDoc) {
+        q = query(
+          messagesRef,
+          where('type', '==', 'voice'),
+          orderBy('createdAt', 'desc'),
+          limit(MEDIA_BATCH_SIZE)
+        )
+      } else {
+        q = query(
+          messagesRef,
+          where('type', '==', 'voice'),
+          orderBy('createdAt', 'desc'),
+          startAfter(voiceLastDoc),
+          limit(MEDIA_BATCH_SIZE)
+        )
+      }
+
+      const snapshot = await getDocs(q)
+      const newItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+
+      const gotFullBatch = snapshot.docs.length === MEDIA_BATCH_SIZE
+
+      if (isInitial) {
+        setVoiceItems(newItems)
+      } else {
+        setVoiceItems(prev => [...prev, ...newItems])
+      }
+
+      setVoiceLastDoc(snapshot.docs[snapshot.docs.length - 1] || null)
+      setVoiceHasMore(gotFullBatch)
+    } catch (err) {
+      console.error('Error loading voice notes:', err)
+    } finally {
+      setVoiceLoading(false)
+      setVoiceLoadingMore(false)
+    }
+  }, [chatId, voiceLastDoc])
+
+  // Load text messages (for links) and file messages (for documents)
+  const loadTextAndDocs = useCallback(async (isInitial = true) => {
+    if (!chatId) return
+
+    if (isInitial) {
+      setTextLoading(true)
+    } else {
+      setTextLoadingMore(true)
+    }
+
+    try {
+      const messagesRef = collection(db, 'chats', chatId, 'messages')
+
+      let q
+      if (isInitial || !textLastDoc) {
+        q = query(
+          messagesRef,
+          where('type', 'in', ['text', 'file']),
+          orderBy('createdAt', 'desc'),
+          limit(MEDIA_BATCH_SIZE)
+        )
+      } else {
+        q = query(
+          messagesRef,
+          where('type', 'in', ['text', 'file']),
+          orderBy('createdAt', 'desc'),
+          startAfter(textLastDoc),
+          limit(MEDIA_BATCH_SIZE)
+        )
+      }
+
+      const snapshot = await getDocs(q)
+      const newItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+
+      const gotFullBatch = snapshot.docs.length === MEDIA_BATCH_SIZE
+
+      if (isInitial) {
+        setTextMessages(newItems)
+      } else {
+        setTextMessages(prev => [...prev, ...newItems])
+      }
+
+      setTextLastDoc(snapshot.docs[snapshot.docs.length - 1] || null)
+      setTextHasMore(gotFullBatch)
+    } catch (err) {
+      console.error('Error loading text/docs:', err)
+    } finally {
+      setTextLoading(false)
+      setTextLoadingMore(false)
+    }
+  }, [chatId, textLastDoc])
+
+  // Load data based on active tab
   useEffect(() => {
-    loadMessages(true)
+    if (activeTab === 'media' && mediaItems.length === 0 && mediaLoading) {
+      loadMedia(true)
+    } else if (activeTab === 'voice' && voiceItems.length === 0 && voiceLoading) {
+      loadVoice(true)
+    } else if ((activeTab === 'links' || activeTab === 'documents') && textMessages.length === 0 && textLoading) {
+      loadTextAndDocs(true)
+    }
+  }, [activeTab, chatId])
+
+  // Initial load for media tab
+  useEffect(() => {
+    loadMedia(true)
   }, [chatId])
 
-  // Extract media items (filtering out deleted media)
-  const { mediaItems, linkItems, documentItems, voiceItems } = useMemo(() => {
-    const media = []
+  // Filter out deleted items from each category
+  const filteredMediaItems = useMemo(() =>
+    mediaItems.filter(msg => !isDeletedForMe(msg.id)),
+    [mediaItems, isDeletedForMe]
+  )
+
+  const filteredVoiceItems = useMemo(() =>
+    voiceItems.filter(msg => !isDeletedForMe(msg.id)),
+    [voiceItems, isDeletedForMe]
+  )
+
+  // Extract links from text messages, filter out deleted
+  const linkItems = useMemo(() => {
     const links = []
-    const documents = []
-    const voices = []
-
-    messages.forEach(msg => {
-      // Media (images and videos)
-      if ((msg.type === 'file' || msg.type === 'video') && msg.file) {
-        if (isImageContentType(msg.file.contentType) || isVideoContentType(msg.file.contentType)) {
-          // Skip media deleted for me
-          if (!isDeletedForMe(msg.id)) {
-            media.push(msg)
-          }
-        } else if (isDocumentContentType(msg.file.contentType) || msg.file.contentType) {
-          // Documents - skip if deleted for me
-          if (!isDeletedForMe(msg.id)) {
-            documents.push(msg)
-          }
-        }
-      }
-
-      // Voice notes - skip if deleted for me
-      if (msg.type === 'voice' && msg.voice?.storagePath && !isDeletedForMe(msg.id)) {
-        voices.push(msg)
-      }
-
-      // Links from text messages
+    textMessages.forEach(msg => {
       if (msg.type === 'text' && msg.text && !isDeletedForMe(msg.id)) {
         const extractedLinks = extractLinksFromText(msg.text)
         extractedLinks.forEach(link => {
@@ -413,36 +547,46 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
         })
       }
     })
+    return links
+  }, [textMessages, isDeletedForMe])
 
-    return {
-      mediaItems: media,
-      linkItems: links,
-      documentItems: documents,
-      voiceItems: voices
-    }
-  }, [messages, isDeletedForMe])
+  // Extract documents from file messages, filter out deleted
+  const documentItems = useMemo(() => {
+    return textMessages.filter(msg => {
+      if (msg.type !== 'file' || !msg.file) return false
+      if (isDeletedForMe(msg.id)) return false
+      const contentType = msg.file.contentType || ''
+      return isDocumentContentType(contentType) ||
+        (!isImageContentType(contentType) && !isVideoContentType(contentType))
+    })
+  }, [textMessages, isDeletedForMe])
 
   // Filter by search
   const filteredItems = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim()
-    if (!query) {
-      return { mediaItems, linkItems, documentItems, voiceItems }
+    const q = searchQuery.toLowerCase().trim()
+    if (!q) {
+      return {
+        mediaItems: filteredMediaItems,
+        linkItems,
+        documentItems,
+        voiceItems: filteredVoiceItems
+      }
     }
 
     return {
-      mediaItems: mediaItems.filter(m =>
-        m.file?.fileName?.toLowerCase().includes(query)
+      mediaItems: filteredMediaItems.filter(m =>
+        m.file?.fileName?.toLowerCase().includes(q)
       ),
       linkItems: linkItems.filter(l =>
-        l.link.toLowerCase().includes(query) ||
-        l.message.text?.toLowerCase().includes(query)
+        l.link.toLowerCase().includes(q) ||
+        l.message.text?.toLowerCase().includes(q)
       ),
       documentItems: documentItems.filter(d =>
-        d.file?.fileName?.toLowerCase().includes(query)
+        d.file?.fileName?.toLowerCase().includes(q)
       ),
-      voiceItems: voiceItems // Voice notes can't be searched by content
+      voiceItems: filteredVoiceItems
     }
-  }, [searchQuery, mediaItems, linkItems, documentItems, voiceItems])
+  }, [searchQuery, filteredMediaItems, linkItems, documentItems, filteredVoiceItems])
 
   const handleViewInChat = (messageId) => {
     setPreviewMessage(null)
@@ -488,94 +632,136 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
       </div>
 
       <div className="shared-media-content">
-        {loading ? (
-          <div className="shared-media-loading">Loading...</div>
-        ) : (
-          <>
-            {activeTab === 'media' && (
-              filteredItems.mediaItems.length === 0 ? (
-                <div className="shared-media-empty">No photos or videos shared yet.</div>
-              ) : (
-                <div className="media-grid">
-                  {filteredItems.mediaItems.map(msg => (
-                    <MediaThumbnail
-                      key={msg.id}
-                      chatId={chatId}
-                      file={msg.file}
-                      onClick={() => setPreviewMessage(msg)}
-                      onDeleteForMe={() => handleDeleteForMe(msg)}
-                    />
-                  ))}
-                </div>
-              )
-            )}
-
-            {activeTab === 'links' && (
-              filteredItems.linkItems.length === 0 ? (
-                <div className="shared-media-empty">No links shared yet.</div>
-              ) : (
-                <div className="links-list">
-                  {filteredItems.linkItems.map((item, index) => (
-                    <LinkItem
-                      key={`${item.message.id}-${index}`}
-                      message={item.message}
-                      link={item.link}
-                      onViewInChat={handleViewInChat}
-                      onDeleteForMe={() => handleDeleteLinkForMe(item.message)}
-                    />
-                  ))}
-                </div>
-              )
-            )}
-
-            {activeTab === 'documents' && (
-              filteredItems.documentItems.length === 0 ? (
-                <div className="shared-media-empty">No documents shared yet.</div>
-              ) : (
-                <div className="documents-list">
-                  {filteredItems.documentItems.map(msg => (
-                    <DocumentItem
-                      key={msg.id}
-                      chatId={chatId}
-                      message={msg}
-                      onViewInChat={handleViewInChat}
-                      onDeleteForMe={() => handleDeleteDocumentForMe(msg)}
-                    />
-                  ))}
-                </div>
-              )
-            )}
-
-            {activeTab === 'voice' && (
-              filteredItems.voiceItems.length === 0 ? (
-                <div className="shared-media-empty">No voice notes shared yet.</div>
-              ) : (
-                <div className="voice-list">
-                  {filteredItems.voiceItems.map(msg => (
-                    <VoiceNoteItem
-                      key={msg.id}
-                      chatId={chatId}
-                      message={msg}
-                      onViewInChat={handleViewInChat}
-                      onDeleteForMe={() => handleDeleteVoiceForMe(msg)}
-                    />
-                  ))}
-                </div>
-              )
-            )}
-
-            {hasMore && !loading && (
-              <div className="shared-media-load-more">
-                <button
-                  onClick={() => loadMessages(false)}
-                  disabled={loadingMore}
-                  className="load-more-btn"
-                >
-                  {loadingMore ? 'Loading...' : 'Load More'}
-                </button>
+        {activeTab === 'media' && (
+          mediaLoading ? (
+            <div className="shared-media-loading">Loading...</div>
+          ) : filteredItems.mediaItems.length === 0 ? (
+            <div className="shared-media-empty">No photos or videos shared yet.</div>
+          ) : (
+            <>
+              <div className="media-grid">
+                {filteredItems.mediaItems.map(msg => (
+                  <MediaThumbnail
+                    key={msg.id}
+                    chatId={chatId}
+                    file={msg.file}
+                    onClick={() => setPreviewMessage(msg)}
+                    onDeleteForMe={() => handleDeleteForMe(msg)}
+                  />
+                ))}
               </div>
-            )}
-          </>
+              {mediaHasMore && (
+                <div className="shared-media-load-more">
+                  <button
+                    onClick={() => loadMedia(false)}
+                    disabled={mediaLoadingMore}
+                    className="load-more-btn"
+                  >
+                    {mediaLoadingMore ? 'Loading...' : 'Load More'}
+                  </button>
+                </div>
+              )}
+            </>
+          )
+        )}
+
+        {activeTab === 'links' && (
+          textLoading ? (
+            <div className="shared-media-loading">Loading...</div>
+          ) : filteredItems.linkItems.length === 0 ? (
+            <div className="shared-media-empty">No links shared yet.</div>
+          ) : (
+            <>
+              <div className="links-list">
+                {filteredItems.linkItems.map((item, index) => (
+                  <LinkItem
+                    key={`${item.message.id}-${index}`}
+                    message={item.message}
+                    link={item.link}
+                    onViewInChat={handleViewInChat}
+                    onDeleteForMe={() => handleDeleteLinkForMe(item.message)}
+                  />
+                ))}
+              </div>
+              {textHasMore && (
+                <div className="shared-media-load-more">
+                  <button
+                    onClick={() => loadTextAndDocs(false)}
+                    disabled={textLoadingMore}
+                    className="load-more-btn"
+                  >
+                    {textLoadingMore ? 'Loading...' : 'Load More'}
+                  </button>
+                </div>
+              )}
+            </>
+          )
+        )}
+
+        {activeTab === 'documents' && (
+          textLoading ? (
+            <div className="shared-media-loading">Loading...</div>
+          ) : filteredItems.documentItems.length === 0 ? (
+            <div className="shared-media-empty">No documents shared yet.</div>
+          ) : (
+            <>
+              <div className="documents-list">
+                {filteredItems.documentItems.map(msg => (
+                  <DocumentItem
+                    key={msg.id}
+                    chatId={chatId}
+                    message={msg}
+                    onViewInChat={handleViewInChat}
+                    onDeleteForMe={() => handleDeleteDocumentForMe(msg)}
+                  />
+                ))}
+              </div>
+              {textHasMore && (
+                <div className="shared-media-load-more">
+                  <button
+                    onClick={() => loadTextAndDocs(false)}
+                    disabled={textLoadingMore}
+                    className="load-more-btn"
+                  >
+                    {textLoadingMore ? 'Loading...' : 'Load More'}
+                  </button>
+                </div>
+              )}
+            </>
+          )
+        )}
+
+        {activeTab === 'voice' && (
+          voiceLoading ? (
+            <div className="shared-media-loading">Loading...</div>
+          ) : filteredItems.voiceItems.length === 0 ? (
+            <div className="shared-media-empty">No voice notes shared yet.</div>
+          ) : (
+            <>
+              <div className="voice-list">
+                {filteredItems.voiceItems.map(msg => (
+                  <VoiceNoteItem
+                    key={msg.id}
+                    chatId={chatId}
+                    message={msg}
+                    onViewInChat={handleViewInChat}
+                    onDeleteForMe={() => handleDeleteVoiceForMe(msg)}
+                  />
+                ))}
+              </div>
+              {voiceHasMore && (
+                <div className="shared-media-load-more">
+                  <button
+                    onClick={() => loadVoice(false)}
+                    disabled={voiceLoadingMore}
+                    className="load-more-btn"
+                  >
+                    {voiceLoadingMore ? 'Loading...' : 'Load More'}
+                  </button>
+                </div>
+              )}
+            </>
+          )
         )}
       </div>
 

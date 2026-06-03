@@ -1,23 +1,36 @@
 import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
+import { verifyPin } from '../utils/pinSecurity'
 
 function LockScreen({ onUnlock, requirePin = false }) {
   const { logout } = useAuth()
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [loggingOut, setLoggingOut] = useState(false)
+  const [verifying, setVerifying] = useState(false)
 
-  const handleUnlock = (e) => {
+  const handleUnlock = async (e) => {
     e?.preventDefault()
 
     if (requirePin) {
-      const storedPin = localStorage.getItem('appPin')
-      if (pin === storedPin) {
-        localStorage.setItem('appLocked', 'false')
-        onUnlock()
-      } else {
-        setError('Incorrect PIN')
+      if (verifying) return
+      setVerifying(true)
+      setError('')
+
+      try {
+        const isValid = await verifyPin(pin)
+        if (isValid) {
+          localStorage.setItem('appLocked', 'false')
+          onUnlock()
+        } else {
+          setError('Incorrect PIN')
+          setPin('')
+        }
+      } catch (err) {
+        setError('Verification failed')
         setPin('')
+      } finally {
+        setVerifying(false)
       }
     } else {
       onUnlock()
@@ -48,15 +61,18 @@ function LockScreen({ onUnlock, requirePin = false }) {
               {error && <div className="lock-error">{error}</div>}
               <input
                 type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 placeholder="Enter PIN"
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                maxLength={8}
+                maxLength={6}
                 className="lock-input"
                 autoFocus
+                disabled={verifying}
               />
-              <button type="submit" className="lock-btn">
-                Unlock
+              <button type="submit" className="lock-btn" disabled={verifying}>
+                {verifying ? 'Verifying...' : 'Unlock'}
               </button>
             </form>
           </>

@@ -1619,7 +1619,7 @@ function generateExportHtml(chatId, currentData, backupData, userNames) {
   for (const [dateStr, messages] of messagesByDate) {
     html += `\n    <div class="date-header">${escapeHtml(dateStr)}</div>`;
     for (const msg of messages) {
-      const senderName = userNames[msg.senderId] || msg.senderId || 'Unknown';
+      const senderName = userNames[msg.senderId] || msg.senderName || msg.senderPhone || msg.senderId || 'Unknown';
       const time = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
@@ -1820,12 +1820,14 @@ exports.exportChatHistory = onCall(
         const userDoc = await db.collection('users').doc(memberId).get();
         if (userDoc.exists) {
           const userData = userDoc.data();
-          userNames[memberId] = userData.displayName || userData.name || memberId;
+          userNames[memberId] = userData.displayName || userData.name || userData.phoneNumber || memberId;
         }
       } catch (err) {
+        logger.warn('Error fetching user:', memberId, err.message);
         userNames[memberId] = memberId;
       }
     }
+    logger.info('User names resolved:', userNames);
 
     // Try to fetch most recent backup for deleted data
     let backupData = null;

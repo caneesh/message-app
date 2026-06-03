@@ -3,6 +3,7 @@ import { db, functions } from '../firebase/firebaseConfig'
 import { collection, doc, getDocs, setDoc, getDoc, deleteDoc, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import AiSettingsPanel from './AiSettingsPanel'
+import { createPinHash, verifyPin, isPinConfigured, clearPin, getPinCreatedAt } from '../utils/pinSecurity'
 
 const AUTO_LOCK_OPTIONS = [
   { value: 2, label: '2 minutes' },
@@ -12,13 +13,13 @@ const AUTO_LOCK_OPTIONS = [
 ]
 
 function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLockTimeoutChange, onLockNow }) {
-  const [pinEnabled, setPinEnabled] = useState(() => {
-    return localStorage.getItem('appPinEnabled') === 'true'
-  })
+  const [pinEnabled, setPinEnabled] = useState(() => isPinConfigured())
   const [showPinSetup, setShowPinSetup] = useState(false)
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [pinError, setPinError] = useState('')
+  const [pinSaving, setPinSaving] = useState(false)
+  const [pinCreatedAt, setPinCreatedAt] = useState(() => getPinCreatedAt())
   const [exporting, setExporting] = useState(false)
   const [fullExporting, setFullExporting] = useState(false)
   const [exportUnlocked, setExportUnlocked] = useState(false)
@@ -222,29 +223,47 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
     }
   }
 
-  const handleSetPin = () => {
-    if (newPin.length < 4) {
-      setPinError('PIN must be at least 4 digits')
+  const handleSetPin = async () => {
+    if (newPin.length < 4 || newPin.length > 6) {
+      setPinError('PIN must be 4-6 digits')
+      return
+    }
+    if (!/^\d+$/.test(newPin)) {
+      setPinError('PIN must contain only digits')
       return
     }
     if (newPin !== confirmPin) {
       setPinError('PINs do not match')
       return
     }
-    localStorage.setItem('appPin', newPin)
-    localStorage.setItem('appPinEnabled', 'true')
-    setPinEnabled(true)
-    setShowPinSetup(false)
-    setNewPin('')
-    setConfirmPin('')
+
+    setPinSaving(true)
     setPinError('')
+
+    try {
+      await createPinHash(newPin)
+      localStorage.setItem('appPinEnabled', 'true')
+      setPinEnabled(true)
+      setPinCreatedAt(Date.now())
+      setShowPinSetup(false)
+      setNewPin('')
+      setConfirmPin('')
+    } catch (err) {
+      setPinError(err.message || 'Failed to set PIN')
+    } finally {
+      setPinSaving(false)
+    }
   }
 
   const handleDisablePin = () => {
-    localStorage.removeItem('appPin')
+    if (!window.confirm('Disable PIN? Your hidden media will become accessible without a PIN.')) {
+      return
+    }
+    clearPin()
     localStorage.removeItem('appPinEnabled')
     localStorage.removeItem('appLocked')
     setPinEnabled(false)
+    setPinCreatedAt(null)
   }
 
   const handleExport = async () => {
@@ -406,36 +425,49 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
       <div className="settings-section">
         <h3>PIN Lock</h3>
         <p className="settings-note">
-          Optional PIN for additional security. This is stored in your browser only.
+          Secure PIN for app lock and hidden media protection. Your PIN is securely hashed and stored only in your browser.
         </p>
         {pinEnabled ? (
-          <button className="settings-btn danger" onClick={handleDisablePin}>
-            Disable PIN Lock
-          </button>
+          <div className="pin-enabled-info">
+            {pinCreatedAt && (
+              <p className="pin-created-at">
+                PIN set on {new Date(pinCreatedAt).toLocaleDateString()}
+              </p>
+            )}
+            <button className="settings-btn danger" onClick={handleDisablePin}>
+              Disable PIN Lock
+            </button>
+          </div>
         ) : showPinSetup ? (
           <div className="pin-setup">
             {pinError && <div className="pin-error">{pinError}</div>}
             <input
               type="password"
-              placeholder="Enter PIN (4+ digits)"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="Enter PIN (4-6 digits)"
               value={newPin}
               onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
-              maxLength={8}
+              maxLength={6}
               className="pin-input"
+              disabled={pinSaving}
             />
             <input
               type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
               placeholder="Confirm PIN"
               value={confirmPin}
               onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-              maxLength={8}
+              maxLength={6}
               className="pin-input"
+              disabled={pinSaving}
             />
             <div className="pin-actions">
-              <button className="settings-btn" onClick={handleSetPin}>
-                Set PIN
+              <button className="settings-btn" onClick={handleSetPin} disabled={pinSaving}>
+                {pinSaving ? 'Saving...' : 'Set PIN'}
               </button>
-              <button className="settings-btn secondary" onClick={() => setShowPinSetup(false)}>
+              <button className="settings-btn secondary" onClick={() => setShowPinSetup(false)} disabled={pinSaving}>
                 Cancel
               </button>
             </div>

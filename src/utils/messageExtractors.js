@@ -28,6 +28,9 @@ export function getDomainFromUrl(url) {
 
 export function isImageContentType(contentType) {
   if (!contentType) return false
+  const ct = contentType.toLowerCase()
+  // Check if it starts with 'image/' or matches known image types
+  if (ct.startsWith('image/')) return true
   return [
     'image/jpeg',
     'image/png',
@@ -36,17 +39,20 @@ export function isImageContentType(contentType) {
     'image/heic',
     'image/heif',
     'image/avif'
-  ].includes(contentType)
+  ].includes(ct)
 }
 
 export function isVideoContentType(contentType) {
   if (!contentType) return false
+  const ct = contentType.toLowerCase()
+  // Check if it starts with 'video/' or matches known video types
+  if (ct.startsWith('video/')) return true
   return [
     'video/mp4',
     'video/webm',
     'video/quicktime',
     'video/x-m4v'
-  ].includes(contentType)
+  ].includes(ct)
 }
 
 export function isDocumentContentType(contentType) {
