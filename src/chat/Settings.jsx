@@ -5,14 +5,14 @@ import { httpsCallable } from 'firebase/functions'
 import AiSettingsPanel from './AiSettingsPanel'
 import { createPinHash, verifyPin, isPinConfigured, clearPin, getPinCreatedAt } from '../utils/pinSecurity'
 
-const AUTO_LOCK_OPTIONS = [
+const AUTO_LOGOUT_OPTIONS = [
   { value: 2, label: '2 minutes' },
   { value: 5, label: '5 minutes' },
   { value: 15, label: '15 minutes' },
   { value: 'never', label: 'Never' },
 ]
 
-function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLockTimeoutChange, onLockNow }) {
+function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAutoLogoutTimeoutChange, onLogoutNow }) {
   const [pinEnabled, setPinEnabled] = useState(() => isPinConfigured())
   const [showPinSetup, setShowPinSetup] = useState(false)
   const [newPin, setNewPin] = useState('')
@@ -396,28 +396,28 @@ function Settings({ currentUser, chatId, onChatJoined, autoLockTimeout, onAutoLo
       </h2>
 
       <div className="settings-section">
-        <h3>Auto-Lock</h3>
+        <h3>Auto-Logout</h3>
         <p className="settings-note">
-          Automatically lock the app after a period of inactivity to protect your privacy.
+          Automatically log out after a period of inactivity to protect your privacy.
         </p>
         <div className="settings-row">
-          <label htmlFor="auto-lock-timeout">Lock after</label>
+          <label htmlFor="auto-logout-timeout">Logout after</label>
           <select
-            id="auto-lock-timeout"
+            id="auto-logout-timeout"
             className="settings-select"
-            value={autoLockTimeout || 5}
-            onChange={(e) => onAutoLockTimeoutChange?.(e.target.value === 'never' ? 'never' : parseInt(e.target.value, 10))}
+            value={autoLogoutTimeout || 5}
+            onChange={(e) => onAutoLogoutTimeoutChange?.(e.target.value === 'never' ? 'never' : parseInt(e.target.value, 10))}
           >
-            {AUTO_LOCK_OPTIONS.map((opt) => (
+            {AUTO_LOGOUT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
           </select>
         </div>
-        {onLockNow && (
-          <button className="settings-btn" onClick={onLockNow}>
-            Lock Now
+        {onLogoutNow && (
+          <button className="settings-btn" onClick={onLogoutNow}>
+            Logout Now
           </button>
         )}
       </div>

@@ -51,19 +51,19 @@ function ChatPage() {
   const pinEnabled = localStorage.getItem('appPinEnabled') === 'true'
 
   const {
-    isLocked: inactivityLocked,
-    unlock: inactivityUnlock,
-    lockNow,
     timeoutMinutes,
     setTimeoutMinutes,
-  } = useInactivityLock({ enabled: true })
+  } = useInactivityLock({
+    enabled: true,
+    onLock: logout
+  })
 
   const [pinLocked, setPinLocked] = useState(() => {
     const wasLocked = localStorage.getItem('appLocked') !== 'false'
     return pinEnabled && wasLocked
   })
 
-  const isLocked = pinLocked || inactivityLocked
+  const isLocked = pinLocked
 
   const getDeviceLabel = () => {
     const ua = navigator.userAgent
@@ -211,7 +211,6 @@ function ChatPage() {
   const handleUnlock = () => {
     setPinLocked(false)
     localStorage.setItem('appLocked', 'false')
-    inactivityUnlock()
   }
 
   if (isLocked) {
@@ -330,9 +329,9 @@ function ChatPage() {
           <Settings
             currentUser={currentUser}
             chatId={PRIVATE_CHAT_ID}
-            autoLockTimeout={timeoutMinutes}
-            onAutoLockTimeoutChange={setTimeoutMinutes}
-            onLockNow={lockNow}
+            autoLogoutTimeout={timeoutMinutes}
+            onAutoLogoutTimeoutChange={setTimeoutMinutes}
+            onLogoutNow={logout}
           />
         )
       default:
