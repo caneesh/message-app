@@ -580,6 +580,33 @@ service cloud.firestore {
         allow delete: if isAuthenticated() && isChatMember(chatId);
       }
 
+      // Per-user media state (delete for me - images and videos)
+      // Only the owner can access their own media state
+      match /userMediaState/{uid}/items/{itemId} {
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && request.resource.data.keys().hasOnly(['messageId', 'mediaKind', 'action', 'createdAt', 'updatedAt', 'createdBy'])
+                      && request.resource.data.createdBy == request.auth.uid
+                      && request.resource.data.messageId is string
+                      && request.resource.data.mediaKind in ['image', 'video', 'link', 'document', 'voice']
+                      && request.resource.data.action == 'deleted_for_me';
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && request.resource.data.keys().hasOnly(['messageId', 'mediaKind', 'action', 'createdAt', 'updatedAt', 'createdBy'])
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.messageId == resource.data.messageId
+                      && request.resource.data.mediaKind in ['image', 'video', 'link', 'document', 'voice']
+                      && request.resource.data.action == 'deleted_for_me';
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
       // Vault items subcollection
       match /vaultItems/{itemId} {
         allow read: if isAuthenticated() && isChatMember(chatId);

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { db } from '../firebase/firebaseConfig'
 import { collection, query, orderBy, limit, getDocs, startAfter } from 'firebase/firestore'
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
+import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
 import {
   extractLinksFromText,
   getDomainFromUrl,
@@ -16,8 +17,9 @@ import {
 const BATCH_SIZE = 100
 const MAX_MESSAGES = 500
 
-function MediaThumbnail({ chatId, file, onClick }) {
+function MediaThumbnail({ chatId, file, onClick, onDeleteForMe }) {
   const { url, loading, error } = useSecureFileUrl(chatId, file?.storagePath)
+  const [showMenu, setShowMenu] = useState(false)
 
   if (loading) {
     return <div className="media-thumbnail loading" />
@@ -29,6 +31,17 @@ function MediaThumbnail({ chatId, file, onClick }) {
 
   const isVideo = isVideoContentType(file?.contentType)
 
+  const handleMenuClick = (e) => {
+    e.stopPropagation()
+    setShowMenu(!showMenu)
+  }
+
+  const handleDeleteForMe = (e) => {
+    e.stopPropagation()
+    setShowMenu(false)
+    onDeleteForMe()
+  }
+
   return (
     <div className="media-thumbnail" onClick={onClick}>
       {isVideo ? (
@@ -39,11 +52,19 @@ function MediaThumbnail({ chatId, file, onClick }) {
       ) : (
         <img src={url} alt={file?.fileName || 'Image'} />
       )}
+      <button className="media-thumbnail-menu-btn" onClick={handleMenuClick} aria-label="More options">
+        ⋯
+      </button>
+      {showMenu && (
+        <div className="media-thumbnail-menu" onClick={(e) => e.stopPropagation()}>
+          <button onClick={handleDeleteForMe}>🙈 Delete for me</button>
+        </div>
+      )}
     </div>
   )
 }
 
-function MediaPreviewModal({ chatId, message, onClose, onViewInChat }) {
+function MediaPreviewModal({ chatId, message, onClose, onViewInChat, onDeleteForMe }) {
   const file = message?.file
   const { url, loading, error } = useSecureFileUrl(chatId, file?.storagePath)
   const isVideo = isVideoContentType(file?.contentType)
@@ -93,16 +114,21 @@ function MediaPreviewModal({ chatId, message, onClose, onViewInChat }) {
           {file?.fileName && (
             <div className="media-preview-filename">{file.fileName}</div>
           )}
-          <button className="media-preview-view-btn" onClick={() => onViewInChat(message.id)}>
-            View in Chat
-          </button>
+          <div className="media-preview-actions">
+            <button className="media-preview-view-btn" onClick={() => onViewInChat(message.id)}>
+              View in Chat
+            </button>
+            <button className="media-preview-delete-btn" onClick={onDeleteForMe}>
+              🙈 Delete for me
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function VoiceNoteItem({ chatId, message, onViewInChat }) {
+function VoiceNoteItem({ chatId, message, onViewInChat, onDeleteForMe }) {
   const voice = message?.voice
   const { url, loading, error } = useSecureFileUrl(chatId, voice?.storagePath)
 
@@ -140,14 +166,19 @@ function VoiceNoteItem({ chatId, message, onViewInChat }) {
         </span>
         <span className="shared-item-date">{formatDate(message.createdAt)}</span>
       </div>
-      <button className="shared-item-view-btn" onClick={() => onViewInChat(message.id)}>
-        View
-      </button>
+      <div className="shared-item-actions">
+        <button className="shared-item-view-btn" onClick={() => onViewInChat(message.id)}>
+          View
+        </button>
+        <button className="shared-item-delete-btn" onClick={onDeleteForMe}>
+          🙈
+        </button>
+      </div>
     </div>
   )
 }
 
-function DocumentItem({ chatId, message, onViewInChat }) {
+function DocumentItem({ chatId, message, onViewInChat, onDeleteForMe }) {
   const file = message?.file
   const { url, loading, error } = useSecureFileUrl(chatId, file?.storagePath)
 
@@ -193,12 +224,15 @@ function DocumentItem({ chatId, message, onViewInChat }) {
         <button className="shared-item-view-btn" onClick={() => onViewInChat(message.id)}>
           View
         </button>
+        <button className="shared-item-delete-btn" onClick={onDeleteForMe}>
+          🙈
+        </button>
       </div>
     </div>
   )
 }
 
-function LinkItem({ message, link, onViewInChat }) {
+function LinkItem({ message, link, onViewInChat, onDeleteForMe }) {
   const formatDate = (timestamp) => {
     if (!timestamp) return ''
     try {
@@ -236,9 +270,14 @@ function LinkItem({ message, link, onViewInChat }) {
       <div className="shared-link-meta">
         <span className="shared-item-date">{formatDate(message.createdAt)}</span>
       </div>
-      <button className="shared-item-view-btn" onClick={() => onViewInChat(message.id)}>
-        View
-      </button>
+      <div className="shared-item-actions">
+        <button className="shared-item-view-btn" onClick={() => onViewInChat(message.id)}>
+          View
+        </button>
+        <button className="shared-item-delete-btn" onClick={onDeleteForMe}>
+          🙈
+        </button>
+      </div>
     </div>
   )
 }
@@ -252,6 +291,45 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
   const [activeTab, setActiveTab] = useState('media')
   const [previewMessage, setPreviewMessage] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const { isDeletedForMe, deleteForMe } = useDeletedMediaForMe(chatId, currentUser?.uid)
+
+  const handleDeleteForMe = useCallback(async (message) => {
+    if (!window.confirm('Delete this from your view? It will still be visible to the other person.')) {
+      return
+    }
+
+    const isVideo = isVideoContentType(message.file?.contentType)
+    const mediaKind = isVideo ? 'video' : 'image'
+
+    const success = await deleteForMe(message.id, mediaKind)
+    if (success) {
+      setPreviewMessage(null)
+    }
+  }, [deleteForMe])
+
+  const handleDeleteLinkForMe = useCallback(async (message) => {
+    if (!window.confirm('Delete this link from your view? It will still be visible to the other person.')) {
+      return
+    }
+
+    await deleteForMe(message.id, 'link')
+  }, [deleteForMe])
+
+  const handleDeleteDocumentForMe = useCallback(async (message) => {
+    if (!window.confirm('Delete this document from your view? It will still be visible to the other person.')) {
+      return
+    }
+
+    await deleteForMe(message.id, 'document')
+  }, [deleteForMe])
+
+  const handleDeleteVoiceForMe = useCallback(async (message) => {
+    if (!window.confirm('Delete this voice note from your view? It will still be visible to the other person.')) {
+      return
+    }
+
+    await deleteForMe(message.id, 'voice')
+  }, [deleteForMe])
 
   // Load messages
   const loadMessages = useCallback(async (isInitial = true) => {
@@ -299,7 +377,7 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
     loadMessages(true)
   }, [chatId])
 
-  // Extract media items
+  // Extract media items (filtering out deleted media)
   const { mediaItems, linkItems, documentItems, voiceItems } = useMemo(() => {
     const media = []
     const links = []
@@ -310,20 +388,25 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
       // Media (images and videos)
       if ((msg.type === 'file' || msg.type === 'video') && msg.file) {
         if (isImageContentType(msg.file.contentType) || isVideoContentType(msg.file.contentType)) {
-          media.push(msg)
+          // Skip media deleted for me
+          if (!isDeletedForMe(msg.id)) {
+            media.push(msg)
+          }
         } else if (isDocumentContentType(msg.file.contentType) || msg.file.contentType) {
-          // Documents
-          documents.push(msg)
+          // Documents - skip if deleted for me
+          if (!isDeletedForMe(msg.id)) {
+            documents.push(msg)
+          }
         }
       }
 
-      // Voice notes
-      if (msg.type === 'voice' && msg.voice?.storagePath) {
+      // Voice notes - skip if deleted for me
+      if (msg.type === 'voice' && msg.voice?.storagePath && !isDeletedForMe(msg.id)) {
         voices.push(msg)
       }
 
       // Links from text messages
-      if (msg.type === 'text' && msg.text) {
+      if (msg.type === 'text' && msg.text && !isDeletedForMe(msg.id)) {
         const extractedLinks = extractLinksFromText(msg.text)
         extractedLinks.forEach(link => {
           links.push({ message: msg, link })
@@ -337,7 +420,7 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
       documentItems: documents,
       voiceItems: voices
     }
-  }, [messages])
+  }, [messages, isDeletedForMe])
 
   // Filter by search
   const filteredItems = useMemo(() => {
@@ -420,6 +503,7 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
                       chatId={chatId}
                       file={msg.file}
                       onClick={() => setPreviewMessage(msg)}
+                      onDeleteForMe={() => handleDeleteForMe(msg)}
                     />
                   ))}
                 </div>
@@ -437,6 +521,7 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
                       message={item.message}
                       link={item.link}
                       onViewInChat={handleViewInChat}
+                      onDeleteForMe={() => handleDeleteLinkForMe(item.message)}
                     />
                   ))}
                 </div>
@@ -454,6 +539,7 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
                       chatId={chatId}
                       message={msg}
                       onViewInChat={handleViewInChat}
+                      onDeleteForMe={() => handleDeleteDocumentForMe(msg)}
                     />
                   ))}
                 </div>
@@ -471,6 +557,7 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
                       chatId={chatId}
                       message={msg}
                       onViewInChat={handleViewInChat}
+                      onDeleteForMe={() => handleDeleteVoiceForMe(msg)}
                     />
                   ))}
                 </div>
@@ -498,6 +585,7 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
           message={previewMessage}
           onClose={() => setPreviewMessage(null)}
           onViewInChat={handleViewInChat}
+          onDeleteForMe={() => handleDeleteForMe(previewMessage)}
         />
       )}
     </div>

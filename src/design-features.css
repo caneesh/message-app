@@ -1721,3 +1721,485 @@
     flex-wrap: wrap;
   }
 }
+
+/* ----------------------------------------
+   Hidden Media
+   ---------------------------------------- */
+.hidden-media-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--color-bg-primary);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hidden-media-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.hidden-media-back {
+  background: none;
+  border: none;
+  font-size: var(--font-size-xl);
+  cursor: pointer;
+  padding: var(--space-2);
+  color: var(--color-text-primary);
+}
+
+.hidden-media-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.hidden-media-tabs {
+  display: flex;
+  padding: var(--space-2) var(--space-4);
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.hidden-media-tab {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.hidden-media-tab.active {
+  background: var(--color-accent-primary);
+  color: white;
+}
+
+.hidden-media-tab .tab-count {
+  background: var(--color-bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.hidden-media-tab.active .tab-count {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.hidden-media-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+.hidden-media-loading,
+.hidden-media-empty {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--color-text-secondary);
+}
+
+.hidden-media-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-2);
+}
+
+.hidden-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-3);
+}
+
+.hidden-media-item {
+  position: relative;
+  aspect-ratio: 1;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.hidden-media-item.loading {
+  animation: pulse 1.5s infinite;
+}
+
+.hidden-media-item.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+.hidden-media-preview {
+  width: 100%;
+  height: 100%;
+}
+
+.hidden-media-preview img,
+.hidden-media-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hidden-media-play-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-sm);
+}
+
+.hidden-media-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.hidden-media-item:hover .hidden-media-actions,
+.hidden-media-item:focus-within .hidden-media-actions {
+  opacity: 1;
+}
+
+.hidden-media-unhide-btn,
+.hidden-media-delete-btn,
+.hidden-media-remove-btn {
+  flex: 1;
+  padding: var(--space-2);
+  border: none;
+  background: transparent;
+  color: white;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.hidden-media-unhide-btn:hover {
+  background: var(--color-accent-primary);
+}
+
+.hidden-media-delete-btn:hover,
+.hidden-media-remove-btn:hover {
+  background: var(--color-error);
+}
+
+.hidden-media-no-pin-warning {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-warning-bg, #fef3cd);
+  color: var(--color-warning-text, #856404);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+/* PIN Entry */
+.pin-entry-container {
+  padding: var(--space-6);
+  text-align: center;
+  max-width: 300px;
+  margin: var(--space-8) auto;
+}
+
+.pin-entry-container h3 {
+  margin-bottom: var(--space-4);
+  color: var(--color-text-primary);
+}
+
+.pin-entry-container input {
+  width: 100%;
+  padding: var(--space-4);
+  font-size: var(--font-size-xl);
+  text-align: center;
+  letter-spacing: 0.5em;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+}
+
+.pin-entry-container input:focus {
+  outline: none;
+  border-color: var(--color-accent-primary);
+}
+
+.pin-error {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-3);
+}
+
+.pin-entry-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.pin-entry-actions button {
+  flex: 1;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  min-height: 48px;
+}
+
+.pin-entry-actions button[type="button"] {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.pin-entry-actions button[type="submit"] {
+  background: var(--color-accent-primary);
+  border: none;
+  color: white;
+}
+
+.pin-entry-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Settings PIN */
+.pin-created-at {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+.pin-enabled-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Hidden media button in toolbar */
+.hidden-media-btn {
+  background: none;
+  border: none;
+  padding: var(--space-2);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.hidden-media-btn:hover {
+  opacity: 1;
+}
+
+/* Mobile action sheet media options */
+@media (max-width: 767px) {
+  .hidden-media-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-2);
+  }
+  
+  .hidden-media-actions {
+    opacity: 1;
+  }
+}
+
+/* ----------------------------------------
+   Deleted Image Placeholder
+   ---------------------------------------- */
+.deleted-image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  min-height: 100px;
+  text-align: center;
+  gap: var(--space-2);
+}
+
+.deleted-image-icon {
+  font-size: var(--font-size-xl);
+  opacity: 0.5;
+}
+
+.deleted-image-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.deleted-image-undo {
+  background: none;
+  border: none;
+  color: var(--color-accent-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  text-decoration: underline;
+}
+
+.deleted-image-undo:hover {
+  color: var(--color-accent-hover);
+}
+
+/* ----------------------------------------
+   Media Thumbnail Menu (SharedMedia)
+   ---------------------------------------- */
+.media-thumbnail {
+  position: relative;
+}
+
+.media-thumbnail-menu-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  transition: background 0.15s, transform 0.15s;
+}
+
+.media-thumbnail-menu-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: scale(1.05);
+}
+
+.media-thumbnail-menu {
+  position: absolute;
+  top: 32px;
+  right: 4px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  min-width: 140px;
+}
+
+.media-thumbnail-menu button {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.media-thumbnail-menu button:hover {
+  background: var(--color-bg-secondary);
+}
+
+/* Media Preview Actions */
+.media-preview-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.media-preview-view-btn,
+.media-preview-delete-btn {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.media-preview-view-btn {
+  background: var(--color-accent-primary);
+  color: white;
+  border: none;
+}
+
+.media-preview-delete-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.media-preview-delete-btn:hover {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.media-preview-delete-btn.delete-permanent {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.media-preview-delete-btn.delete-permanent:hover {
+  background: var(--color-error);
+  color: white;
+}
+
+/* Shared Media Delete All Button */
+.shared-media-delete-all {
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.shared-media-delete-all:hover:not(:disabled) {
+  background: var(--color-error);
+  color: white;
+}
+
+.shared-media-delete-all:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Thumbnail menu delete permanent option */
+.media-thumbnail-menu button.delete-permanent {
+  color: var(--color-error);
+}
+
+.media-thumbnail-menu button.delete-permanent:hover {
+  background: var(--color-error-light);
+}
+

@@ -8192,6 +8192,29 @@ body.dark-mode .toolbar-btn:hover {
   min-height: 32px;
 }
 
+.shared-item-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.shared-item-delete-btn {
+  background: none;
+  border: 1px solid #ddd;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: #666;
+  min-height: 32px;
+  transition: all 0.15s;
+}
+
+.shared-item-delete-btn:hover {
+  border-color: #e57373;
+  background: #ffebee;
+}
+
 .shared-voice-duration {
   font-weight: 600;
   font-size: 0.9rem;
@@ -8292,6 +8315,16 @@ body.dark-mode .shared-document-open {
 body.dark-mode .shared-item-view-btn {
   border-color: #444;
   color: #aaa;
+}
+
+body.dark-mode .shared-item-delete-btn {
+  border-color: #444;
+  color: #aaa;
+}
+
+body.dark-mode .shared-item-delete-btn:hover {
+  border-color: #e57373;
+  background: rgba(229, 115, 115, 0.2);
 }
 
 body.dark-mode .load-more-btn {

@@ -21,6 +21,8 @@ import MessageToTaskAiAction from './MessageToTaskAiAction'
 import SecureFileContent from './SecureFileContent'
 import SecureVoiceContent from './SecureVoiceContent'
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
+import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
+import { isImageContentType, isVideoContentType } from '../utils/messageExtractors'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -132,6 +134,11 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const [revealedMessages, setRevealedMessages] = useState({})
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [showScrollBottom, setShowScrollBottom] = useState(false)
+  const {
+    isDeletedForMe,
+    deleteForMe,
+    undoDelete
+  } = useDeletedMediaForMe(chatId, currentUser?.uid)
   const messagesEndRef = useRef(null)
   const messagesStartRef = useRef(null)
   const messageListRef = useRef(null)
@@ -721,6 +728,38 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     setMobileActionSheet(null)
   }
 
+  const isImageMessage = (message) => {
+    return message.type === 'file' && message.file && isImageContentType(message.file.contentType)
+  }
+
+  const isVideoMessage = (message) => {
+    return (message.type === 'video' || message.type === 'file') &&
+           message.file && isVideoContentType(message.file.contentType)
+  }
+
+  const isMediaMessage = (message) => {
+    return isImageMessage(message) || isVideoMessage(message)
+  }
+
+  const getMediaKind = (message) => {
+    if (isVideoMessage(message)) return 'video'
+    if (isImageMessage(message)) return 'image'
+    return null
+  }
+
+  const handleDeleteMediaForMe = async (message) => {
+    const mediaKind = getMediaKind(message)
+    const mediaLabel = mediaKind === 'video' ? 'video' : 'image'
+    if (!window.confirm(`Delete this ${mediaLabel} from your view? It will still be visible to the other person.`)) return
+    setShowMoreMenu(null)
+    setMobileActionSheet(null)
+    await deleteForMe(message.id, mediaKind)
+  }
+
+  const handleUndoDeleteForMe = async (messageId) => {
+    await undoDelete(messageId)
+  }
+
   const closeMobileActionSheet = () => {
     setMobileActionSheet(null)
   }
@@ -1054,7 +1093,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               {/* Mobile more button - always visible on touch devices */}
               <button
                 className="mobile-more-btn"
-                onClick={() => setMobileActionSheet({ message, isOwn, isFileMessage, isVoiceMessage })}
+                onClick={() => setMobileActionSheet({ message, isOwn, isFileMessage, isVideoMessage, isVoiceMessage })}
                 aria-label="Message actions"
               >
                 ⋯
@@ -1100,6 +1139,11 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                   <button role="menuitem" onClick={() => handleCopyMessage(message)}>
                     📋 Copy
                   </button>
+                  {isMediaMessage(message) && !isDeletedForMe(message.id) && (
+                    <button role="menuitem" onClick={() => handleDeleteMediaForMe(message)}>
+                      🗑 Delete for me
+                    </button>
+                  )}
                   <div className="more-menu-divider" />
                   <button role="menuitem" onClick={() => openConvertModal(message, 'reminder')}>
                     ⏰ Save as Reminder
@@ -1216,8 +1260,21 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               )}
               {isSpecialMessage ? (
                 renderSpecialMessage(message)
-              ) : isFileMessage || isVideoMessage ? (
-                <SecureFileContent chatId={chatId} file={message.file} />
+              ) : (isFileMessage || isVideoMessage) ? (
+                isMediaMessage(message) && isDeletedForMe(message.id) ? (
+                  <div className="deleted-image-placeholder">
+                    <span className="deleted-image-icon">🗑</span>
+                    <span className="deleted-image-text">Media deleted from your view</span>
+                    <button
+                      className="deleted-image-undo"
+                      onClick={() => handleUndoDeleteForMe(message.id)}
+                    >
+                      Undo
+                    </button>
+                  </div>
+                ) : (
+                  <SecureFileContent chatId={chatId} file={message.file} />
+                )
               ) : isVoiceMessage ? (
                 <SecureVoiceContent chatId={chatId} voice={message.voice} />
               ) : editingId === message.id ? (
@@ -1373,6 +1430,11 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               {mobileActionSheet.isOwn && (
                 <button className="action-sheet-btn action-sheet-btn-danger" onClick={() => { closeMobileActionSheet(); handleDelete(mobileActionSheet.message) }}>
                   🗑 Delete
+                </button>
+              )}
+              {isMediaMessage(mobileActionSheet.message) && !isDeletedForMe(mobileActionSheet.message.id) && (
+                <button className="action-sheet-btn" onClick={() => handleDeleteMediaForMe(mobileActionSheet.message)}>
+                  🗑 Delete for me
                 </button>
               )}
               <div className="action-sheet-divider" />
