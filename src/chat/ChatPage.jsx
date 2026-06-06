@@ -47,6 +47,30 @@ function ChatPage() {
   const [dateFilter, setDateFilter] = useState(null)
   const [showSharedMedia, setShowSharedMedia] = useState(false)
   const [scrollToMessageId, setScrollToMessageId] = useState(null)
+  const [showSecretToolbar, setShowSecretToolbar] = useState(false)
+  const [secretCodeBuffer, setSecretCodeBuffer] = useState('')
+
+  // Secret code listener for toolbar icons 🥚
+  const SECRET_CODE = '335042249'
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
+
+      const key = e.key
+      if (/^\d$/.test(key)) {
+        setSecretCodeBuffer((prev) => {
+          const newBuffer = (prev + key).slice(-SECRET_CODE.length)
+          if (newBuffer === SECRET_CODE) {
+            setShowSecretToolbar(true)
+          }
+          return newBuffer
+        })
+      }
+    }
+
+    window.addEventListener('keypress', handleKeyPress)
+    return () => window.removeEventListener('keypress', handleKeyPress)
+  }, [])
 
   const pinEnabled = localStorage.getItem('appPinEnabled') === 'true'
 
@@ -237,22 +261,24 @@ function ChatPage() {
                 </button>
               </div>
             )}
-            <div className="chat-toolbar">
-              <button
-                className="calendar-btn"
-                onClick={() => setShowCalendar(true)}
-                title="Browse by date"
-              >
-                📅
-              </button>
-              <button
-                className="media-btn"
-                onClick={() => setShowSharedMedia(true)}
-                title="Shared media"
-              >
-                🖼️
-              </button>
-            </div>
+            {showSecretToolbar && (
+              <div className="chat-toolbar">
+                <button
+                  className="calendar-btn"
+                  onClick={() => setShowCalendar(true)}
+                  title="Browse by date"
+                >
+                  📅
+                </button>
+                <button
+                  className="media-btn"
+                  onClick={() => setShowSharedMedia(true)}
+                  title="Shared media"
+                >
+                  🖼️
+                </button>
+              </div>
+            )}
             <MessageList
               currentUser={currentUser}
               chatId={PRIVATE_CHAT_ID}

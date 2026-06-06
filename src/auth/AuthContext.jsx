@@ -29,36 +29,71 @@ export function AuthProvider({ children }) {
   }, [])
 
   const setupRecaptcha = () => {
-    if (!recaptchaVerifierRef.current) {
+    console.log('[Auth] Setting up reCAPTCHA...')
+
+    // Always clear and recreate to avoid stale DOM references
+    if (recaptchaVerifierRef.current) {
+      try {
+        recaptchaVerifierRef.current.clear()
+        console.log('[Auth] Cleared existing reCAPTCHA')
+      } catch (e) {
+        console.log('[Auth] Error clearing reCAPTCHA:', e.message)
+      }
+      recaptchaVerifierRef.current = null
+    }
+
+    const container = document.getElementById('recaptcha-container')
+    if (!container) {
+      console.error('[Auth] recaptcha-container not found in DOM')
+      return null
+    }
+    console.log('[Auth] Found recaptcha-container')
+
+    try {
       recaptchaVerifierRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
         size: 'invisible',
       })
+      console.log('[Auth] Created new RecaptchaVerifier')
+      return recaptchaVerifierRef.current
+    } catch (e) {
+      console.error('[Auth] Error creating RecaptchaVerifier:', e.message)
+      return null
     }
-    return recaptchaVerifierRef.current
   }
 
   const startPhoneLogin = async (phoneNumber) => {
     const appVerifier = setupRecaptcha()
+    if (!appVerifier) {
+      return { success: false, error: 'reCAPTCHA setup failed. Please refresh and try again.' }
+    }
     try {
+      console.log('[Auth] Calling signInWithPhoneNumber...')
       const result = await signInWithPhoneNumber(auth, phoneNumber, appVerifier)
+      console.log('[Auth] signInWithPhoneNumber success')
       setConfirmationResult(result)
-      return { success: true }
+      return { success: true, confirmationResult: result }
     } catch (error) {
+      console.error('[Auth] signInWithPhoneNumber error:', error.code, error.message)
       // Reset recaptcha on error
       if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear()
+        try {
+          recaptchaVerifierRef.current.clear()
+        } catch (e) {
+          // Ignore
+        }
         recaptchaVerifierRef.current = null
       }
-      return { success: false, error: getErrorMessage(error.code) }
+      return { success: false, error: getErrorMessage(error.code), code: error.code }
     }
   }
 
-  const confirmPhoneCode = async (code) => {
-    if (!confirmationResult) {
+  const confirmPhoneCode = async (code, confirmResultOverride) => {
+    const result = confirmResultOverride || confirmationResult
+    if (!result) {
       return { success: false, error: 'No verification in progress' }
     }
     try {
-      await confirmationResult.confirm(code)
+      await result.confirm(code)
       setConfirmationResult(null)
       return { success: true }
     } catch (error) {
