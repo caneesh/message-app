@@ -23,6 +23,7 @@ import SecureVoiceContent from './SecureVoiceContent'
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
 import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
 import { isImageContentType, isVideoContentType } from '../utils/messageExtractors'
+import { isEmojiOnlyMessage } from '../utils/emojiUtils'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -1051,12 +1052,14 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           const isSpecialMessage = message.type === 'special'
           const hasHeartEmoji = message.text && /[\u2764\u2765\u2763\u{1F493}-\u{1F49F}\u{1FA75}-\u{1FA77}\u{1F90D}\u{1F90E}\u{1F9E1}\u{2764}\u{1FAC0}]/u.test(message.text)
           const isLoveStyle = hasHeartEmoji && !isSpecialMessage
+          const isTextMessage = message.type === 'text' || (!isFileMessage && !isVideoMessage && !isVoiceMessage && !isSpecialMessage)
+          const emojiOnly = isTextMessage && isEmojiOnlyMessage(message.text)
 
           return (
             <div
               key={message.id}
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
-              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVideoMessage ? 'video-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''}`}
+              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVideoMessage ? 'video-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''} ${emojiOnly ? 'message--emoji-only' : ''}`}
             >
               {/* Floating toolbar - visible on hover/focus (desktop) */}
               <div className="message-toolbar" role="toolbar" aria-label="Message actions">

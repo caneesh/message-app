@@ -2131,6 +2131,49 @@ body.dark-mode .device-meta {
   border-bottom-left-radius: 4px;
 }
 
+/* Emoji-only messages - larger display */
+.message--emoji-only {
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 8px;
+}
+
+.message--emoji-only .message-text {
+  font-size: 2.8rem;
+  line-height: 1.15;
+}
+
+.message--emoji-only.own {
+  background: transparent;
+}
+
+.message--emoji-only.other {
+  background: transparent;
+}
+
+/* Keep other elements normal size in emoji-only messages */
+.message--emoji-only .message-header,
+.message--emoji-only .message-time,
+.message--emoji-only .message-sender,
+.message--emoji-only .reactions-display,
+.message--emoji-only .emotional-receipts,
+.message--emoji-only .reply-quote,
+.message--emoji-only .edited-label {
+  font-size: 0.75rem;
+}
+
+/* Slightly smaller emoji on mobile */
+@media (max-width: 600px) {
+  .message--emoji-only .message-text {
+    font-size: 2.4rem;
+  }
+}
+
+/* Dark mode emoji-only */
+body.dark-mode .message--emoji-only {
+  background: transparent;
+}
+
 .message-header {
   display: flex;
   justify-content: space-between;
