@@ -27,6 +27,8 @@ import FollowUps from './FollowUps'
 import LoveHeatMap from './LoveHeatMap'
 import MessageCalendar from './MessageCalendar'
 import SharedMedia from './SharedMedia'
+import ThoughtsPage from './ThoughtsPage'
+import { useUnreadThoughts } from '../hooks/useUnreadThoughts'
 
 const STALE_TYPING_MS = 5000
 
@@ -46,6 +48,10 @@ function ChatPage() {
   const [showCalendar, setShowCalendar] = useState(false)
   const [dateFilter, setDateFilter] = useState(null)
   const [showSharedMedia, setShowSharedMedia] = useState(false)
+  const [showThoughts, setShowThoughts] = useState(false)
+  const [activeThoughtReply, setActiveThoughtReply] = useState(null)
+  const [viewThoughtId, setViewThoughtId] = useState(null)
+  const [viewThoughtBlockId, setViewThoughtBlockId] = useState(null)
   const [scrollToMessageId, setScrollToMessageId] = useState(null)
   const [showSecretToolbar, setShowSecretToolbar] = useState(false)
   const [secretCodeBuffer, setSecretCodeBuffer] = useState('')
@@ -88,6 +94,8 @@ function ChatPage() {
   })
 
   const isLocked = pinLocked
+
+  const { unreadCount: unreadThoughts } = useUnreadThoughts(PRIVATE_CHAT_ID, currentUser?.uid)
 
   const getDeviceLabel = () => {
     const ua = navigator.userAgent
@@ -261,24 +269,38 @@ function ChatPage() {
                 </button>
               </div>
             )}
-            {showSecretToolbar && (
-              <div className="chat-toolbar">
-                <button
-                  className="calendar-btn"
-                  onClick={() => setShowCalendar(true)}
-                  title="Browse by date"
-                >
-                  📅
-                </button>
-                <button
-                  className="media-btn"
-                  onClick={() => setShowSharedMedia(true)}
-                  title="Shared media"
-                >
-                  🖼️
-                </button>
-              </div>
-            )}
+            <div className="chat-toolbar">
+              <button
+                className={`thoughts-btn ${unreadThoughts > 0 ? 'thoughts-btn-badge' : ''}`}
+                onClick={() => setShowThoughts(true)}
+                title="Thoughts"
+              >
+                💭
+                {unreadThoughts > 0 && (
+                  <span className="thoughts-unread-badge">
+                    {unreadThoughts > 9 ? '9+' : unreadThoughts}
+                  </span>
+                )}
+              </button>
+              {showSecretToolbar && (
+                <>
+                  <button
+                    className="calendar-btn"
+                    onClick={() => setShowCalendar(true)}
+                    title="Browse by date"
+                  >
+                    📅
+                  </button>
+                  <button
+                    className="media-btn"
+                    onClick={() => setShowSharedMedia(true)}
+                    title="Shared media"
+                  >
+                    🖼️
+                  </button>
+                </>
+              )}
+            </div>
             <MessageList
               currentUser={currentUser}
               chatId={PRIVATE_CHAT_ID}
@@ -287,6 +309,11 @@ function ChatPage() {
               dateFilter={dateFilter}
               scrollToMessageId={scrollToMessageId}
               onScrollComplete={() => setScrollToMessageId(null)}
+              onViewThought={(thoughtId, blockId) => {
+                setViewThoughtId(thoughtId)
+                setViewThoughtBlockId(blockId || null)
+                setShowThoughts(true)
+              }}
             />
             {friendTyping && (
               <div className="typing-indicator">Friend is typing...</div>
@@ -296,6 +323,8 @@ function ChatPage() {
               chatId={PRIVATE_CHAT_ID}
               activeReplyTo={activeReplyTo}
               clearReply={clearReply}
+              activeThoughtReply={activeThoughtReply}
+              clearThoughtReply={() => setActiveThoughtReply(null)}
             />
             {showCalendar && (
               <MessageCalendar
@@ -316,6 +345,23 @@ function ChatPage() {
                 onViewInChat={(messageId) => {
                   setScrollToMessageId(messageId)
                 }}
+              />
+            )}
+            {showThoughts && (
+              <ThoughtsPage
+                currentUser={currentUser}
+                chatId={PRIVATE_CHAT_ID}
+                onClose={() => {
+                  setShowThoughts(false)
+                  setViewThoughtId(null)
+                  setViewThoughtBlockId(null)
+                }}
+                onReplyToThought={(replyData) => {
+                  setActiveThoughtReply(replyData)
+                  setShowThoughts(false)
+                }}
+                initialThoughtId={viewThoughtId}
+                initialBlockId={viewThoughtBlockId}
               />
             )}
           </>

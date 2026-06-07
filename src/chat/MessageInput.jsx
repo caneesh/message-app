@@ -124,7 +124,7 @@ const EMOJI_LIST = [
   '⭐', '🔥', '💫', '🎀', '🎁', '🍫', '🍰', '🧁',
 ]
 
-function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
+function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeThoughtReply, clearThoughtReply }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -235,9 +235,21 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
         }
       }
 
+      if (activeThoughtReply) {
+        messageData.thoughtRef = {
+          thoughtId: activeThoughtReply.thoughtId,
+          authorId: activeThoughtReply.authorId,
+          quote: activeThoughtReply.quote.slice(0, 300),
+        }
+        if (activeThoughtReply.blockId) {
+          messageData.thoughtRef.blockId = activeThoughtReply.blockId
+        }
+      }
+
       await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
       setText('')
       clearReply()
+      if (clearThoughtReply) clearThoughtReply()
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current)
       }
@@ -571,6 +583,20 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply }) {
             <span className="reply-preview-text">{activeReplyTo.textPreview}</span>
           </div>
           <button className="reply-cancel-btn" onClick={clearReply} title="Cancel reply">
+            ×
+          </button>
+        </div>
+      )}
+      {activeThoughtReply && (
+        <div className="reply-preview thought-reply-preview">
+          <span className="thought-reply-icon">💭</span>
+          <div className="reply-preview-content">
+            <span className="reply-preview-label">
+              Replying to {activeThoughtReply.blockId ? 'paragraph' : 'thought'}
+            </span>
+            <span className="reply-preview-text">{activeThoughtReply.quote}</span>
+          </div>
+          <button className="reply-cancel-btn" onClick={clearThoughtReply} title="Cancel reply">
             ×
           </button>
         </div>

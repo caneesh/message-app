@@ -100,7 +100,7 @@ function linkifyText(text) {
   })
 }
 
-function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilter = null, scrollToMessageId = null, onScrollComplete = null }) {
+function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilter = null, scrollToMessageId = null, onScrollComplete = null, onViewThought = null }) {
   const [messages, setMessages] = useState([])
   const [reactions, setReactions] = useState({})
   const [pinnedMessages, setPinnedMessages] = useState([])
@@ -1122,6 +1122,21 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                   {replyNotFoundId === replyTo.messageId && (
                     <span className="reply-not-found">Original message is not loaded.</span>
                   )}
+                </div>
+              )}
+              {message.thoughtRef && (
+                <div
+                  className="thought-ref-card"
+                  onClick={() => onViewThought?.(message.thoughtRef.thoughtId, message.thoughtRef.blockId)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') onViewThought?.(message.thoughtRef.thoughtId, message.thoughtRef.blockId) }}
+                >
+                  <span className="thought-ref-icon">💭</span>
+                  <div className="thought-ref-content">
+                    <span className="thought-ref-label">Reply to Thought</span>
+                    <span className="thought-ref-quote">{message.thoughtRef.quote}</span>
+                  </div>
                 </div>
               )}
               <div className="message-header">

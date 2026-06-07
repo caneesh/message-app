@@ -14,7 +14,21 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef']);
+    }
+
+    // Helper: Validate optional thoughtRef field
+    function isValidThoughtRef() {
+      let data = request.resource.data;
+      return !('thoughtRef' in data) || (
+        data.thoughtRef is map
+        && data.thoughtRef.keys().hasOnly(['thoughtId', 'blockId', 'quote', 'authorId'])
+        && data.thoughtRef.thoughtId is string
+        && (!('blockId' in data.thoughtRef) || data.thoughtRef.blockId is string)
+        && data.thoughtRef.quote is string
+        && data.thoughtRef.quote.size() <= 300
+        && data.thoughtRef.authorId is string
+      );
     }
 
     // Helper: Validate message edit (only text/edited/editedAt can change)
@@ -162,7 +176,8 @@ service cloud.firestore {
                       && hasOnlyAllowedFields()
                       && isValidBaseMessage()
                       && (isValidTextMessage() || isValidFileMessage() || isValidVideoMessage() || isValidVoiceMessage() || isValidSpecialMessage())
-                      && isValidReplyTo();
+                      && isValidReplyTo()
+                      && isValidThoughtRef();
         allow update: if isAuthenticated()
                       && isChatMember(chatId)
                       && isValidMessageEdit();
@@ -649,6 +664,147 @@ service cloud.firestore {
       // AI Runs subcollection - audit log, no client access
       match /aiRuns/{runId} {
         allow read, write: if false;
+      }
+
+      // Private thought read state - only owner can access
+      match /thoughtReadState/{uid}/items/{thoughtId} {
+        // Helper: Validate read state fields
+        function hasOnlyAllowedReadStateFields() {
+          return request.resource.data.keys().hasOnly(['thoughtId', 'readerId', 'lastReadBlockIndex', 'readBlockIds', 'readPercent', 'firstOpenedAt', 'lastReadAt', 'updatedAt']);
+        }
+
+        // Only the owner can read their own read state
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+
+        // Only the owner can create/update their own read state
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedReadStateFields()
+                      && request.resource.data.readerId == request.auth.uid
+                      && request.resource.data.thoughtId is string
+                      && request.resource.data.readBlockIds is list
+                      && request.resource.data.readPercent >= 0
+                      && request.resource.data.readPercent <= 100;
+
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedReadStateFields()
+                      && request.resource.data.readerId == request.auth.uid
+                      && request.resource.data.thoughtId == resource.data.thoughtId
+                      && request.resource.data.readBlockIds is list
+                      && request.resource.data.readPercent >= 0
+                      && request.resource.data.readPercent <= 100;
+
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Shared read receipt summary - author can see progress, reader can update
+      match /thoughtReadReceipts/{thoughtId}/readers/{uid} {
+        // Helper: Validate read receipt fields (no detailed block info)
+        function hasOnlyAllowedReceiptFields() {
+          return request.resource.data.keys().hasOnly(['thoughtId', 'readerId', 'readPercent', 'firstOpenedAt', 'lastReadAt', 'updatedAt']);
+        }
+
+        // Helper: Get the thought to check authorship
+        function getThought() {
+          return get(/databases/$(database)/documents/chats/$(chatId)/thoughts/$(thoughtId)).data;
+        }
+
+        // Reader can read their own summary, OR author can read summaries for their thoughts
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && (uid == request.auth.uid || getThought().authorId == request.auth.uid);
+
+        // Only the reader can create/update their own receipt
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedReceiptFields()
+                      && request.resource.data.readerId == request.auth.uid
+                      && request.resource.data.thoughtId == thoughtId
+                      && request.resource.data.readPercent >= 0
+                      && request.resource.data.readPercent <= 100;
+
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedReceiptFields()
+                      && request.resource.data.readerId == request.auth.uid
+                      && request.resource.data.thoughtId == resource.data.thoughtId
+                      && request.resource.data.readPercent >= 0
+                      && request.resource.data.readPercent <= 100;
+
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Thoughts subcollection - longer personal reflections
+      match /thoughts/{thoughtId} {
+        // Helper: Validate thought has only allowed fields
+        function hasOnlyAllowedThoughtFields() {
+          return request.resource.data.keys().hasOnly(['chatId', 'authorId', 'title', 'body', 'blocks', 'mood', 'status', 'createdAt', 'updatedAt']);
+        }
+
+        // Helper: Validate mood value
+        function isValidThoughtMood() {
+          return request.resource.data.mood in ['normal', 'warm', 'love', 'quiet', 'missing'];
+        }
+
+        // Helper: Validate status value
+        function isValidThoughtStatus() {
+          return request.resource.data.status in ['shared', 'deleted'];
+        }
+
+        // Helper: Validate blocks array
+        function isValidThoughtBlocks() {
+          return request.resource.data.blocks is list
+              && request.resource.data.blocks.size() <= 100;
+        }
+
+        // Helper: Check if user is the author
+        function isThoughtAuthor() {
+          return resource.data.authorId == request.auth.uid;
+        }
+
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && resource.data.status == 'shared';
+
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && hasOnlyAllowedThoughtFields()
+                      && request.resource.data.chatId == chatId
+                      && request.resource.data.authorId == request.auth.uid
+                      && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
+                      && request.resource.data.body is string
+                      && request.resource.data.body.size() > 0
+                      && request.resource.data.body.size() <= 10000
+                      && isValidThoughtBlocks()
+                      && isValidThoughtMood()
+                      && request.resource.data.status == 'shared';
+
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && isThoughtAuthor()
+                      && hasOnlyAllowedThoughtFields()
+                      && request.resource.data.chatId == resource.data.chatId
+                      && request.resource.data.authorId == resource.data.authorId
+                      && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
+                      && request.resource.data.body is string
+                      && request.resource.data.body.size() > 0
+                      && request.resource.data.body.size() <= 10000
+                      && isValidThoughtBlocks()
+                      && isValidThoughtMood()
+                      && isValidThoughtStatus();
+
+        allow delete: if false;
       }
     }
 

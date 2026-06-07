@@ -1468,12 +1468,20 @@ body.dark-mode .message-list {
 }
 
 body.dark-mode .message.other {
-  background-color: #3a3a3a;
+  background-color: #3d3830;
   color: #e0e0e0;
 }
 
 body.dark-mode .message.own {
-  background-color: #1e5899;
+  background-color: #2d3a4d;
+  color: #e0e0e0;
+}
+
+body.dark-mode .message--love,
+body.dark-mode .message.own.message--love,
+body.dark-mode .message.other.message--love {
+  background: linear-gradient(135deg, #4a3040 0%, #3d2535 100%);
+  color: #e0e0e0;
 }
 
 body.dark-mode .reply-quote {
@@ -2119,16 +2127,29 @@ body.dark-mode .device-meta {
 }
 
 .message.own {
-  background-color: #007bff;
-  color: white;
+  background-color: #d4e4f7;
+  color: #333;
   align-self: flex-end;
   border-bottom-right-radius: 4px;
 }
 
 .message.other {
-  background-color: #e9ecef;
+  background-color: #f5efe6;
+  color: #333;
   align-self: flex-start;
   border-bottom-left-radius: 4px;
+}
+
+/* Love/heart message styling - overrides sender/receiver colors */
+.message--love {
+  background: linear-gradient(135deg, #fff0f4 0%, #ffe3ec 100%);
+  color: #333;
+}
+
+.message.own.message--love,
+.message.other.message--love {
+  background: linear-gradient(135deg, #fff0f4 0%, #ffe3ec 100%);
+  color: #333;
 }
 
 /* Emoji-only messages - larger display */
@@ -2229,8 +2250,8 @@ body.dark-mode .message--emoji-only {
 }
 
 .message.own .reply-quote {
-  background: rgba(255, 255, 255, 0.15);
-  border-left-color: rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.08);
+  border-left-color: rgba(0, 0, 0, 0.2);
 }
 
 .reply-quote-label {
@@ -2261,7 +2282,7 @@ body.dark-mode .message--emoji-only {
 }
 
 .message.own .message-link {
-  color: #90caf9;
+  color: #1a73e8;
 }
 
 .message-link:hover {
@@ -2653,7 +2674,7 @@ body.dark-mode .message--emoji-only {
 }
 
 .message.own .file-card {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .file-icon {
@@ -2691,7 +2712,7 @@ body.dark-mode .message--emoji-only {
 }
 
 .message.own .reaction-picker {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .reaction-option {
@@ -2727,15 +2748,15 @@ body.dark-mode .message--emoji-only {
 }
 
 .message.own .reaction-chip {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .reaction-chip.own {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .message.own .reaction-chip.own {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.18);
 }
 
 /* Edit Message */
@@ -2771,9 +2792,9 @@ body.dark-mode .message--emoji-only {
 }
 
 .message.own .edit-input {
-  border-color: rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.5);
+  color: #333;
 }
 
 .edit-actions {
@@ -8426,4 +8447,1074 @@ body.dark-mode .media-btn:hover {
   right: 0;
   bottom: 0;
   z-index: 500;
+}
+
+/* ==========================================
+   THOUGHTS FEATURE STYLES
+   ========================================== */
+
+/* Thoughts button in chat toolbar */
+.thoughts-btn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  min-height: 36px;
+  min-width: 36px;
+  transition: background 0.2s;
+}
+
+.thoughts-btn:hover {
+  background: #f0f0f0;
+}
+
+body.dark-mode .thoughts-btn:hover {
+  background: #333;
+}
+
+/* Thoughts Page Overlay */
+.thoughts-page-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thoughts-page {
+  background: #faf9f7;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .thoughts-page {
+    max-width: 600px;
+    max-height: 90vh;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.thoughts-page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+}
+
+.thoughts-page-back {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  min-height: 40px;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thoughts-page-back:hover {
+  background: #f0f0f0;
+}
+
+.thoughts-page-header h1 {
+  flex: 1;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.thoughts-page-icon {
+  font-size: 1.4rem;
+}
+
+.thoughts-page-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* Thought List */
+.thought-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.thought-list-new-btn {
+  background: linear-gradient(135deg, #e8d5f2 0%, #f5e6d3 100%);
+  border: none;
+  padding: 14px 20px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #5a4a6a;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.thought-list-new-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.thought-list-loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: #888;
+}
+
+.thought-list-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.thought-list-empty-icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.thought-list-empty p {
+  margin: 0 0 8px 0;
+}
+
+.thought-list-empty-hint {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.thought-list-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Thought Card */
+.thought-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-left: 4px solid #ddd;
+}
+
+.thought-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.thought-card--normal { border-left-color: #b8b8b8; }
+.thought-card--warm { border-left-color: #f5c576; }
+.thought-card--love { border-left-color: #f5a5b8; }
+.thought-card--quiet { border-left-color: #a5b8c5; }
+.thought-card--missing { border-left-color: #c5a5f5; }
+
+.thought-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.thought-card-mood {
+  font-size: 1.2rem;
+}
+
+.thought-card-date {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.thought-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+
+.thought-card-preview {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Thought Detail Overlay */
+.thought-detail-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thought-detail {
+  background: #faf9f7;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .thought-detail {
+    max-width: 550px;
+    max-height: 85vh;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  }
+}
+
+.thought-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+}
+
+.thought-detail-back {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  min-height: 40px;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thought-detail-back:hover {
+  background: #f0f0f0;
+}
+
+.thought-detail-mood {
+  font-size: 1.4rem;
+}
+
+.thought-detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px;
+}
+
+.thought-detail-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 12px 0;
+  line-height: 1.3;
+}
+
+.thought-detail-meta {
+  margin-bottom: 20px;
+}
+
+.thought-detail-date {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.thought-detail-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.thought-detail-paragraph {
+  font-size: 1rem;
+  color: #444;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Thought Composer Overlay */
+.thought-composer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thought-composer {
+  background: #faf9f7;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .thought-composer {
+    max-width: 550px;
+    max-height: 90vh;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  }
+}
+
+.thought-composer-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+}
+
+.thought-composer-back {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  min-height: 40px;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thought-composer-back:hover {
+  background: #f0f0f0;
+}
+
+.thought-composer-header h2 {
+  flex: 1;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.thought-composer-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow-y: auto;
+  gap: 16px;
+}
+
+.thought-composer-error {
+  background: #fef2f2;
+  color: #c53030;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.thought-composer-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.thought-composer-title {
+  padding: 14px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 1rem;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.thought-composer-title:focus {
+  outline: none;
+  border-color: #9b8ab8;
+}
+
+.thought-composer-body {
+  padding: 14px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 1rem;
+  background: #fff;
+  resize: vertical;
+  min-height: 200px;
+  font-family: inherit;
+  line-height: 1.6;
+  transition: border-color 0.2s;
+}
+
+.thought-composer-body:focus {
+  outline: none;
+  border-color: #9b8ab8;
+}
+
+.thought-composer-char-count {
+  font-size: 0.8rem;
+  color: #888;
+  text-align: right;
+  margin-top: 4px;
+}
+
+.thought-composer-mood {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thought-composer-mood label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #555;
+}
+
+.thought-composer-mood-options {
+  display: flex;
+  gap: 8px;
+}
+
+.thought-mood-btn {
+  background: #fff;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.thought-mood-btn:hover {
+  background: #f8f8f8;
+}
+
+.thought-mood-btn.active {
+  border-color: #9b8ab8;
+  background: #f5f0fa;
+}
+
+.thought-composer-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.thought-composer-cancel {
+  flex: 1;
+  padding: 14px 20px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.thought-composer-cancel:hover {
+  background: #f5f5f5;
+}
+
+.thought-composer-submit {
+  flex: 2;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #9b8ab8 0%, #a5b8c5 100%);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.thought-composer-submit:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.thought-composer-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Dark mode for Thoughts */
+body.dark-mode .thoughts-page {
+  background: #1a1a1a;
+}
+
+body.dark-mode .thoughts-page-header {
+  background: #252525;
+  border-bottom-color: #333;
+}
+
+body.dark-mode .thoughts-page-header h1 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .thoughts-page-back:hover {
+  background: #333;
+}
+
+body.dark-mode .thought-list-new-btn {
+  background: linear-gradient(135deg, #3d2f4d 0%, #4a3d35 100%);
+  color: #d8c8e8;
+}
+
+body.dark-mode .thought-list-empty {
+  color: #aaa;
+}
+
+body.dark-mode .thought-list-empty-hint {
+  color: #777;
+}
+
+body.dark-mode .thought-card {
+  background: #252525;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .thought-card-title {
+  color: #e0e0e0;
+}
+
+body.dark-mode .thought-card-preview {
+  color: #aaa;
+}
+
+body.dark-mode .thought-card-date {
+  color: #777;
+}
+
+body.dark-mode .thought-detail {
+  background: #1a1a1a;
+}
+
+body.dark-mode .thought-detail-header {
+  background: #252525;
+  border-bottom-color: #333;
+}
+
+body.dark-mode .thought-detail-back:hover {
+  background: #333;
+}
+
+body.dark-mode .thought-detail-title {
+  color: #e0e0e0;
+}
+
+body.dark-mode .thought-detail-date {
+  color: #777;
+}
+
+body.dark-mode .thought-detail-paragraph {
+  color: #ccc;
+}
+
+body.dark-mode .thought-composer {
+  background: #1a1a1a;
+}
+
+body.dark-mode .thought-composer-header {
+  background: #252525;
+  border-bottom-color: #333;
+}
+
+body.dark-mode .thought-composer-header h2 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .thought-composer-back:hover {
+  background: #333;
+}
+
+body.dark-mode .thought-composer-error {
+  background: #3d2020;
+  color: #f5a5a5;
+}
+
+body.dark-mode .thought-composer-title,
+body.dark-mode .thought-composer-body {
+  background: #252525;
+  border-color: #444;
+  color: #e0e0e0;
+}
+
+body.dark-mode .thought-composer-title:focus,
+body.dark-mode .thought-composer-body:focus {
+  border-color: #7a6a98;
+}
+
+body.dark-mode .thought-composer-char-count {
+  color: #777;
+}
+
+body.dark-mode .thought-composer-mood label {
+  color: #aaa;
+}
+
+body.dark-mode .thought-mood-btn {
+  background: #252525;
+  border-color: #444;
+}
+
+body.dark-mode .thought-mood-btn:hover {
+  background: #333;
+}
+
+body.dark-mode .thought-mood-btn.active {
+  border-color: #7a6a98;
+  background: #3d2f4d;
+}
+
+body.dark-mode .thought-composer-cancel {
+  background: #252525;
+  border-color: #444;
+  color: #e0e0e0;
+}
+
+body.dark-mode .thought-composer-cancel:hover {
+  background: #333;
+}
+
+body.dark-mode .thought-composer-submit {
+  background: linear-gradient(135deg, #5a4a7a 0%, #4a6a7a 100%);
+}
+
+/* Thought paragraph read states */
+.thought-paragraph--read {
+  background: linear-gradient(135deg, #fef6f0 0%, #fdf2f8 100%);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: -8px -12px;
+}
+
+.thought-paragraph--current {
+  box-shadow: 0 0 8px rgba(155, 138, 184, 0.3);
+}
+
+.thought-paragraph--read.thought-paragraph--current {
+  box-shadow: 0 0 12px rgba(155, 138, 184, 0.4);
+}
+
+body.dark-mode .thought-paragraph--read {
+  background: linear-gradient(135deg, #2d2520 0%, #2a2030 100%);
+}
+
+body.dark-mode .thought-paragraph--current {
+  box-shadow: 0 0 8px rgba(122, 106, 152, 0.4);
+}
+
+body.dark-mode .thought-paragraph--read.thought-paragraph--current {
+  box-shadow: 0 0 12px rgba(122, 106, 152, 0.5);
+}
+
+/* Thought card read status */
+.thought-card-read-status {
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+body.dark-mode .thought-card-read-status {
+  color: #777;
+  border-top-color: #333;
+}
+
+/* Thought reply preview in MessageInput */
+.thought-reply-preview {
+  border-left-color: #9b8ab8;
+}
+
+.thought-reply-icon {
+  font-size: 1.2rem;
+  margin-right: 8px;
+}
+
+/* Thought reference card in messages */
+.thought-ref-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, #fef6f0 0%, #fdf2f8 100%);
+  border-radius: 8px;
+  border-left: 3px solid #9b8ab8;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.thought-ref-card:hover {
+  background: linear-gradient(135deg, #fef0e8 0%, #fde8f0 100%);
+}
+
+.thought-ref-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.thought-ref-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.thought-ref-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #8a7a9a;
+}
+
+.thought-ref-quote {
+  font-size: 0.85rem;
+  color: #555;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+body.dark-mode .thought-ref-card {
+  background: linear-gradient(135deg, #2d2520 0%, #2a2030 100%);
+}
+
+body.dark-mode .thought-ref-card:hover {
+  background: linear-gradient(135deg, #352d28 0%, #322838 100%);
+}
+
+body.dark-mode .thought-ref-label {
+  color: #a99ab8;
+}
+
+body.dark-mode .thought-ref-quote {
+  color: #bbb;
+}
+
+/* Thought detail reply button in header */
+.thought-detail-reply-btn {
+  margin-left: auto;
+  background: linear-gradient(135deg, #9b8ab8 0%, #a5b8c5 100%);
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #fff;
+  cursor: pointer;
+  min-height: 36px;
+  transition: opacity 0.2s;
+}
+
+.thought-detail-reply-btn:hover {
+  opacity: 0.9;
+}
+
+/* Thought block wrapper for paragraph + reply button */
+.thought-block-wrapper {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.thought-block-wrapper .thought-detail-paragraph {
+  flex: 1;
+}
+
+.thought-block-reply-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  color: #888;
+  cursor: pointer;
+  min-height: 28px;
+  min-width: 28px;
+  transition: background 0.2s, color 0.2s;
+  opacity: 0;
+}
+
+.thought-block-wrapper:hover .thought-block-reply-btn {
+  opacity: 1;
+}
+
+.thought-block-reply-btn:hover {
+  background: #f5f5f5;
+  color: #666;
+}
+
+body.dark-mode .thought-block-reply-btn {
+  border-color: #444;
+  color: #777;
+}
+
+body.dark-mode .thought-block-reply-btn:hover {
+  background: #333;
+  color: #aaa;
+}
+
+/* Thought paragraph highlight when opened from chat */
+.thought-paragraph--highlight {
+  animation: highlight-pulse 2s ease-out;
+}
+
+@keyframes highlight-pulse {
+  0% { background: rgba(155, 138, 184, 0.4); }
+  100% { background: transparent; }
+}
+
+/* Thought detail edit and delete buttons */
+.thought-detail-edit-btn,
+.thought-detail-delete-btn {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 1rem;
+  cursor: pointer;
+  min-height: 36px;
+  min-width: 36px;
+  transition: background 0.2s;
+}
+
+.thought-detail-edit-btn:hover {
+  background: #f5f5f5;
+}
+
+.thought-detail-delete-btn:hover {
+  background: #fef2f2;
+}
+
+body.dark-mode .thought-detail-edit-btn,
+body.dark-mode .thought-detail-delete-btn {
+  border-color: #444;
+}
+
+body.dark-mode .thought-detail-edit-btn:hover {
+  background: #333;
+}
+
+body.dark-mode .thought-detail-delete-btn:hover {
+  background: #3d2020;
+}
+
+/* Thought delete confirmation */
+.thought-delete-confirm {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 16px 20px;
+  text-align: center;
+}
+
+.thought-delete-confirm p {
+  margin: 0 0 12px 0;
+  color: #333;
+}
+
+.thought-delete-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.thought-delete-cancel,
+.thought-delete-confirm-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  min-height: 40px;
+}
+
+.thought-delete-cancel {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  color: #333;
+}
+
+.thought-delete-confirm-btn {
+  background: #e53e3e;
+  border: none;
+  color: #fff;
+}
+
+.thought-delete-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+body.dark-mode .thought-delete-confirm {
+  background: #252525;
+  border-color: #444;
+}
+
+body.dark-mode .thought-delete-confirm p {
+  color: #e0e0e0;
+}
+
+body.dark-mode .thought-delete-cancel {
+  background: #333;
+  border-color: #444;
+  color: #e0e0e0;
+}
+
+/* Thought edited indicator */
+.thought-detail-edited {
+  color: #888;
+  font-size: 0.8rem;
+}
+
+/* Block not found notice */
+.thought-block-not-found {
+  background: #fef2f2;
+  color: #c53030;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+}
+
+body.dark-mode .thought-block-not-found {
+  background: #3d2020;
+  color: #f5a5a5;
+}
+
+/* Thought ref unavailable */
+.thought-ref-card.thought-ref-unavailable {
+  background: #f5f5f5;
+  border-left-color: #999;
+  cursor: default;
+}
+
+.thought-ref-card.thought-ref-unavailable .thought-ref-quote {
+  color: #888;
+  font-style: italic;
+}
+
+body.dark-mode .thought-ref-card.thought-ref-unavailable {
+  background: #252525;
+  border-left-color: #555;
+}
+
+body.dark-mode .thought-ref-card.thought-ref-unavailable .thought-ref-quote {
+  color: #777;
+}
+
+/* Unread thoughts badge */
+.thoughts-btn-badge {
+  position: relative;
+}
+
+.thoughts-unread-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #e53e3e;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* Thought unavailable notice */
+.thought-unavailable-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  flex: 1;
+}
+
+.thought-unavailable-icon {
+  font-size: 3rem;
+  opacity: 0.5;
+  margin-bottom: 16px;
+}
+
+.thought-unavailable-notice p {
+  color: #666;
+  margin: 0 0 16px 0;
+}
+
+.thought-unavailable-notice button {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.thought-unavailable-notice button:hover {
+  background: #e8e8e8;
+}
+
+body.dark-mode .thought-unavailable-notice p {
+  color: #aaa;
+}
+
+body.dark-mode .thought-unavailable-notice button {
+  background: #333;
+  border-color: #444;
+  color: #e0e0e0;
+}
+
+body.dark-mode .thought-unavailable-notice button:hover {
+  background: #3a3a3a;
 }
