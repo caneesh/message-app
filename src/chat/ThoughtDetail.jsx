@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getThoughtReadState, updateThoughtReadState, softDeleteThought } from '../services/thoughtService'
+import { getThoughtReadState, updateThoughtReadState, softDeleteThought, getThoughtReadReceipt } from '../services/thoughtService'
 import { calculateReadPercent, buildThoughtQuote, getThoughtPreview } from '../utils/thoughtUtils'
+import { db } from '../firebase/firebaseConfig'
+import { doc, getDoc } from 'firebase/firestore'
 
 const MOOD_EMOJI = {
   normal: '💭',
@@ -13,11 +15,26 @@ const MOOD_EMOJI = {
 const VISIBILITY_DELAY_MS = 500
 const DEBOUNCE_MS = 1500
 
+function getReaderStatusLabel(readPercent) {
+  if (readPercent === undefined || readPercent === null) {
+    return 'Not opened yet'
+  }
+  if (readPercent === 0) {
+    return 'Opened'
+  }
+  if (readPercent >= 100) {
+    return 'Finished reading'
+  }
+  return `Read ${Math.round(readPercent)}%`
+}
+
 function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought, highlightBlockId, onEdit, onDeleted }) {
   const [readBlockIds, setReadBlockIds] = useState(new Set())
   const [currentVisibleBlock, setCurrentVisibleBlock] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [readerReceipt, setReaderReceipt] = useState(null)
+  const [otherMemberUid, setOtherMemberUid] = useState(null)
   const blockRefs = useRef({})
   const visibilityTimers = useRef({})
   const saveTimeoutRef = useRef(null)
@@ -39,6 +56,36 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
 
     loadReadState()
   }, [thought?.id, currentUser?.uid, chatId])
+
+  useEffect(() => {
+    const fetchOtherMember = async () => {
+      if (!chatId || !currentUser?.uid) return
+      try {
+        const chatRef = doc(db, 'chats', chatId)
+        const chatSnap = await getDoc(chatRef)
+        if (chatSnap.exists()) {
+          const members = chatSnap.data().members || []
+          const other = members.find(uid => uid !== currentUser.uid)
+          setOtherMemberUid(other || null)
+        }
+      } catch (err) {
+        console.error('Error fetching chat members:', err)
+      }
+    }
+    fetchOtherMember()
+  }, [chatId, currentUser?.uid])
+
+  useEffect(() => {
+    if (!isAuthor || !otherMemberUid || !thought?.id || !chatId) return
+
+    const fetchReaderReceipt = async () => {
+      const result = await getThoughtReadReceipt(chatId, thought.id, otherMemberUid)
+      if (result.success && result.receipt) {
+        setReaderReceipt(result.receipt)
+      }
+    }
+    fetchReaderReceipt()
+  }, [isAuthor, otherMemberUid, thought?.id, chatId])
 
   useEffect(() => {
     if (highlightBlockId && blockRefs.current[highlightBlockId]) {
@@ -269,11 +316,21 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
           )}
 
           <div className="thought-detail-meta">
+            <span className="thought-detail-author">
+              {isAuthor ? 'You' : 'Friend'}
+            </span>
+            <span className="thought-detail-separator">·</span>
             <span className="thought-detail-date">{formatDate(thought.createdAt)}</span>
             {thought.updatedAt && thought.updatedAt !== thought.createdAt && (
               <span className="thought-detail-edited"> (edited)</span>
             )}
           </div>
+
+          {isAuthor && otherMemberUid && (
+            <div className="thought-detail-reader-status">
+              {getReaderStatusLabel(readerReceipt?.readPercent)}
+            </div>
+          )}
 
           {blockNotFound && (
             <div className="thought-block-not-found">

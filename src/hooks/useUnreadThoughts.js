@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { db } from '../firebase/firebaseConfig'
 import { collection, query, where, orderBy, limit, getDocs, doc, getDoc } from 'firebase/firestore'
+import { getThoughtReadStatus, isUnreadStatus } from '../utils/thoughtUnreadUtils'
 
 const MAX_THOUGHTS_CHECK = 20
 
@@ -33,27 +34,26 @@ export function useUnreadThoughts(chatId, userId) {
         let count = 0
 
         for (const thoughtDoc of snapshot.docs) {
-          const thought = thoughtDoc.data()
+          const thought = { id: thoughtDoc.id, ...thoughtDoc.data() }
 
           // Skip thoughts authored by the current user
           if (thought.authorId === userId) continue
 
           try {
-            const receiptRef = doc(db, 'chats', chatId, 'thoughtReadReceipts', thoughtDoc.id, 'readers', userId)
-            const receiptSnap = await getDoc(receiptRef)
+            // Check private read state for more accurate status
+            const readStateRef = doc(db, 'chats', chatId, 'thoughtReadState', userId, 'items', thoughtDoc.id)
+            const readStateSnap = await getDoc(readStateRef)
 
             if (cancelled) return
 
-            if (!receiptSnap.exists()) {
+            const readState = readStateSnap.exists() ? readStateSnap.data() : null
+            const status = getThoughtReadStatus(thought, readState, userId)
+
+            if (isUnreadStatus(status)) {
               count++
-            } else {
-              const readPercent = receiptSnap.data().readPercent
-              if (readPercent < 100) {
-                count++
-              }
             }
           } catch {
-            // If we can't read the receipt, count as unread
+            // If we can't read the state, count as unread
             count++
           }
         }

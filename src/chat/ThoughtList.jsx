@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { getThoughtPreview } from '../utils/thoughtUtils'
-import { getThoughtReadReceipt } from '../services/thoughtService'
-import { db, PRIVATE_CHAT_ID } from '../firebase/firebaseConfig'
+import { getThoughtReadStatus, getStatusLabel } from '../utils/thoughtUnreadUtils'
+import { getThoughtReadReceipt, getThoughtReadState } from '../services/thoughtService'
+import { db } from '../firebase/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore'
 
 const MOOD_EMOJI = {
@@ -12,7 +13,7 @@ const MOOD_EMOJI = {
   missing: '💫'
 }
 
-function getReadLabel(readPercent) {
+function getAuthorReadLabel(readPercent) {
   if (readPercent === undefined || readPercent === null) {
     return 'Not opened yet'
   }
@@ -27,6 +28,7 @@ function getReadLabel(readPercent) {
 
 function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, chatId }) {
   const [readReceipts, setReadReceipts] = useState({})
+  const [myReadStates, setMyReadStates] = useState({})
   const [otherMemberUid, setOtherMemberUid] = useState(null)
 
   useEffect(() => {
@@ -47,6 +49,7 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
     fetchOtherMember()
   }, [chatId, currentUser?.uid])
 
+  // Fetch read receipts for author's thoughts (to show reader progress)
   useEffect(() => {
     if (!otherMemberUid || !currentUser?.uid) return
 
@@ -65,6 +68,26 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
 
     fetchReceipts()
   }, [thoughts, currentUser?.uid, chatId, otherMemberUid])
+
+  // Fetch my read states for other's thoughts (to show my read progress)
+  useEffect(() => {
+    if (!currentUser?.uid || !chatId) return
+
+    const fetchMyReadStates = async () => {
+      const states = {}
+      for (const thought of thoughts) {
+        if (thought.authorId !== currentUser.uid) {
+          const result = await getThoughtReadState(chatId, currentUser.uid, thought.id)
+          if (result.success && result.readState) {
+            states[thought.id] = result.readState
+          }
+        }
+      }
+      setMyReadStates(states)
+    }
+
+    fetchMyReadStates()
+  }, [thoughts, currentUser?.uid, chatId])
 
   const formatDate = (timestamp) => {
     if (!timestamp) return ''
@@ -123,11 +146,26 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
             const moodEmoji = MOOD_EMOJI[thought.mood] || MOOD_EMOJI.normal
             const isAuthor = thought.authorId === currentUser?.uid
             const receipt = readReceipts[thought.id]
+            const myReadState = myReadStates[thought.id]
+
+            // Get read status for non-author thoughts
+            const readStatus = !isAuthor
+              ? getThoughtReadStatus(thought, myReadState, currentUser?.uid)
+              : 'own'
+            const statusLabel = !isAuthor
+              ? getStatusLabel(readStatus, myReadState?.readPercent)
+              : null
+
+            const cardClasses = [
+              'thought-card',
+              `thought-card--${thought.mood || 'normal'}`,
+              !isAuthor && readStatus !== 'read' && readStatus !== 'own' ? `thought-card--${readStatus}` : ''
+            ].filter(Boolean).join(' ')
 
             return (
               <div
                 key={thought.id}
-                className={`thought-card thought-card--${thought.mood || 'normal'}`}
+                className={cardClasses}
                 onClick={() => onSelect(thought)}
                 role="button"
                 tabIndex={0}
@@ -135,6 +173,11 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
               >
                 <div className="thought-card-header">
                   <span className="thought-card-mood">{moodEmoji}</span>
+                  {statusLabel && (
+                    <span className={`thought-status-label thought-status-label--${readStatus}`}>
+                      {statusLabel}
+                    </span>
+                  )}
                   <span className="thought-card-date">{formatDate(thought.createdAt)}</span>
                 </div>
 
@@ -146,7 +189,7 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
 
                 {isAuthor && otherMemberUid && (
                   <div className="thought-card-read-status">
-                    {getReadLabel(receipt?.readPercent)}
+                    {getAuthorReadLabel(receipt?.readPercent)}
                   </div>
                 )}
               </div>

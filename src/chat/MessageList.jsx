@@ -24,6 +24,7 @@ import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
 import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
 import { isImageContentType, isVideoContentType } from '../utils/messageExtractors'
 import { isEmojiOnlyMessage } from '../utils/emojiUtils'
+import ZoomableImagePreview from './ZoomableImagePreview'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -135,6 +136,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const [revealedMessages, setRevealedMessages] = useState({})
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [showScrollBottom, setShowScrollBottom] = useState(false)
+  const [imagePreview, setImagePreview] = useState(null)
   const {
     isDeletedForMe,
     deleteForMe,
@@ -1291,7 +1293,11 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                     </button>
                   </div>
                 ) : (
-                  <SecureFileContent chatId={chatId} file={message.file} />
+                  <SecureFileContent
+                    chatId={chatId}
+                    file={message.file}
+                    onImageClick={(url, fileName) => setImagePreview({ url, fileName, messageId: message.id })}
+                  />
                 )
               ) : isVoiceMessage ? (
                 <SecureVoiceContent chatId={chatId} voice={message.voice} />
@@ -1486,6 +1492,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
             </button>
           </div>
         </div>
+      )}
+
+      {imagePreview && (
+        <ZoomableImagePreview
+          imageUrl={imagePreview.url}
+          alt={imagePreview.fileName || 'Image preview'}
+          onClose={() => setImagePreview(null)}
+          showActions={false}
+        />
       )}
     </div>
   )

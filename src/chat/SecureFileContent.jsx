@@ -14,7 +14,7 @@ function isVideoType(contentType) {
   return ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'].includes(contentType)
 }
 
-function SecureFileContent({ chatId, file }) {
+function SecureFileContent({ chatId, file, onImageClick }) {
   // Use stored URL for old messages, secure URL for new ones
   const needsSecureUrl = !file?.url && file?.storagePath
   const { url: secureUrl, loading, error } = useSecureFileUrl(
@@ -37,10 +37,20 @@ function SecureFileContent({ chatId, file }) {
   }
 
   if (isImageType(file.contentType)) {
+    const handleClick = (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (onImageClick) {
+        onImageClick(fileUrl, file.fileName)
+      } else {
+        window.open(fileUrl, '_blank')
+      }
+    }
+
     return (
-      <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="file-image-link">
+      <div className="file-image-link" onClick={handleClick} role="button" tabIndex={0}>
         <img src={fileUrl} alt={file.fileName} className="file-image" />
-      </a>
+      </div>
     )
   }
 

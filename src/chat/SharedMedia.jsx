@@ -3,6 +3,7 @@ import { db } from '../firebase/firebaseConfig'
 import { collection, query, orderBy, limit, getDocs, startAfter, where } from 'firebase/firestore'
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
 import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
+import ZoomableImagePreview from './ZoomableImagePreview'
 import {
   extractLinksFromText,
   getDomainFromUrl,
@@ -282,9 +283,45 @@ function LinkItem({ message, link, onViewInChat, onDeleteForMe }) {
   )
 }
 
+function ZoomableImagePreviewWithUrl({ chatId, message, images, currentIndex, onNavigate, onClose, onViewInChat, onDeleteForMe }) {
+  const file = message?.file
+  const { url, loading, error } = useSecureFileUrl(chatId, file?.storagePath)
+
+  if (loading) {
+    return (
+      <div className="zoomable-preview-overlay">
+        <div className="zoomable-preview-loading">Loading...</div>
+      </div>
+    )
+  }
+
+  if (error || !url) {
+    return (
+      <div className="zoomable-preview-overlay" onClick={onClose}>
+        <div className="zoomable-preview-loading">Failed to load image</div>
+      </div>
+    )
+  }
+
+  return (
+    <ZoomableImagePreview
+      imageUrl={url}
+      alt={file?.fileName || 'Image preview'}
+      onClose={onClose}
+      onViewInChat={onViewInChat}
+      onDeleteForMe={onDeleteForMe}
+      showActions={true}
+      images={images}
+      currentIndex={currentIndex}
+      onNavigate={onNavigate}
+    />
+  )
+}
+
 function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
   const [activeTab, setActiveTab] = useState('media')
   const [previewMessage, setPreviewMessage] = useState(null)
+  const [previewIndex, setPreviewIndex] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
 
   // Separate state for each tab
@@ -640,15 +677,24 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
           ) : (
             <>
               <div className="media-grid">
-                {filteredItems.mediaItems.map(msg => (
-                  <MediaThumbnail
-                    key={msg.id}
-                    chatId={chatId}
-                    file={msg.file}
-                    onClick={() => setPreviewMessage(msg)}
-                    onDeleteForMe={() => handleDeleteForMe(msg)}
-                  />
-                ))}
+                {filteredItems.mediaItems.map((msg) => {
+                  const isImage = isImageContentType(msg.file?.contentType)
+                  const imageItems = filteredItems.mediaItems.filter(m => isImageContentType(m.file?.contentType))
+                  const imageIndex = isImage ? imageItems.findIndex(m => m.id === msg.id) : 0
+
+                  return (
+                    <MediaThumbnail
+                      key={msg.id}
+                      chatId={chatId}
+                      file={msg.file}
+                      onClick={() => {
+                        setPreviewMessage(msg)
+                        setPreviewIndex(imageIndex)
+                      }}
+                      onDeleteForMe={() => handleDeleteForMe(msg)}
+                    />
+                  )
+                })}
               </div>
               {mediaHasMore && (
                 <div className="shared-media-load-more">
@@ -766,13 +812,32 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
       </div>
 
       {previewMessage && (
-        <MediaPreviewModal
-          chatId={chatId}
-          message={previewMessage}
-          onClose={() => setPreviewMessage(null)}
-          onViewInChat={handleViewInChat}
-          onDeleteForMe={() => handleDeleteForMe(previewMessage)}
-        />
+        isVideoContentType(previewMessage.file?.contentType) ? (
+          <MediaPreviewModal
+            chatId={chatId}
+            message={previewMessage}
+            onClose={() => setPreviewMessage(null)}
+            onViewInChat={handleViewInChat}
+            onDeleteForMe={() => handleDeleteForMe(previewMessage)}
+          />
+        ) : (
+          <ZoomableImagePreviewWithUrl
+            chatId={chatId}
+            message={previewMessage}
+            images={filteredItems.mediaItems.filter(m => isImageContentType(m.file?.contentType))}
+            currentIndex={previewIndex}
+            onNavigate={(newIndex) => {
+              const imageItems = filteredItems.mediaItems.filter(m => isImageContentType(m.file?.contentType))
+              if (imageItems[newIndex]) {
+                setPreviewMessage(imageItems[newIndex])
+                setPreviewIndex(newIndex)
+              }
+            }}
+            onClose={() => setPreviewMessage(null)}
+            onViewInChat={() => handleViewInChat(previewMessage.id)}
+            onDeleteForMe={() => handleDeleteForMe(previewMessage)}
+          />
+        )
       )}
     </div>
   )
