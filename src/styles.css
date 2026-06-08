@@ -1835,6 +1835,33 @@ body.dark-mode .settings-select {
   min-width: 140px;
 }
 
+.export-subsection {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.export-subsection:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.export-subsection h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: #444;
+}
+
+body.dark-mode .export-subsection {
+  border-top-color: #333;
+}
+
+body.dark-mode .export-subsection h4 {
+  color: #ccc;
+}
+
 .settings-section.danger-zone {
   border-color: #dc3545;
   margin-top: 30px;
@@ -1975,6 +2002,88 @@ body.dark-mode .invite-code-display code {
 .invite-redeem {
   display: flex;
   gap: 10px;
+}
+
+/* Settings Modal */
+.settings-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.settings-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.settings-modal.wide {
+  max-width: 600px;
+}
+
+body.dark-mode .settings-modal {
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+.settings-modal h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+}
+
+.settings-modal p {
+  margin: 0 0 16px 0;
+  color: #555;
+  line-height: 1.5;
+}
+
+body.dark-mode .settings-modal p {
+  color: #aaa;
+}
+
+.settings-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* Thoughts Export */
+.thoughts-export-options {
+  margin-bottom: 16px;
+}
+
+.thoughts-export-options .settings-row {
+  margin-bottom: 12px;
+}
+
+.thoughts-export-fallback-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 13px;
+  resize: vertical;
+  background: #f8f8f8;
+}
+
+body.dark-mode .thoughts-export-fallback-textarea {
+  background: #252525;
+  border-color: #333;
+  color: #e0e0e0;
 }
 
 /* Devices */

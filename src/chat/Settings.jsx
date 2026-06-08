@@ -4,6 +4,14 @@ import { collection, doc, getDocs, setDoc, getDoc, deleteDoc, orderBy, query, se
 import { httpsCallable } from 'firebase/functions'
 import AiSettingsPanel from './AiSettingsPanel'
 import { createPinHash, verifyPin, isPinConfigured, clearPin, getPinCreatedAt } from '../utils/pinSecurity'
+import { listThoughtsForExport } from '../services/thoughtService'
+import {
+  buildThoughtsMarkdownExport,
+  buildThoughtsJsonExport,
+  downloadTextFile,
+  generateExportFilename,
+  supportsDownload
+} from '../utils/thoughtExportUtils'
 
 const AUTO_LOGOUT_OPTIONS = [
   { value: 2, label: '2 minutes' },
@@ -74,6 +82,15 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deletingAllMessages, setDeletingAllMessages] = useState(false)
   const [deleteAllProgress, setDeleteAllProgress] = useState('')
+
+  // Thoughts export state
+  const [thoughtsExportScope, setThoughtsExportScope] = useState('my_thoughts')
+  const [thoughtsExportFormat, setThoughtsExportFormat] = useState('markdown')
+  const [thoughtsExporting, setThoughtsExporting] = useState(false)
+  const [showThoughtsPrivacyConfirm, setShowThoughtsPrivacyConfirm] = useState(false)
+  const [showThoughtsFallback, setShowThoughtsFallback] = useState(false)
+  const [thoughtsFallbackContent, setThoughtsFallbackContent] = useState('')
+  const [thoughtsExportError, setThoughtsExportError] = useState('')
 
   useEffect(() => {
     if (currentUser) {
@@ -381,6 +398,74 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
     }
   }
 
+  const handleThoughtsExportClick = () => {
+    setThoughtsExportError('')
+    setShowThoughtsPrivacyConfirm(true)
+  }
+
+  const handleThoughtsExportConfirm = async () => {
+    setShowThoughtsPrivacyConfirm(false)
+    setThoughtsExporting(true)
+    setThoughtsExportError('')
+
+    try {
+      const result = await listThoughtsForExport(chatId, thoughtsExportScope, currentUser?.uid)
+
+      if (!result.success) {
+        setThoughtsExportError(result.error || 'Failed to load thoughts')
+        return
+      }
+
+      const thoughts = result.thoughts
+      const context = {
+        scope: thoughtsExportScope,
+        currentUserId: currentUser?.uid,
+        chatId
+      }
+
+      let content, mimeType, filename
+
+      if (thoughtsExportFormat === 'json') {
+        const jsonData = buildThoughtsJsonExport(thoughts, context)
+        content = JSON.stringify(jsonData, null, 2)
+        mimeType = 'application/json'
+        filename = generateExportFilename(thoughtsExportScope, 'json')
+      } else {
+        content = buildThoughtsMarkdownExport(thoughts, context)
+        mimeType = 'text/markdown'
+        filename = generateExportFilename(thoughtsExportScope, 'markdown')
+      }
+
+      if (!supportsDownload()) {
+        setThoughtsFallbackContent(content)
+        setShowThoughtsFallback(true)
+        return
+      }
+
+      const downloadResult = downloadTextFile(filename, content, mimeType)
+
+      if (downloadResult.fallbackNeeded) {
+        setThoughtsFallbackContent(content)
+        setShowThoughtsFallback(true)
+      }
+    } catch (err) {
+      console.error('Thoughts export error:', err)
+      setThoughtsExportError(err.message || 'Failed to export thoughts')
+    } finally {
+      setThoughtsExporting(false)
+    }
+  }
+
+  const handleCopyThoughtsExport = async () => {
+    try {
+      await navigator.clipboard.writeText(thoughtsFallbackContent)
+      alert('Copied to clipboard!')
+    } catch (err) {
+      console.error('Copy failed:', err)
+      alert('Failed to copy. Please select and copy manually.')
+    }
+  }
+
   return (
     <div className="settings-container">
       <h2
@@ -489,28 +574,147 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
 
       <AiSettingsPanel currentUser={currentUser} />
 
+      {/* Advanced Export - hidden until code 335042249 is entered */}
+      {/* TODO: Later combine into single export control with dropdown: Messages / Thoughts / Both */}
       {exportUnlocked && (
         <div className="settings-section">
-          <h3>Export Data</h3>
+          <h3>Advanced Export</h3>
           <p className="settings-note">
-            Download all your messages, notes, reminders, dates, and lists.
+            Export your private data. These exports may contain sensitive information - save only somewhere you trust.
           </p>
-          <div className="export-buttons">
-            <button className="settings-btn" onClick={handleExport} disabled={exporting}>
-              {exporting ? 'Exporting...' : 'Quick Export (JSON)'}
-            </button>
-            <button
-              className="settings-btn"
-              onClick={handleFullExport}
-              disabled={fullExporting || !chatId}
-              title="Includes deleted messages from backups"
-            >
-              {fullExporting ? 'Generating...' : 'Full Export (HTML)'}
-            </button>
+
+          {/* Messages Export */}
+          <div className="export-subsection">
+            <h4>Export Messages</h4>
+            <p className="settings-note">
+              Download all your messages, notes, reminders, dates, and lists.
+            </p>
+            <div className="export-buttons">
+              <button className="settings-btn" onClick={handleExport} disabled={exporting}>
+                {exporting ? 'Exporting...' : 'Quick Export (JSON)'}
+              </button>
+              <button
+                className="settings-btn"
+                onClick={handleFullExport}
+                disabled={fullExporting || !chatId}
+                title="Includes deleted messages from backups"
+              >
+                {fullExporting ? 'Generating...' : 'Full Export (HTML)'}
+              </button>
+            </div>
+            <p className="settings-note" style={{ marginTop: '8px', fontSize: '0.85em' }}>
+              Full Export includes deleted data from backups in a readable HTML format.
+            </p>
           </div>
-          <p className="settings-note" style={{ marginTop: '8px', fontSize: '0.85em' }}>
-            Full Export includes deleted data from backups in a readable HTML format.
-          </p>
+
+          {/* Thoughts Export */}
+          {chatId && (
+            <div className="export-subsection">
+              <h4>Export Thoughts</h4>
+              <p className="settings-note">
+                Export your thoughts to keep a personal copy.
+              </p>
+
+              {thoughtsExportError && (
+                <div className="settings-error">{thoughtsExportError}</div>
+              )}
+
+              <div className="thoughts-export-options">
+                <div className="settings-row">
+                  <label htmlFor="thoughts-export-scope">Include</label>
+                  <select
+                    id="thoughts-export-scope"
+                    className="settings-select"
+                    value={thoughtsExportScope}
+                    onChange={(e) => setThoughtsExportScope(e.target.value)}
+                    disabled={thoughtsExporting}
+                  >
+                    <option value="my_thoughts">My Thoughts</option>
+                    <option value="all_shared">All Shared Thoughts</option>
+                  </select>
+                </div>
+
+                <div className="settings-row">
+                  <label htmlFor="thoughts-export-format">Format</label>
+                  <select
+                    id="thoughts-export-format"
+                    className="settings-select"
+                    value={thoughtsExportFormat}
+                    onChange={(e) => setThoughtsExportFormat(e.target.value)}
+                    disabled={thoughtsExporting}
+                  >
+                    <option value="markdown">Markdown / Text</option>
+                    <option value="json">JSON</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                className="settings-btn"
+                onClick={handleThoughtsExportClick}
+                disabled={thoughtsExporting}
+              >
+                {thoughtsExporting ? 'Exporting...' : 'Download Thoughts'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Thoughts export modals - render outside conditional so they show when triggered */}
+      {showThoughtsPrivacyConfirm && (
+        <div className="settings-modal-overlay" onClick={() => setShowThoughtsPrivacyConfirm(false)}>
+          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Privacy Notice</h3>
+            <p>
+              This export may contain private conversation data. Save it only somewhere you trust.
+            </p>
+            <div className="settings-modal-actions">
+              <button
+                className="settings-btn secondary"
+                onClick={() => setShowThoughtsPrivacyConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="settings-btn"
+                onClick={handleThoughtsExportConfirm}
+              >
+                Continue Export
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showThoughtsFallback && (
+        <div className="settings-modal-overlay" onClick={() => setShowThoughtsFallback(false)}>
+          <div className="settings-modal wide" onClick={(e) => e.stopPropagation()}>
+            <h3>Export Content</h3>
+            <p className="settings-note">
+              Download is not supported on this device. You can copy the export instead.
+            </p>
+            <textarea
+              className="thoughts-export-fallback-textarea"
+              value={thoughtsFallbackContent}
+              readOnly
+              rows={12}
+            />
+            <div className="settings-modal-actions">
+              <button
+                className="settings-btn secondary"
+                onClick={() => setShowThoughtsFallback(false)}
+              >
+                Close
+              </button>
+              <button
+                className="settings-btn"
+                onClick={handleCopyThoughtsExport}
+              >
+                Copy to Clipboard
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

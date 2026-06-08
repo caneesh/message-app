@@ -366,6 +366,59 @@ export async function getThoughtReadReceipt(chatId, thoughtId, readerId) {
   }
 }
 
+/**
+ * List thoughts for export
+ * @param {string} chatId - The chat ID
+ * @param {string} scope - 'my_thoughts' | 'all_shared'
+ * @param {string} currentUserId - The current user's ID
+ * @returns {Object} - { success, thoughts, error }
+ */
+export async function listThoughtsForExport(chatId, scope, currentUserId) {
+  if (!chatId || !currentUserId) {
+    return { success: false, error: 'Missing chatId or userId', thoughts: [] }
+  }
+
+  if (!['my_thoughts', 'all_shared'].includes(scope)) {
+    return { success: false, error: 'Invalid scope', thoughts: [] }
+  }
+
+  try {
+    const thoughtsRef = collection(db, 'chats', chatId, 'thoughts')
+    let q
+
+    if (scope === 'my_thoughts') {
+      q = query(
+        thoughtsRef,
+        where('status', '==', 'shared'),
+        where('authorId', '==', currentUserId),
+        orderBy('createdAt', 'asc')
+      )
+    } else {
+      q = query(
+        thoughtsRef,
+        where('status', '==', 'shared'),
+        orderBy('createdAt', 'asc')
+      )
+    }
+
+    const snapshot = await getDocs(q)
+    const thoughts = snapshot.docs.map(doc => ({
+      id: doc.id,
+      authorId: doc.data().authorId,
+      title: doc.data().title || '',
+      body: doc.data().body || '',
+      mood: doc.data().mood || 'normal',
+      createdAt: doc.data().createdAt,
+      updatedAt: doc.data().updatedAt
+    }))
+
+    return { success: true, thoughts }
+  } catch (error) {
+    console.error('Error listing thoughts for export:', error)
+    return { success: false, error: error.message || 'Failed to list thoughts', thoughts: [] }
+  }
+}
+
 export default {
   createThought,
   listThoughts,
@@ -374,5 +427,6 @@ export default {
   softDeleteThought,
   getThoughtReadState,
   updateThoughtReadState,
-  getThoughtReadReceipt
+  getThoughtReadReceipt,
+  listThoughtsForExport
 }
