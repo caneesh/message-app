@@ -50,21 +50,15 @@ service cloud.firestore {
           && 'editedAt' in incoming;
     }
 
-    // Helper: Validate transcription request (chat member can request)
+    // Helper: Validate transcription request (chat member can request or mark failed)
     function isValidTranscriptionRequest() {
       let existing = resource.data;
       let incoming = request.resource.data;
       let changedKeys = incoming.diff(existing).affectedKeys();
+      // Allow setting to pending (new request) or failed (error recovery)
       return existing.type == 'voice'
-          && changedKeys.hasOnly(['transcriptionStatus', 'transcriptRequestedBy', 'transcriptUpdatedAt'])
-          && incoming.transcriptionStatus == 'pending'
-          && incoming.transcriptRequestedBy == request.auth.uid
-          && incoming.senderId == existing.senderId
-          && incoming.senderPhone == existing.senderPhone
-          && incoming.type == existing.type
-          && incoming.createdAt == existing.createdAt
-          && incoming.voice == existing.voice
-          && incoming.text == existing.text;
+          && changedKeys.hasOnly(['transcriptionStatus', 'transcriptRequestedBy', 'transcriptUpdatedAt', 'transcriptErrorCode'])
+          && incoming.transcriptionStatus in ['pending', 'failed'];
     }
 
     // Helper: Validate base message fields

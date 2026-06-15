@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { db } from '../firebase/firebaseConfig'
-import { collection, query, orderBy, limit, getDocs, startAfter, where } from 'firebase/firestore'
+import { collection, query, orderBy, limit, getDocs, startAfter, where, onSnapshot } from 'firebase/firestore'
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
 import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
 import ZoomableImagePreview from './ZoomableImagePreview'
+import VoiceNoteTranscript from './VoiceNoteTranscript'
+import { requestTranscription } from '../services/transcriptionService'
 import {
   extractLinksFromText,
   getDomainFromUrl,
@@ -129,9 +131,10 @@ function MediaPreviewModal({ chatId, message, onClose, onViewInChat, onDeleteFor
   )
 }
 
-function VoiceNoteItem({ chatId, message, onViewInChat, onDeleteForMe }) {
+function VoiceNoteItem({ chatId, message, currentUser, onViewInChat, onDeleteForMe, onTranscriptionUpdate }) {
   const voice = message?.voice
   const { url, loading, error } = useSecureFileUrl(chatId, voice?.storagePath)
+  const [isRequesting, setIsRequesting] = useState(false)
 
   const formatDate = (timestamp) => {
     if (!timestamp) return ''
@@ -148,9 +151,53 @@ function VoiceNoteItem({ chatId, message, onViewInChat, onDeleteForMe }) {
     }
   }
 
+  const handleTranscribe = async () => {
+    if (!chatId || !message?.id || !currentUser?.uid) return
+    if (isRequesting || message.transcriptionStatus === 'pending') return
+
+    setIsRequesting(true)
+    try {
+      const result = await requestTranscription(chatId, message.id, currentUser.uid)
+      if (result.success && onTranscriptionUpdate) {
+        onTranscriptionUpdate(message.id, 'pending')
+      }
+    } catch (err) {
+      console.error('Transcription request failed:', err)
+    } finally {
+      setIsRequesting(false)
+    }
+  }
+
+  const canTranscribe = message?.id && currentUser?.uid && (
+    !message.transcriptionStatus ||
+    message.transcriptionStatus === 'none' ||
+    message.transcriptionStatus === 'failed'
+  )
+
+  const showTranscript = message.transcriptionStatus === 'completed' ||
+    message.transcriptionStatus === 'pending' ||
+    message.transcriptionStatus === 'failed' ||
+    isRequesting
+
+  const senderDisplay = message.senderId === currentUser?.uid ? 'You' : (message.senderPhone || 'Friend')
+
   return (
     <div className="shared-voice-item">
-      <div className="shared-voice-icon">🎤</div>
+      <div className="shared-voice-header">
+        <div className="shared-voice-icon">🎤</div>
+        <div className="shared-voice-meta">
+          <span className="shared-item-sender">{senderDisplay}</span>
+          <span className="shared-item-date">{formatDate(message.createdAt)}</span>
+        </div>
+        <div className="shared-item-actions">
+          <button className="shared-item-view-btn" onClick={() => onViewInChat(message.id)}>
+            View
+          </button>
+          <button className="shared-item-delete-btn" onClick={onDeleteForMe}>
+            🙈
+          </button>
+        </div>
+      </div>
       <div className="shared-voice-content">
         <div className="shared-voice-duration">{formatDuration(voice?.durationSeconds)}</div>
         {loading ? (
@@ -161,19 +208,25 @@ function VoiceNoteItem({ chatId, message, onViewInChat, onDeleteForMe }) {
           <audio src={url} controls preload="metadata" className="shared-voice-player" />
         )}
       </div>
-      <div className="shared-voice-meta">
-        <span className="shared-item-sender">
-          {message.senderPhone || 'Unknown'}
-        </span>
-        <span className="shared-item-date">{formatDate(message.createdAt)}</span>
-      </div>
-      <div className="shared-item-actions">
-        <button className="shared-item-view-btn" onClick={() => onViewInChat(message.id)}>
-          View
-        </button>
-        <button className="shared-item-delete-btn" onClick={onDeleteForMe}>
-          🙈
-        </button>
+      <div className="shared-voice-transcript">
+        {showTranscript ? (
+          <VoiceNoteTranscript
+            transcriptText={message.transcriptText}
+            status={message.transcriptionStatus}
+            errorCode={message.transcriptErrorCode}
+            onRetry={handleTranscribe}
+            isRequesting={isRequesting}
+          />
+        ) : canTranscribe && (
+          <button
+            className="shared-voice-transcribe-btn"
+            onClick={handleTranscribe}
+            type="button"
+            disabled={isRequesting}
+          >
+            Transcribe
+          </button>
+        )}
       </div>
     </div>
   )
@@ -383,6 +436,14 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
     await deleteForMe(message.id, 'voice')
   }, [deleteForMe])
 
+  const handleTranscriptionUpdate = useCallback((messageId, status) => {
+    setVoiceItems(prev => prev.map(msg =>
+      msg.id === messageId
+        ? { ...msg, transcriptionStatus: status }
+        : msg
+    ))
+  }, [])
+
   // Load media (photos & videos) - type 'file' or 'video'
   const loadMedia = useCallback(async (isInitial = true) => {
     if (!chatId) return
@@ -556,6 +617,39 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
       loadTextAndDocs(true)
     }
   }, [activeTab, chatId])
+
+  // Subscribe to voice items for real-time transcription updates
+  const hasVoiceItems = voiceItems.length > 0
+  useEffect(() => {
+    if (activeTab !== 'voice' || !chatId || !hasVoiceItems) return
+
+    const messagesRef = collection(db, 'chats', chatId, 'messages')
+    const q = query(
+      messagesRef,
+      where('type', '==', 'voice'),
+      orderBy('createdAt', 'desc'),
+      limit(MEDIA_BATCH_SIZE)
+    )
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const updatedItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      setVoiceItems(prev => {
+        const prevMap = new Map(prev.map(item => [item.id, item]))
+        updatedItems.forEach(item => {
+          prevMap.set(item.id, item)
+        })
+        return Array.from(prevMap.values()).sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0
+          const bTime = b.createdAt?.toMillis?.() || 0
+          return bTime - aTime
+        })
+      })
+    }, (err) => {
+      console.error('Error subscribing to voice items:', err)
+    })
+
+    return () => unsubscribe()
+  }, [activeTab, chatId, hasVoiceItems])
 
   // Initial load for media tab
   useEffect(() => {
@@ -790,8 +884,10 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
                     key={msg.id}
                     chatId={chatId}
                     message={msg}
+                    currentUser={currentUser}
                     onViewInChat={handleViewInChat}
                     onDeleteForMe={() => handleDeleteVoiceForMe(msg)}
+                    onTranscriptionUpdate={handleTranscriptionUpdate}
                   />
                 ))}
               </div>
