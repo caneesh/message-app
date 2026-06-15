@@ -28,7 +28,9 @@ import LoveHeatMap from './LoveHeatMap'
 import MessageCalendar from './MessageCalendar'
 import SharedMedia from './SharedMedia'
 import ThoughtsPage from './ThoughtsPage'
+import PanicLogoutButton from '../components/PanicLogoutButton'
 import { useUnreadThoughts } from '../hooks/useUnreadThoughts'
+import { useUnreadComments } from '../hooks/useUnreadComments'
 
 const STALE_TYPING_MS = 5000
 
@@ -96,6 +98,8 @@ function ChatPage() {
   const isLocked = pinLocked
 
   const { unreadCount: unreadThoughts } = useUnreadThoughts(PRIVATE_CHAT_ID, currentUser?.uid)
+  const { unreadCount: unreadComments } = useUnreadComments(PRIVATE_CHAT_ID, currentUser?.uid)
+  const totalThoughtsBadge = unreadThoughts + unreadComments
 
   const getDeviceLabel = () => {
     const ua = navigator.userAgent
@@ -271,14 +275,14 @@ function ChatPage() {
             )}
             <div className="chat-toolbar">
               <button
-                className={`thoughts-btn ${unreadThoughts > 0 ? 'thoughts-btn-badge' : ''}`}
+                className={`thoughts-btn ${totalThoughtsBadge > 0 ? 'thoughts-btn-badge' : ''}`}
                 onClick={() => setShowThoughts(true)}
                 title="Thoughts"
               >
                 💭
-                {unreadThoughts > 0 && (
+                {totalThoughtsBadge > 0 && (
                   <span className="thoughts-unread-badge">
-                    {unreadThoughts > 9 ? '9+' : unreadThoughts}
+                    {totalThoughtsBadge > 9 ? '9+' : totalThoughtsBadge}
                   </span>
                 )}
               </button>
@@ -412,21 +416,24 @@ function ChatPage() {
   }
 
   return (
-    <AppShell
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      darkMode={darkMode}
-      onToggleDarkMode={toggleDarkMode}
-      notificationsEnabled={notificationsEnabled}
-      onToggleNotifications={handleToggleNotifications}
-      notificationStatus={notificationStatus}
-      showNotificationBtn={!!VAPID_KEY}
-      onLogout={logout}
-      searchQuery={searchQuery}
-      onSearchChange={setSearchQuery}
-    >
-      {renderContent()}
-    </AppShell>
+    <>
+      <PanicLogoutButton />
+      <AppShell
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        darkMode={darkMode}
+        onToggleDarkMode={toggleDarkMode}
+        notificationsEnabled={notificationsEnabled}
+        onToggleNotifications={handleToggleNotifications}
+        notificationStatus={notificationStatus}
+        showNotificationBtn={!!VAPID_KEY}
+        onLogout={logout}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+      >
+        {renderContent()}
+      </AppShell>
+    </>
   )
 }
 

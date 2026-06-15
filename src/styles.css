@@ -1585,6 +1585,72 @@ body.dark-mode .no-items {
   color: #666;
 }
 
+/* Panic Logout Button */
+.panic-logout-btn {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: rgba(120, 120, 120, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(100, 100, 100, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+  outline: none;
+}
+
+.panic-logout-btn:hover,
+.panic-logout-btn:focus {
+  background: rgba(100, 100, 100, 0.5);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.panic-logout-btn:focus-visible {
+  outline: 2px solid rgba(80, 80, 80, 0.6);
+  outline-offset: 2px;
+}
+
+.panic-logout-btn:active {
+  transform: translate(-50%, -50%) scale(0.92);
+  background: rgba(80, 80, 80, 0.6);
+}
+
+.panic-logout-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.panic-logout-icon {
+  font-size: 1.4rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .panic-logout-btn {
+  background: rgba(180, 180, 180, 0.25);
+  border-color: rgba(200, 200, 200, 0.2);
+}
+
+body.dark-mode .panic-logout-btn:hover,
+body.dark-mode .panic-logout-btn:focus {
+  background: rgba(200, 200, 200, 0.35);
+}
+
+body.dark-mode .panic-logout-icon {
+  color: rgba(255, 255, 255, 0.85);
+}
+
 /* Lock Screen */
 .lock-screen {
   display: flex;
@@ -2637,6 +2703,350 @@ body.dark-mode .message--emoji-only {
   color: #999;
   padding: 40px 20px;
   margin: auto;
+}
+
+/* Selection Mode */
+.message-list.selection-mode {
+  padding-top: 60px;
+}
+
+.selection-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: #1976d2;
+  color: white;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.selection-bar-cancel {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 8px;
+  line-height: 1;
+}
+
+.selection-bar-count {
+  flex: 1;
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.selection-bar-delete {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.selection-bar-delete:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.selection-bar-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.message-checkbox {
+  position: absolute;
+  left: -36px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.message-checkbox input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.message-checkbox-mark {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #1976d2;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.message-checkbox input:checked + .message-checkbox-mark {
+  background: #1976d2;
+}
+
+.message-checkbox input:checked + .message-checkbox-mark::after {
+  content: '✓';
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.message.selected {
+  background-color: rgba(25, 118, 210, 0.08) !important;
+}
+
+.message.selected.own {
+  background-color: rgba(25, 118, 210, 0.12) !important;
+}
+
+.selection-mode .message {
+  cursor: pointer;
+  margin-left: 40px;
+}
+
+/* Bulk Delete Modal */
+.bulk-delete-modal {
+  max-width: 360px;
+  padding: 24px;
+}
+
+.bulk-delete-modal .modal-title {
+  margin: 0 0 8px 0;
+  font-size: 1.2rem;
+}
+
+.bulk-delete-modal .modal-body {
+  margin: 0 0 20px 0;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.bulk-delete-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.bulk-delete-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.bulk-delete-option:hover:not(:disabled) {
+  border-color: #1976d2;
+  background: #f5f9ff;
+}
+
+.bulk-delete-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bulk-delete-option-danger {
+  border-color: #ffcdd2;
+}
+
+.bulk-delete-option-danger:hover:not(:disabled) {
+  border-color: #f44336;
+  background: #fff5f5;
+}
+
+.bulk-delete-option-icon {
+  font-size: 1.5rem;
+}
+
+.bulk-delete-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bulk-delete-option-text strong {
+  font-size: 0.95rem;
+}
+
+.bulk-delete-option-text small {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.bulk-delete-progress {
+  text-align: center;
+  color: #666;
+  padding: 8px 0;
+  font-size: 0.9rem;
+}
+
+.modal-cancel-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  background: #f5f5f5;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #333;
+  transition: background 0.15s;
+}
+
+.modal-cancel-btn:hover:not(:disabled) {
+  background: #e8e8e8;
+}
+
+.modal-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Deleted message placeholder */
+.deleted-message-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  gap: 8px;
+}
+
+.deleted-message-icon {
+  font-size: 1.5rem;
+  opacity: 0.6;
+}
+
+.deleted-message-text {
+  font-size: 0.9rem;
+  color: #888;
+  font-style: italic;
+}
+
+.deleted-message-undo {
+  background: none;
+  border: none;
+  color: #1976d2;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  text-decoration: underline;
+}
+
+.deleted-message-undo:hover {
+  color: #1565c0;
+}
+
+body.dark-mode .deleted-message-placeholder {
+  background: #333;
+}
+
+body.dark-mode .deleted-message-text {
+  color: #999;
+}
+
+body.dark-mode .deleted-message-undo {
+  color: #64b5f6;
+}
+
+/* Dark mode selection styles */
+body.dark-mode .selection-bar {
+  background: #1565c0;
+}
+
+body.dark-mode .message-checkbox-mark {
+  background: #1e1e1e;
+  border-color: #64b5f6;
+}
+
+body.dark-mode .message-checkbox input:checked + .message-checkbox-mark {
+  background: #1976d2;
+}
+
+body.dark-mode .message.selected {
+  background-color: rgba(100, 181, 246, 0.15) !important;
+}
+
+body.dark-mode .bulk-delete-modal {
+  background: #2a2a2a;
+}
+
+body.dark-mode .bulk-delete-modal .modal-title {
+  color: #e0e0e0;
+}
+
+body.dark-mode .bulk-delete-modal .modal-body {
+  color: #aaa;
+}
+
+body.dark-mode .bulk-delete-option {
+  background: #333;
+  border-color: #444;
+}
+
+body.dark-mode .bulk-delete-option:hover:not(:disabled) {
+  border-color: #64b5f6;
+  background: #3a4a5a;
+}
+
+body.dark-mode .bulk-delete-option-danger {
+  border-color: #5a3a3a;
+}
+
+body.dark-mode .bulk-delete-option-danger:hover:not(:disabled) {
+  border-color: #f44336;
+  background: #4a3030;
+}
+
+body.dark-mode .bulk-delete-option-text strong {
+  color: #e0e0e0;
+}
+
+body.dark-mode .modal-cancel-btn {
+  background: #333;
+  color: #e0e0e0;
+}
+
+body.dark-mode .modal-cancel-btn:hover:not(:disabled) {
+  background: #404040;
+}
+
+/* Mobile selection adjustments */
+@media (max-width: 600px) {
+  .message-checkbox {
+    left: -32px;
+  }
+
+  .message-checkbox-mark {
+    width: 22px;
+    height: 22px;
+  }
+
+  .selection-mode .message {
+    margin-left: 36px;
+  }
+
+  .bulk-delete-modal {
+    margin: 20px;
+    max-width: none;
+  }
 }
 
 /* Message Input Wrapper */
