@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { verifyPin } from '../utils/pinSecurity'
+
+const MAX_PIN_ATTEMPTS = 5
 
 function LockScreen({ onUnlock, requirePin = false }) {
   const { logout } = useAuth()
@@ -8,6 +10,23 @@ function LockScreen({ onUnlock, requirePin = false }) {
   const [error, setError] = useState('')
   const [loggingOut, setLoggingOut] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  const [attempts, setAttempts] = useState(0)
+
+  const handleEmergencyLogout = useCallback(async () => {
+    setLoggingOut(true)
+    try {
+      // Clear all sensitive local state
+      localStorage.removeItem('appLocked')
+      localStorage.removeItem('lockTimestamp')
+      localStorage.removeItem('appPinEnabled')
+      sessionStorage.clear()
+      await logout()
+    } catch (err) {
+      console.error('Emergency logout error:', err)
+      // Force reload to clear state even if logout fails
+      window.location.reload()
+    }
+  }, [logout])
 
   const handleUnlock = async (e) => {
     e?.preventDefault()
@@ -21,9 +40,20 @@ function LockScreen({ onUnlock, requirePin = false }) {
         const isValid = await verifyPin(pin)
         if (isValid) {
           localStorage.setItem('appLocked', 'false')
+          setAttempts(0)
           onUnlock()
         } else {
-          setError('Incorrect PIN')
+          const newAttempts = attempts + 1
+          setAttempts(newAttempts)
+
+          if (newAttempts >= MAX_PIN_ATTEMPTS) {
+            setError('Too many failed attempts')
+            // Emergency logout after max attempts
+            await handleEmergencyLogout()
+          } else {
+            const remaining = MAX_PIN_ATTEMPTS - newAttempts
+            setError(`Incorrect PIN (${remaining} ${remaining === 1 ? 'attempt' : 'attempts'} left)`)
+          }
           setPin('')
         }
       } catch (err) {
