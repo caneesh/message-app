@@ -28,11 +28,14 @@ More than just a chat app - this is a complete private space for couples, close 
 - Pin important messages
 - Typing indicators
 - Read receipts
-- Photo and file sharing (up to 5MB)
-- Voice notes (up to 60 seconds)
+- Photo and file sharing (up to 5MB for images, 100MB for videos)
+- Photo zoom with pinch-to-zoom and double-tap
+- Voice notes (up to 60 seconds) with automatic transcription (Whisper API)
 - Quick status buttons (Reached safely, On the way, Call me, etc.)
 - Search messages
+- Message calendar for browsing by date
 - Love-style messages: Messages with heart emojis display with a soft pink background and heart watermark
+- Large emoji-only messages display at 3x size
 
 ### Dashboard
 - Today's overview at a glance
@@ -79,6 +82,56 @@ More than just a chat app - this is a complete private space for couples, close 
 - See how your partner is feeling
 - Optional notes
 
+### Thoughts
+- Long-form journaling and notes
+- Block-based editor with text and image blocks
+- Draft system for work-in-progress thoughts
+- Comments with reactions
+- Share or keep private
+- Export thoughts alongside messages
+- Removal requests with mutual consent
+
+### Shared Media
+- Browse all shared photos, videos, links, documents, and voice notes
+- Filter by media type
+- Quick access to media from chat history
+- Delete media for yourself
+
+### Hidden Media
+- Hide sensitive photos/videos from the main chat
+- PIN-protected access
+- Unhide or permanently delete
+
+### Care Mode
+- Quick access dashboard for important information
+- Today's check-ins
+- Urgent reminders
+- Upcoming events
+- Emergency vault items
+- One-tap "I need help" message
+
+### Capsules
+- Group related items together (like mini-projects)
+- Color-coded organization
+- Link reminders, decisions, and other items to capsules
+
+### Promises
+- Track commitments to each other
+- Assign owner and due date
+- Status tracking (pending, done, cancelled)
+- Link to source messages
+
+### Follow-ups
+- Schedule gentle reminder messages
+- Pre-written caring message templates
+- Track what needs follow-up
+
+### Misunderstandings
+- Record and resolve communication mishaps
+- Structure: What I meant / What I heard / What I need
+- AI-assisted suggestions for resolution
+- Response tracking
+
 ### Love Heat Map
 - Visual calendar showing warm moments over time
 - Detects heart emojis, love phrases, and reactions
@@ -87,13 +140,20 @@ More than just a chat app - this is a complete private space for couples, close 
 - Date range selector (30/90 days, this year)
 - Soft pink/red color palette
 
+### Important Dates
+- Track birthdays, anniversaries, and special occasions
+- Annual reminders
+
 ### Other Features
 - Dark mode
 - Push notifications
 - Device management
 - PIN lock screen
+- Auto-logout on inactivity (configurable)
 - Auto-delete old messages (configurable)
 - Convert messages to reminders/decisions/memories
+- Export messages and thoughts to JSON
+- Simple mode (hide advanced features)
 
 ## Project Structure
 
@@ -102,23 +162,36 @@ src/
   firebase/       # Firebase configuration
   auth/           # Authentication components
   chat/           # Chat and feature components
-    ChatPage.jsx
-    MessageList.jsx
-    MessageInput.jsx
-    VoiceRecorder.jsx
-    Dashboard.jsx
-    Reminders.jsx
-    Decisions.jsx
-    Vault.jsx
-    Memories.jsx
-    Events.jsx
-    Lists.jsx
-    Notes.jsx
-    CheckIn.jsx
-    LoveHeatMap.jsx
-    Settings.jsx
-    Devices.jsx
+    ChatPage.jsx         # Main chat interface
+    MessageList.jsx      # Message display with reactions, replies
+    MessageInput.jsx     # Text, photo, voice input
+    VoiceRecorder.jsx    # Voice note recording
+    ThoughtsPage.jsx     # Long-form journaling
+    ThoughtComposer.jsx  # Block-based thought editor
+    Dashboard.jsx        # Today's overview
+    Reminders.jsx        # Shared reminders
+    Decisions.jsx        # Decision tracking
+    Vault.jsx            # Important information storage
+    Memories.jsx         # Save meaningful moments
+    Events.jsx           # Calendar events
+    Lists.jsx            # Shared lists
+    Notes.jsx            # Quick notes
+    CheckIn.jsx          # Daily mood check-in
+    LoveHeatMap.jsx      # Warmth visualization
+    SharedMedia.jsx      # Media browser
+    HiddenMedia.jsx      # PIN-protected hidden media
+    CareMode.jsx         # Emergency quick access
+    Capsules.jsx         # Grouped items
+    Promises.jsx         # Commitment tracking
+    FollowUps.jsx        # Gentle reminder scheduling
+    Misunderstandings.jsx # Conflict resolution
+    Settings.jsx         # App settings
+    Devices.jsx          # Device management
   components/     # Shared components (Sidebar, icons, etc.)
+  hooks/          # Custom React hooks
+  services/       # Firebase service functions
+  utils/          # Utility functions
+  config/         # App configuration
   layout/         # Layout components
   App.jsx         # Main app component
   main.jsx        # Entry point
@@ -316,6 +389,7 @@ The app includes these Cloud Functions:
 | `cleanupOldMessages` | Auto-delete old messages (runs daily) |
 | `createInvite` | Generate invite codes |
 | `redeemInvite` | Redeem invite codes |
+| `transcribeVoiceNote` | Transcribe voice notes using OpenAI Whisper API |
 
 ## Troubleshooting
 
@@ -330,7 +404,7 @@ The app includes these Cloud Functions:
 3. Verify browser notification permissions
 
 ### File upload fails
-1. Check file size (max 5MB)
+1. Check file size (max 5MB for images, 100MB for videos)
 2. Verify file type is allowed
 3. Deploy storage rules: `firebase deploy --only storage`
 
@@ -338,6 +412,11 @@ The app includes these Cloud Functions:
 1. Check function logs: `firebase functions:log`
 2. Verify Node.js version is 20 in `functions/package.json`
 3. Redeploy: `firebase deploy --only functions`
+
+### Voice transcription not working
+1. Ensure OpenAI API key is configured in Firebase Functions secrets
+2. Check that the voice note was recorded successfully
+3. Review function logs for transcription errors
 
 ## Known Limitations
 
