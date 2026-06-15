@@ -1300,7 +1300,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                   />
                 )
               ) : isVoiceMessage ? (
-                <SecureVoiceContent chatId={chatId} voice={message.voice} />
+                <SecureVoiceContent
+                  chatId={chatId}
+                  voice={message.voice}
+                  messageId={message.id}
+                  transcriptionStatus={message.transcriptionStatus}
+                  transcriptText={message.transcriptText}
+                  transcriptErrorCode={message.transcriptErrorCode}
+                  currentUserId={currentUser?.uid}
+                />
               ) : editingId === message.id ? (
                 <div className="edit-container">
                   <input

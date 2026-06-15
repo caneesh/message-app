@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
+import VoiceNoteTranscript from './VoiceNoteTranscript'
+import { requestTranscription } from '../services/transcriptionService'
 
 const isDev = import.meta.env.DEV
 
@@ -35,10 +37,19 @@ function isFormatSupported(contentType) {
   return true
 }
 
-function SecureVoiceContent({ chatId, voice }) {
+function SecureVoiceContent({
+  chatId,
+  voice,
+  messageId,
+  transcriptionStatus,
+  transcriptText,
+  transcriptErrorCode,
+  currentUserId
+}) {
   const audioRef = useRef(null)
   const [playError, setPlayError] = useState(false)
   const [errorDetails, setErrorDetails] = useState(null)
+  const [isRequesting, setIsRequesting] = useState(false)
 
   // Use stored URL for old messages, secure URL for new ones
   const needsSecureUrl = !voice?.url && voice?.storagePath
@@ -82,6 +93,31 @@ function SecureVoiceContent({ chatId, voice }) {
     setErrorDetails(errorInfo)
     setPlayError(true)
   }
+
+  const handleTranscribe = async () => {
+    if (!chatId || !messageId || !currentUserId) return
+    if (isRequesting || transcriptionStatus === 'pending') return
+
+    setIsRequesting(true)
+    try {
+      await requestTranscription(chatId, messageId, currentUserId)
+    } catch (err) {
+      console.error('Transcription request failed:', err)
+    } finally {
+      setIsRequesting(false)
+    }
+  }
+
+  const canTranscribe = messageId && currentUserId && (
+    !transcriptionStatus ||
+    transcriptionStatus === 'none' ||
+    transcriptionStatus === 'failed'
+  )
+
+  const showTranscript = transcriptionStatus === 'completed' ||
+    transcriptionStatus === 'pending' ||
+    transcriptionStatus === 'failed' ||
+    isRequesting
 
   if (!voice?.storagePath && !voice?.url) {
     return <div className="voice-loading">Voice note not available</div>
@@ -135,18 +171,39 @@ function SecureVoiceContent({ chatId, voice }) {
   }
 
   return (
-    <div className="voice-message">
-      <span className="voice-icon" aria-hidden="true">🎤</span>
-      <audio
-        ref={audioRef}
-        src={audioUrl}
-        controls
-        className="voice-audio-player"
-        preload="metadata"
-        playsInline
-        onError={handleError}
-      />
-      <span className="voice-duration">{formatVoiceDuration(voice.durationSeconds)}</span>
+    <div className="voice-message-container">
+      <div className="voice-message">
+        <span className="voice-icon" aria-hidden="true">🎤</span>
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          controls
+          className="voice-audio-player"
+          preload="metadata"
+          playsInline
+          onError={handleError}
+        />
+        <span className="voice-duration">{formatVoiceDuration(voice.durationSeconds)}</span>
+      </div>
+
+      {showTranscript ? (
+        <VoiceNoteTranscript
+          transcriptText={transcriptText}
+          status={transcriptionStatus}
+          errorCode={transcriptErrorCode}
+          onRetry={handleTranscribe}
+          isRequesting={isRequesting}
+        />
+      ) : canTranscribe && (
+        <button
+          className="voice-transcribe-btn"
+          onClick={handleTranscribe}
+          type="button"
+          disabled={isRequesting}
+        >
+          Transcribe
+        </button>
+      )}
     </div>
   )
 }

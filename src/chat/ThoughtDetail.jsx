@@ -3,6 +3,16 @@ import { getThoughtReadState, updateThoughtReadState, softDeleteThought, getThou
 import { calculateReadPercent, buildThoughtQuote, getThoughtPreview } from '../utils/thoughtUtils'
 import { db } from '../firebase/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore'
+import ThoughtComments from './ThoughtComments'
+import ThoughtRemovalModal from './ThoughtRemovalModal'
+import ThoughtRemovalBanner from './ThoughtRemovalBanner'
+import {
+  createRemovalRequest,
+  getPendingRemovalRequest,
+  cancelRemovalRequest,
+  acceptRemovalRequest,
+  dismissRemovalRequest
+} from '../services/thoughtRemovalService'
 
 const MOOD_EMOJI = {
   normal: '💭',
@@ -28,13 +38,31 @@ function getReaderStatusLabel(readPercent) {
   return `Read ${Math.round(readPercent)}%`
 }
 
-function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought, highlightBlockId, onEdit, onDeleted }) {
+function ThoughtDetail({
+  thought,
+  currentUser,
+  chatId,
+  onClose,
+  onReplyToThought,
+  highlightBlockId,
+  onEdit,
+  onDeleted,
+  onRemovalAccepted,
+  onTalkInChat
+}) {
   const [readBlockIds, setReadBlockIds] = useState(new Set())
   const [currentVisibleBlock, setCurrentVisibleBlock] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [readerReceipt, setReaderReceipt] = useState(null)
   const [otherMemberUid, setOtherMemberUid] = useState(null)
+
+  // Removal request state
+  const [showRemovalModal, setShowRemovalModal] = useState(false)
+  const [submittingRemoval, setSubmittingRemoval] = useState(false)
+  const [pendingRequest, setPendingRequest] = useState(null)
+  const [removalSuccess, setRemovalSuccess] = useState(false)
+
   const blockRefs = useRef({})
   const visibilityTimers = useRef({})
   const saveTimeoutRef = useRef(null)
@@ -43,9 +71,24 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
   const blocks = thought?.blocks || []
   const totalBlocks = blocks.length
   const isAuthor = thought?.authorId === currentUser?.uid
+  const isRemoved = thought?.status === 'removed_from_both'
+
+  // Fetch pending removal request
+  useEffect(() => {
+    if (!thought?.id || !chatId || isRemoved) return
+
+    const fetchRequest = async () => {
+      const result = await getPendingRemovalRequest(chatId, thought.id)
+      if (result.success && result.request) {
+        setPendingRequest(result.request)
+      }
+    }
+    fetchRequest()
+  }, [thought?.id, chatId, isRemoved])
 
   useEffect(() => {
-    if (!thought?.id || !currentUser?.uid || !chatId) return
+    if (!thought?.id || !currentUser?.uid || !chatId || isRemoved) return
+    if (thought?.authorId === currentUser?.uid) return
 
     const loadReadState = async () => {
       const result = await getThoughtReadState(chatId, currentUser.uid, thought.id)
@@ -55,7 +98,7 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
     }
 
     loadReadState()
-  }, [thought?.id, currentUser?.uid, chatId])
+  }, [thought?.id, thought?.authorId, currentUser?.uid, chatId, isRemoved])
 
   useEffect(() => {
     const fetchOtherMember = async () => {
@@ -76,7 +119,7 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
   }, [chatId, currentUser?.uid])
 
   useEffect(() => {
-    if (!isAuthor || !otherMemberUid || !thought?.id || !chatId) return
+    if (!isAuthor || !otherMemberUid || !thought?.id || !chatId || isRemoved) return
 
     const fetchReaderReceipt = async () => {
       const result = await getThoughtReadReceipt(chatId, thought.id, otherMemberUid)
@@ -85,7 +128,7 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
       }
     }
     fetchReaderReceipt()
-  }, [isAuthor, otherMemberUid, thought?.id, chatId])
+  }, [isAuthor, otherMemberUid, thought?.id, chatId, isRemoved])
 
   useEffect(() => {
     if (highlightBlockId && blockRefs.current[highlightBlockId]) {
@@ -104,7 +147,8 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
     }
 
     saveTimeoutRef.current = setTimeout(async () => {
-      if (!thought?.id || !currentUser?.uid || !chatId) return
+      if (!thought?.id || !currentUser?.uid || !chatId || isRemoved) return
+      if (thought?.authorId === currentUser?.uid) return
 
       const readBlockIdsArray = Array.from(blockIds)
       const readPercent = calculateReadPercent(readBlockIdsArray, totalBlocks)
@@ -122,7 +166,7 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
         lastReadBlockIndex
       })
     }, DEBOUNCE_MS)
-  }, [thought?.id, currentUser?.uid, chatId, blocks, totalBlocks])
+  }, [thought?.id, thought?.authorId, currentUser?.uid, chatId, blocks, totalBlocks, isRemoved])
 
   const markBlockAsRead = useCallback((blockId) => {
     setReadBlockIds((prev) => {
@@ -135,7 +179,7 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
   }, [saveReadState])
 
   useEffect(() => {
-    if (!blocks.length) return
+    if (!blocks.length || isRemoved || isAuthor) return
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
@@ -174,13 +218,42 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
         clearTimeout(timer)
       })
       visibilityTimers.current = {}
+    }
+  }, [blocks, markBlockAsRead, isRemoved, isAuthor])
+
+  useEffect(() => {
+    return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current)
       }
     }
-  }, [blocks, markBlockAsRead])
+  }, [])
 
   if (!thought) return null
+
+  // Show removed placeholder
+  if (isRemoved) {
+    return (
+      <div className="thought-detail-overlay" onClick={onClose}>
+        <div className="thought-detail" onClick={(e) => e.stopPropagation()}>
+          <div className="thought-detail-header">
+            <button className="thought-detail-back" onClick={onClose} aria-label="Back">
+              ←
+            </button>
+          </div>
+          <div className="thought-detail-content">
+            <div className="thought-removed-placeholder">
+              <div className="thought-removed-icon-container">
+                <span className="thought-removed-icon">💭</span>
+              </div>
+              <h3 className="thought-removed-title">This Thought was removed from view.</h3>
+              <p className="thought-removed-subtitle">It is no longer shown in your shared Thoughts.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const formatDate = (timestamp) => {
     if (!timestamp) return ''
@@ -250,6 +323,67 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
     }
   }
 
+  // Removal request handlers
+  const handleRemovalSubmit = async ({ feeling, note }) => {
+    setSubmittingRemoval(true)
+    const result = await createRemovalRequest(chatId, thought.id, currentUser.uid, { feeling, note })
+    setSubmittingRemoval(false)
+
+    if (result.success) {
+      setShowRemovalModal(false)
+      setRemovalSuccess(true)
+      // Close after showing success message
+      setTimeout(() => {
+        onClose()
+      }, 2000)
+    }
+  }
+
+  const handleCancelRequest = async () => {
+    if (!pendingRequest) return
+    const result = await cancelRemovalRequest(chatId, thought.id, pendingRequest.id, currentUser.uid)
+    if (result.success) {
+      setPendingRequest(null)
+    }
+  }
+
+  const handleAcceptRemoval = async () => {
+    if (!pendingRequest) return
+    const result = await acceptRemovalRequest(
+      chatId,
+      thought.id,
+      pendingRequest.id,
+      currentUser.uid,
+      pendingRequest.requestedBy
+    )
+    if (result.success) {
+      onRemovalAccepted?.()
+      onClose()
+    }
+  }
+
+  const handleDismissRequest = async () => {
+    if (!pendingRequest) return
+    const result = await dismissRemovalRequest(chatId, thought.id, pendingRequest.id, currentUser.uid)
+    if (result.success) {
+      setPendingRequest(null)
+    }
+  }
+
+  const handleTalkInChat = () => {
+    if (onTalkInChat) {
+      onTalkInChat({
+        thoughtId: thought.id,
+        context: 'removal_request',
+        suggestedText: "I saw your request. Can we talk about it?"
+      })
+    }
+    onClose()
+  }
+
+  const isRequester = pendingRequest?.requestedBy === currentUser?.uid
+  const showRemovalButton = !isAuthor && !pendingRequest && !removalSuccess
+
   return (
     <div className="thought-detail-overlay" onClick={onClose}>
       <div className="thought-detail" onClick={(e) => e.stopPropagation()}>
@@ -286,6 +420,15 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
               💬 Reply
             </button>
           )}
+          {showRemovalButton && (
+            <button
+              className="thought-detail-removal-btn"
+              onClick={() => setShowRemovalModal(true)}
+              title="I need this gone"
+            >
+              🚫
+            </button>
+          )}
         </div>
 
         {showDeleteConfirm && (
@@ -307,6 +450,26 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Pending removal request banner */}
+        {pendingRequest && (
+          <ThoughtRemovalBanner
+            request={pendingRequest}
+            isRequester={isRequester}
+            onAccept={handleAcceptRemoval}
+            onDismiss={handleDismissRequest}
+            onCancel={handleCancelRequest}
+            onTalkInChat={handleTalkInChat}
+          />
+        )}
+
+        {/* Removal success message */}
+        {removalSuccess && (
+          <div className="thought-removal-success">
+            <span className="removal-success-icon">✓</span>
+            <p>Hidden from your view. A removal request was sent.</p>
           </div>
         )}
 
@@ -363,7 +526,38 @@ function ThoughtDetail({ thought, currentUser, chatId, onClose, onReplyToThought
               <p className="thought-detail-paragraph">{thought.body}</p>
             )}
           </div>
+
+          <ThoughtComments
+            chatId={chatId}
+            thoughtId={thought.id}
+            currentUser={currentUser}
+          />
+
+          {/* Prominent removal button at bottom for non-authors */}
+          {showRemovalButton && (
+            <div className="thought-removal-trigger-section">
+              <button
+                className="thought-removal-trigger"
+                onClick={() => setShowRemovalModal(true)}
+                aria-label="Request to remove this Thought"
+              >
+                <span className="thought-removal-trigger-icon">💔</span>
+                <span className="thought-removal-trigger-content">
+                  <span className="thought-removal-trigger-label">I need this gone</span>
+                  <span className="thought-removal-trigger-subtext">Ask to remove this Thought from both views</span>
+                </span>
+              </button>
+            </div>
+          )}
         </div>
+
+        {showRemovalModal && (
+          <ThoughtRemovalModal
+            onSubmit={handleRemovalSubmit}
+            onCancel={() => setShowRemovalModal(false)}
+            submitting={submittingRemoval}
+          />
+        )}
       </div>
     </div>
   )

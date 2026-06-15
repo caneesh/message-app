@@ -199,6 +199,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 
 const aiApiKey = defineSecret('AI_API_KEY');
+const openaiApiKey = defineSecret('OPENAI_API_KEY');
 const chatBackupEnabled = defineSecret('CHAT_BACKUP_ENABLED');
 const chatBackupBucket = defineSecret('CHAT_BACKUP_BUCKET');
 
@@ -1884,3 +1885,288 @@ exports.exportChatHistory = onCall(
     };
   }
 );
+
+// ============================================
+// MIGRATION: Backfill commentsSummary for existing thoughts
+// ============================================
+
+exports.migrateCommentsSummary = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be logged in');
+  }
+
+  const uid = request.auth.uid;
+  logger.info('Starting commentsSummary migration', { requestedBy: uid });
+
+  const results = {
+    totalThoughts: 0,
+    updated: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  try {
+    // Get all chats
+    const chatsSnap = await db.collection('chats').get();
+
+    for (const chatDoc of chatsSnap.docs) {
+      const chatId = chatDoc.id;
+      const chatData = chatDoc.data();
+
+      // Only allow migration by chat members
+      if (!chatData.members?.includes(uid)) {
+        continue;
+      }
+
+      // Get all thoughts in this chat
+      const thoughtsSnap = await db
+        .collection('chats')
+        .doc(chatId)
+        .collection('thoughts')
+        .get();
+
+      for (const thoughtDoc of thoughtsSnap.docs) {
+        results.totalThoughts++;
+        const thoughtId = thoughtDoc.id;
+        const thoughtData = thoughtDoc.data();
+
+        // Skip if already has commentsSummary with data
+        if (thoughtData.commentsSummary?.updatedAt) {
+          results.skipped++;
+          continue;
+        }
+
+        try {
+          // Get all active comments for this thought
+          const commentsSnap = await db
+            .collection('chats')
+            .doc(chatId)
+            .collection('thoughts')
+            .doc(thoughtId)
+            .collection('comments')
+            .where('status', '==', 'active')
+            .orderBy('createdAt', 'desc')
+            .get();
+
+          const activeComments = commentsSnap.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+
+          // Build commentsSummary
+          let commentsSummary;
+          if (activeComments.length === 0) {
+            commentsSummary = {
+              commentCount: 0,
+              lastCommentAt: null,
+              lastCommentBy: null,
+              updatedAt: FieldValue.serverTimestamp(),
+            };
+          } else {
+            const latestComment = activeComments[0];
+            commentsSummary = {
+              commentCount: activeComments.length,
+              lastCommentAt: latestComment.createdAt,
+              lastCommentBy: latestComment.authorId,
+              updatedAt: FieldValue.serverTimestamp(),
+            };
+          }
+
+          // Update the thought
+          await db
+            .collection('chats')
+            .doc(chatId)
+            .collection('thoughts')
+            .doc(thoughtId)
+            .update({ commentsSummary });
+
+          results.updated++;
+          logger.info('Updated thought', { chatId, thoughtId, commentCount: commentsSummary.commentCount });
+        } catch (err) {
+          results.errors.push({ thoughtId, error: err.message });
+          logger.error('Error updating thought', { thoughtId, error: err.message });
+        }
+      }
+    }
+
+    logger.info('Migration complete', results);
+    return { success: true, ...results };
+  } catch (err) {
+    logger.error('Migration failed', { error: err.message });
+    throw new HttpsError('internal', 'Migration failed: ' + err.message);
+  }
+});
+
+/**
+ * Get file extension for audio content type
+ */
+function getAudioExtension(contentType) {
+  if (!contentType) return 'webm';
+  if (contentType.includes('webm')) return 'webm';
+  if (contentType.includes('mp4') || contentType.includes('m4a')) return 'm4a';
+  if (contentType.includes('mpeg') || contentType.includes('mp3')) return 'mp3';
+  if (contentType.includes('wav')) return 'wav';
+  if (contentType.includes('ogg')) return 'ogg';
+  if (contentType.includes('flac')) return 'flac';
+  return 'webm';
+}
+
+/**
+ * Transcribe audio using OpenAI Whisper API
+ */
+async function transcribeWithWhisper(audioBuffer, contentType, apiKey) {
+  const extension = getAudioExtension(contentType);
+  const filename = `audio.${extension}`;
+
+  const formData = new FormData();
+  formData.append('file', new Blob([audioBuffer], { type: contentType }), filename);
+  formData.append('model', 'whisper-1');
+  formData.append('response_format', 'json');
+
+  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Whisper API error', { status: response.status, error: errorText });
+    throw new Error(`Whisper API error: ${response.status}`);
+  }
+
+  const result = await response.json();
+  return result.text || '';
+}
+
+/**
+ * Transcribe a voice note using OpenAI Whisper API
+ */
+exports.transcribeVoiceNote = onCall({ secrets: [openaiApiKey] }, async (request) => {
+  const { auth, data } = request;
+
+  if (!auth) {
+    throw new HttpsError('unauthenticated', 'Must be logged in');
+  }
+
+  const { chatId, messageId } = data;
+  const userId = auth.uid;
+
+  if (!chatId || !messageId) {
+    throw new HttpsError('invalid-argument', 'Missing chatId or messageId');
+  }
+
+  const apiKey = openaiApiKey.value();
+  if (!apiKey) {
+    logger.error('OPENAI_API_KEY secret not configured');
+    throw new HttpsError('failed-precondition', 'Transcription service not configured');
+  }
+
+  try {
+    const chatDoc = await db.collection('chats').doc(chatId).get();
+    if (!chatDoc.exists) {
+      throw new HttpsError('not-found', 'Chat not found');
+    }
+
+    const chatData = chatDoc.data();
+    if (!chatData.members || !chatData.members.includes(userId)) {
+      throw new HttpsError('permission-denied', 'Not a member of this chat');
+    }
+
+    const messageRef = db.collection('chats').doc(chatId).collection('messages').doc(messageId);
+    const messageDoc = await messageRef.get();
+
+    if (!messageDoc.exists) {
+      throw new HttpsError('not-found', 'Message not found');
+    }
+
+    const messageData = messageDoc.data();
+
+    if (messageData.type !== 'voice') {
+      throw new HttpsError('failed-precondition', 'Message is not a voice note');
+    }
+
+    if (!messageData.voice?.storagePath) {
+      throw new HttpsError('failed-precondition', 'Voice note has no storage path');
+    }
+
+    if (messageData.transcriptionStatus === 'completed' && messageData.transcriptText) {
+      return { success: true, alreadyTranscribed: true };
+    }
+
+    await messageRef.update({
+      transcriptionStatus: 'pending',
+      transcriptUpdatedAt: new Date()
+    });
+
+    const bucket = storage.bucket();
+    const file = bucket.file(messageData.voice.storagePath);
+
+    const [exists] = await file.exists();
+    if (!exists) {
+      await messageRef.update({
+        transcriptionStatus: 'failed',
+        transcriptErrorCode: 'file_not_found',
+        transcriptUpdatedAt: new Date()
+      });
+      throw new HttpsError('not-found', 'Voice file not found in storage');
+    }
+
+    const [audioBuffer] = await file.download();
+    const contentType = messageData.voice.contentType || 'audio/webm';
+
+    const transcript = await transcribeWithWhisper(audioBuffer, contentType, apiKey);
+
+    if (!transcript || transcript.trim().length === 0) {
+      await messageRef.update({
+        transcriptionStatus: 'completed',
+        transcriptText: '[No speech detected]',
+        transcriptCreatedAt: new Date(),
+        transcriptUpdatedAt: new Date()
+      });
+      return { success: true, empty: true };
+    }
+
+    await messageRef.update({
+      transcriptionStatus: 'completed',
+      transcriptText: transcript.trim(),
+      transcriptCreatedAt: new Date(),
+      transcriptUpdatedAt: new Date()
+    });
+
+    logger.info('Transcription completed', {
+      chatId,
+      messageId,
+      userId,
+      transcriptLength: transcript.length
+    });
+
+    return { success: true };
+
+  } catch (err) {
+    logger.error('Transcription error', {
+      chatId,
+      messageId,
+      error: err.message,
+      code: err.code
+    });
+
+    if (err instanceof HttpsError) {
+      throw err;
+    }
+
+    try {
+      await db.collection('chats').doc(chatId).collection('messages').doc(messageId).update({
+        transcriptionStatus: 'failed',
+        transcriptErrorCode: err.code || 'transcription_error',
+        transcriptUpdatedAt: new Date()
+      });
+    } catch (updateErr) {
+      logger.error('Failed to update transcription status', { error: updateErr.message });
+    }
+
+    throw new HttpsError('internal', 'Transcription failed: ' + err.message);
+  }
+});

@@ -14,7 +14,7 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef', 'transcriptionStatus', 'transcriptText', 'transcriptCreatedAt', 'transcriptUpdatedAt', 'transcriptRequestedBy', 'transcriptErrorCode']);
     }
 
     // Helper: Validate optional thoughtRef field
@@ -48,6 +48,23 @@ service cloud.firestore {
           && incoming.text.size() <= 2000
           && incoming.edited == true
           && 'editedAt' in incoming;
+    }
+
+    // Helper: Validate transcription request (chat member can request)
+    function isValidTranscriptionRequest() {
+      let existing = resource.data;
+      let incoming = request.resource.data;
+      let changedKeys = incoming.diff(existing).affectedKeys();
+      return existing.type == 'voice'
+          && changedKeys.hasOnly(['transcriptionStatus', 'transcriptRequestedBy', 'transcriptUpdatedAt'])
+          && incoming.transcriptionStatus == 'pending'
+          && incoming.transcriptRequestedBy == request.auth.uid
+          && incoming.senderId == existing.senderId
+          && incoming.senderPhone == existing.senderPhone
+          && incoming.type == existing.type
+          && incoming.createdAt == existing.createdAt
+          && incoming.voice == existing.voice
+          && incoming.text == existing.text;
     }
 
     // Helper: Validate base message fields
@@ -180,7 +197,7 @@ service cloud.firestore {
                       && isValidThoughtRef();
         allow update: if isAuthenticated()
                       && isChatMember(chatId)
-                      && isValidMessageEdit();
+                      && (isValidMessageEdit() || isValidTranscriptionRequest());
         allow delete: if isAuthenticated()
                       && isChatMember(chatId);
 
@@ -749,7 +766,7 @@ service cloud.firestore {
       match /thoughts/{thoughtId} {
         // Helper: Validate thought has only allowed fields
         function hasOnlyAllowedThoughtFields() {
-          return request.resource.data.keys().hasOnly(['chatId', 'authorId', 'title', 'body', 'blocks', 'mood', 'status', 'createdAt', 'updatedAt']);
+          return request.resource.data.keys().hasOnly(['chatId', 'authorId', 'title', 'body', 'blocks', 'mood', 'status', 'createdAt', 'updatedAt', 'removedFromBothAt', 'removedFromBothBy', 'removalRequestId', 'commentsSummary']);
         }
 
         // Helper: Validate mood value
@@ -759,7 +776,7 @@ service cloud.firestore {
 
         // Helper: Validate status value
         function isValidThoughtStatus() {
-          return request.resource.data.status in ['shared', 'deleted'];
+          return request.resource.data.status in ['shared', 'deleted', 'removed_from_both'];
         }
 
         // Helper: Validate blocks array
@@ -773,9 +790,17 @@ service cloud.firestore {
           return resource.data.authorId == request.auth.uid;
         }
 
+        // Helper: Check if update is a removal acceptance (non-author changing to removed_from_both)
+        function isValidRemovalAcceptance() {
+          return resource.data.authorId != request.auth.uid
+              && resource.data.status == 'shared'
+              && request.resource.data.status == 'removed_from_both'
+              && request.resource.data.removedFromBothBy == request.auth.uid
+              && 'removalRequestId' in request.resource.data;
+        }
+
         allow read: if isAuthenticated()
-                    && isChatMember(chatId)
-                    && resource.data.status == 'shared';
+                    && isChatMember(chatId);
 
         allow create: if isAuthenticated()
                       && isChatMember(chatId)
@@ -792,19 +817,268 @@ service cloud.firestore {
 
         allow update: if isAuthenticated()
                       && isChatMember(chatId)
-                      && isThoughtAuthor()
                       && hasOnlyAllowedThoughtFields()
                       && request.resource.data.chatId == resource.data.chatId
                       && request.resource.data.authorId == resource.data.authorId
-                      && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
-                      && request.resource.data.body is string
-                      && request.resource.data.body.size() > 0
-                      && request.resource.data.body.size() <= 10000
-                      && isValidThoughtBlocks()
                       && isValidThoughtMood()
-                      && isValidThoughtStatus();
+                      && isValidThoughtStatus()
+                      && (
+                        // Author can edit their own thought
+                        (isThoughtAuthor()
+                         && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
+                         && request.resource.data.body is string
+                         && request.resource.data.body.size() > 0
+                         && request.resource.data.body.size() <= 10000
+                         && isValidThoughtBlocks())
+                        // Or non-author can accept removal request
+                        || isValidRemovalAcceptance()
+                      );
 
         allow delete: if false;
+
+        // Removal Requests subcollection
+        match /removalRequests/{requestId} {
+          function hasOnlyAllowedRemovalRequestFields() {
+            return request.resource.data.keys().hasOnly(['chatId', 'thoughtId', 'requestedBy', 'requestedAt', 'feeling', 'note', 'status', 'resolvedBy', 'resolvedAt', 'resolution']);
+          }
+
+          function isValidRemovalFeeling() {
+            return request.resource.data.feeling in ['hurt', 'upset', 'angry', 'overwhelmed', 'need_space', 'prefer_not_to_say'];
+          }
+
+          function isValidRemovalStatus() {
+            return request.resource.data.status in ['pending', 'accepted', 'dismissed', 'cancelled'];
+          }
+
+          function isRemovalRequester() {
+            return resource.data.requestedBy == request.auth.uid;
+          }
+
+          allow read: if isAuthenticated() && isChatMember(chatId);
+
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && hasOnlyAllowedRemovalRequestFields()
+                        && request.resource.data.chatId == chatId
+                        && request.resource.data.thoughtId == thoughtId
+                        && request.resource.data.requestedBy == request.auth.uid
+                        && isValidRemovalFeeling()
+                        && (!('note' in request.resource.data) || request.resource.data.note == null || (request.resource.data.note is string && request.resource.data.note.size() <= 500))
+                        && request.resource.data.status == 'pending';
+
+          allow update: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && hasOnlyAllowedRemovalRequestFields()
+                        && resource.data.status == 'pending'
+                        && request.resource.data.chatId == resource.data.chatId
+                        && request.resource.data.thoughtId == resource.data.thoughtId
+                        && request.resource.data.requestedBy == resource.data.requestedBy
+                        && request.resource.data.requestedAt == resource.data.requestedAt
+                        && request.resource.data.feeling == resource.data.feeling
+                        && request.resource.data.note == resource.data.note
+                        && isValidRemovalStatus()
+                        && request.resource.data.resolvedBy == request.auth.uid
+                        && (
+                          // Requester can cancel
+                          (isRemovalRequester() && request.resource.data.status == 'cancelled')
+                          // Non-requester can accept or dismiss
+                          || (!isRemovalRequester() && request.resource.data.status in ['accepted', 'dismissed'])
+                        );
+
+          allow delete: if false;
+        }
+
+        // Thought Comments subcollection
+        match /comments/{commentId} {
+          // Helper: Validate comment has only allowed fields
+          function hasOnlyAllowedCommentFields() {
+            return request.resource.data.keys().hasOnly(['chatId', 'thoughtId', 'authorId', 'text', 'parentCommentId', 'rootCommentId', 'depth', 'path', 'status', 'createdAt', 'updatedAt', 'editedAt']);
+          }
+
+          // Helper: Check if user is comment author
+          function isCommentAuthor() {
+            return resource.data.authorId == request.auth.uid;
+          }
+
+          // Helper: Validate comment status
+          function isValidCommentStatus() {
+            return request.resource.data.status in ['active', 'deleted'];
+          }
+
+          allow read: if isAuthenticated() && isChatMember(chatId);
+
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && hasOnlyAllowedCommentFields()
+                        && request.resource.data.chatId == chatId
+                        && request.resource.data.thoughtId == thoughtId
+                        && request.resource.data.authorId == request.auth.uid
+                        && request.resource.data.text is string
+                        && request.resource.data.text.size() > 0
+                        && request.resource.data.text.size() <= 2000
+                        && (request.resource.data.parentCommentId == null || request.resource.data.parentCommentId is string)
+                        && (request.resource.data.rootCommentId == null || request.resource.data.rootCommentId is string)
+                        && request.resource.data.depth is number
+                        && request.resource.data.depth >= 0
+                        && request.resource.data.path is list
+                        && request.resource.data.status == 'active';
+
+          allow update: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && isCommentAuthor()
+                        && hasOnlyAllowedCommentFields()
+                        && request.resource.data.chatId == resource.data.chatId
+                        && request.resource.data.thoughtId == resource.data.thoughtId
+                        && request.resource.data.authorId == resource.data.authorId
+                        && request.resource.data.parentCommentId == resource.data.parentCommentId
+                        && request.resource.data.rootCommentId == resource.data.rootCommentId
+                        && request.resource.data.depth == resource.data.depth
+                        && request.resource.data.path == resource.data.path
+                        && request.resource.data.createdAt == resource.data.createdAt
+                        && (request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 2000)
+                        && isValidCommentStatus();
+
+          allow delete: if false;
+
+          // Comment Reactions subcollection - doc ID must equal user's uid
+          match /reactions/{reactionId} {
+            allow read: if isAuthenticated() && isChatMember(chatId);
+
+            allow create, update: if isAuthenticated()
+                                  && isChatMember(chatId)
+                                  && reactionId == request.auth.uid
+                                  && request.resource.data.keys().hasOnly(['uid', 'reaction', 'createdAt', 'updatedAt'])
+                                  && request.resource.data.uid == request.auth.uid
+                                  && request.resource.data.reaction in ['like', 'dislike'];
+
+            allow delete: if isAuthenticated()
+                          && isChatMember(chatId)
+                          && reactionId == request.auth.uid;
+          }
+        }
+      }
+
+      // Per-user Thought Comment Read State
+      // Path: chats/{chatId}/thoughtCommentReadState/{uid}/items/{thoughtId}
+      match /thoughtCommentReadState/{uid}/items/{thoughtId} {
+        function hasOnlyAllowedCommentReadStateFields() {
+          return request.resource.data.keys().hasOnly(['thoughtId', 'userId', 'lastSeenCommentsAt', 'lastSeenCommentId', 'unreadCountSnapshot', 'updatedAt']);
+        }
+
+        // Only the owner can read their own comment read state
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+
+        // Only the owner can create their own comment read state
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedCommentReadStateFields()
+                      && request.resource.data.thoughtId == thoughtId
+                      && request.resource.data.userId == request.auth.uid;
+
+        // Only the owner can update their own comment read state
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedCommentReadStateFields()
+                      && request.resource.data.thoughtId == thoughtId
+                      && request.resource.data.userId == request.auth.uid;
+
+        // Only the owner can delete their own comment read state
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Per-user Thought state (hidden/restored)
+      // Path: chats/{chatId}/thoughtUserState/{uid}/items/{thoughtId}
+      match /thoughtUserState/{uid}/items/{thoughtId} {
+        function hasOnlyAllowedThoughtUserStateFields() {
+          return request.resource.data.keys().hasOnly(['thoughtId', 'userId', 'state', 'source', 'removalRequestId', 'createdAt', 'updatedAt']);
+        }
+
+        function isValidThoughtUserState() {
+          return request.resource.data.state in ['hidden_due_to_removal_request', 'restored'];
+        }
+
+        function isValidThoughtUserStateSource() {
+          return request.resource.data.source in ['self_request', 'accepted_removal'];
+        }
+
+        // Only the owner can read their own state
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+
+        // Only the owner can write their own state
+        allow create, update: if isAuthenticated()
+                              && isChatMember(chatId)
+                              && uid == request.auth.uid
+                              && hasOnlyAllowedThoughtUserStateFields()
+                              && request.resource.data.thoughtId == thoughtId
+                              && request.resource.data.userId == request.auth.uid
+                              && isValidThoughtUserState()
+                              && isValidThoughtUserStateSource();
+
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Thought Drafts - private to each user
+      // Path: chats/{chatId}/thoughtDrafts/{uid}/items/{draftId}
+      match /thoughtDrafts/{uid}/items/{draftId} {
+        // Helper: Validate draft has only allowed fields
+        function hasOnlyAllowedDraftFields() {
+          return request.resource.data.keys().hasOnly(['chatId', 'authorId', 'title', 'body', 'blocks', 'mood', 'createdAt', 'updatedAt']);
+        }
+
+        // Helper: Validate mood value for drafts
+        function isValidDraftMood() {
+          return request.resource.data.mood in ['normal', 'warm', 'love', 'quiet', 'missing'];
+        }
+
+        // Helper: Validate blocks array for drafts
+        function isValidDraftBlocks() {
+          return !('blocks' in request.resource.data)
+              || (request.resource.data.blocks is list && request.resource.data.blocks.size() <= 100);
+        }
+
+        // Only the owner can read their own drafts
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+
+        // Only the owner can create their own drafts
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedDraftFields()
+                      && request.resource.data.chatId == chatId
+                      && request.resource.data.authorId == request.auth.uid
+                      && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
+                      && (!('body' in request.resource.data) || (request.resource.data.body is string && request.resource.data.body.size() <= 10000))
+                      && isValidDraftBlocks()
+                      && isValidDraftMood();
+
+        // Only the owner can update their own drafts
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedDraftFields()
+                      && request.resource.data.chatId == resource.data.chatId
+                      && request.resource.data.authorId == resource.data.authorId
+                      && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() <= 120))
+                      && (!('body' in request.resource.data) || (request.resource.data.body is string && request.resource.data.body.size() <= 10000))
+                      && isValidDraftBlocks()
+                      && isValidDraftMood();
+
+        // Only the owner can delete their own drafts
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
       }
     }
 
