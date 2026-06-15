@@ -6,8 +6,8 @@ export async function deleteMediaForMe(chatId, uid, messageId, mediaKind = 'imag
     throw new Error('Missing required parameters')
   }
 
-  if (!['image', 'video', 'link', 'document', 'voice'].includes(mediaKind)) {
-    throw new Error('Invalid mediaKind. Must be "image", "video", "link", "document", or "voice"')
+  if (!['image', 'video', 'link', 'document', 'voice', 'text'].includes(mediaKind)) {
+    throw new Error('Invalid mediaKind. Must be "image", "video", "link", "document", "voice", or "text"')
   }
 
   const itemRef = doc(db, 'chats', chatId, 'userMediaState', uid, 'items', messageId)

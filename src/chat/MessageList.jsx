@@ -25,6 +25,7 @@ import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
 import { isImageContentType, isVideoContentType } from '../utils/messageExtractors'
 import { isEmojiOnlyMessage } from '../utils/emojiUtils'
 import ZoomableImagePreview from './ZoomableImagePreview'
+import { bulkDeleteForMe, bulkDeleteForEveryone, canDeleteAllForEveryone } from '../services/messageService'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -137,6 +138,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [showScrollBottom, setShowScrollBottom] = useState(false)
   const [imagePreview, setImagePreview] = useState(null)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedMessages, setSelectedMessages] = useState(new Map())
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const {
     isDeletedForMe,
     deleteForMe,
@@ -767,6 +772,71 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     setMobileActionSheet(null)
   }
 
+  // Selection mode handlers
+  const enterSelectionMode = (initialMessage = null) => {
+    setSelectionMode(true)
+    setShowMoreMenu(null)
+    setMobileActionSheet(null)
+    if (initialMessage) {
+      setSelectedMessages(new Map([[initialMessage.id, initialMessage]]))
+    } else {
+      setSelectedMessages(new Map())
+    }
+  }
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false)
+    setSelectedMessages(new Map())
+    setShowDeleteModal(false)
+  }
+
+  const toggleMessageSelection = (message) => {
+    setSelectedMessages(prev => {
+      const next = new Map(prev)
+      if (next.has(message.id)) {
+        next.delete(message.id)
+      } else {
+        next.set(message.id, message)
+      }
+      return next
+    })
+  }
+
+  const handleBulkDelete = async (deleteMode) => {
+    if (selectedMessages.size === 0) return
+
+    setBulkDeleting(true)
+    const messagesArray = Array.from(selectedMessages.values())
+
+    try {
+      let result
+      if (deleteMode === 'for_me') {
+        result = await bulkDeleteForMe(chatId, messagesArray, currentUser.uid)
+      } else {
+        result = await bulkDeleteForEveryone(chatId, messagesArray, currentUser.uid)
+      }
+
+      if (result.success) {
+        exitSelectionMode()
+      } else if (result.error) {
+        alert(result.error)
+      } else if (result.deletedCount > 0) {
+        exitSelectionMode()
+      }
+    } catch (err) {
+      console.error('Bulk delete error:', err)
+      alert('Failed to delete messages. Please try again.')
+    } finally {
+      setBulkDeleting(false)
+      setShowDeleteModal(false)
+    }
+  }
+
+  const canDeleteSelectedForEveryone = () => {
+    const messagesArray = Array.from(selectedMessages.values())
+    return canDeleteAllForEveryone(messagesArray, currentUser.uid)
+  }
+
   const scrollToMessage = (messageId) => {
     if (!messageId) return
 
@@ -989,8 +1059,27 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   }
 
   return (
-    <div className="message-list" ref={messageListRef}>
+    <div className={`message-list ${selectionMode ? 'selection-mode' : ''}`} ref={messageListRef}>
       <div ref={messagesStartRef} />
+
+      {/* Selection mode bar */}
+      {selectionMode && (
+        <div className="selection-bar">
+          <button className="selection-bar-cancel" onClick={exitSelectionMode}>
+            ✕
+          </button>
+          <span className="selection-bar-count">
+            {selectedMessages.size} selected
+          </span>
+          <button
+            className="selection-bar-delete"
+            onClick={() => setShowDeleteModal(true)}
+            disabled={selectedMessages.size === 0 || bulkDeleting}
+          >
+            🗑 Delete
+          </button>
+        </div>
+      )}
 
       {/* Floating scroll buttons */}
       {showScrollTop && (
@@ -1057,13 +1146,29 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           const isTextMessage = message.type === 'text' || (!isFileMessage && !isVideoMessage && !isVoiceMessage && !isSpecialMessage)
           const emojiOnly = isTextMessage && isEmojiOnlyMessage(message.text)
 
+          const isSelected = selectedMessages.has(message.id)
+
           return (
             <div
               key={message.id}
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
-              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVideoMessage ? 'video-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''} ${emojiOnly ? 'message--emoji-only' : ''}`}
+              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVideoMessage ? 'video-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''} ${emojiOnly ? 'message--emoji-only' : ''} ${isSelected ? 'selected' : ''}`}
+              onClick={selectionMode ? () => toggleMessageSelection(message) : undefined}
             >
+              {/* Selection checkbox */}
+              {selectionMode && (
+                <label className="message-checkbox" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleMessageSelection(message)}
+                  />
+                  <span className="message-checkbox-mark" />
+                </label>
+              )}
+
               {/* Floating toolbar - visible on hover/focus (desktop) */}
+              {!selectionMode && (
               <div className="message-toolbar" role="toolbar" aria-label="Message actions">
                 <button
                   className="toolbar-btn"
@@ -1094,8 +1199,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                   ⋯
                 </button>
               </div>
+              )}
 
               {/* Mobile more button - always visible on touch devices */}
+              {!selectionMode && (
               <button
                 className="mobile-more-btn"
                 onClick={() => setMobileActionSheet({ message, isOwn, isFileMessage, isVideoMessage, isVoiceMessage })}
@@ -1103,6 +1210,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               >
                 ⋯
               </button>
+              )}
 
               {replyTo && (
                 <div
@@ -1198,6 +1306,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                   }}>
                     ✨ AI Extract Tasks
                   </button>
+                  <div className="more-menu-divider" />
+                  <button role="menuitem" onClick={() => enterSelectionMode(message)}>
+                    ☑ Select
+                  </button>
                 </div>
               )}
               {showAiTaskExtract === message.id && (
@@ -1278,27 +1390,25 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                   {emojiError && <span className="custom-emoji-error">{emojiError}</span>}
                 </div>
               )}
-              {isSpecialMessage ? (
+              {isDeletedForMe(message.id) ? (
+                <div className="deleted-message-placeholder">
+                  <span className="deleted-message-icon">🗑</span>
+                  <span className="deleted-message-text">Message hidden from your view</span>
+                  <button
+                    className="deleted-message-undo"
+                    onClick={(e) => { e.stopPropagation(); handleUndoDeleteForMe(message.id) }}
+                  >
+                    Undo
+                  </button>
+                </div>
+              ) : isSpecialMessage ? (
                 renderSpecialMessage(message)
               ) : (isFileMessage || isVideoMessage) ? (
-                isMediaMessage(message) && isDeletedForMe(message.id) ? (
-                  <div className="deleted-image-placeholder">
-                    <span className="deleted-image-icon">🗑</span>
-                    <span className="deleted-image-text">Media deleted from your view</span>
-                    <button
-                      className="deleted-image-undo"
-                      onClick={() => handleUndoDeleteForMe(message.id)}
-                    >
-                      Undo
-                    </button>
-                  </div>
-                ) : (
-                  <SecureFileContent
-                    chatId={chatId}
-                    file={message.file}
-                    onImageClick={(url, fileName) => setImagePreview({ url, fileName, messageId: message.id })}
-                  />
-                )
+                <SecureFileContent
+                  chatId={chatId}
+                  file={message.file}
+                  onImageClick={(url, fileName) => setImagePreview({ url, fileName, messageId: message.id })}
+                />
               ) : isVoiceMessage ? (
                 <SecureVoiceContent
                   chatId={chatId}
@@ -1494,6 +1604,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowAiTaskExtract(mobileActionSheet.message.id) }}>
                 ✨ AI Extract Tasks
               </button>
+              <div className="action-sheet-divider" />
+              <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); enterSelectionMode(mobileActionSheet.message) }}>
+                ☑ Select
+              </button>
             </div>
             <button className="action-sheet-cancel" onClick={closeMobileActionSheet}>
               Cancel
@@ -1509,6 +1623,54 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           onClose={() => setImagePreview(null)}
           showActions={false}
         />
+      )}
+
+      {/* Bulk delete confirmation modal */}
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content bulk-delete-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Delete {selectedMessages.size} {selectedMessages.size === 1 ? 'message' : 'messages'}?</h3>
+            <p className="modal-body">
+              Choose how you want to delete the selected messages.
+            </p>
+            <div className="bulk-delete-options">
+              <button
+                className="bulk-delete-option"
+                onClick={() => handleBulkDelete('for_me')}
+                disabled={bulkDeleting}
+              >
+                <span className="bulk-delete-option-icon">🙈</span>
+                <span className="bulk-delete-option-text">
+                  <strong>Delete for me</strong>
+                  <small>Messages will be hidden from your view only</small>
+                </span>
+              </button>
+              {canDeleteSelectedForEveryone() && (
+                <button
+                  className="bulk-delete-option bulk-delete-option-danger"
+                  onClick={() => handleBulkDelete('for_everyone')}
+                  disabled={bulkDeleting}
+                >
+                  <span className="bulk-delete-option-icon">🗑</span>
+                  <span className="bulk-delete-option-text">
+                    <strong>Delete for everyone</strong>
+                    <small>Messages will be permanently deleted</small>
+                  </span>
+                </button>
+              )}
+            </div>
+            <button
+              className="modal-cancel-btn"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </button>
+            {bulkDeleting && (
+              <div className="bulk-delete-progress">Deleting...</div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

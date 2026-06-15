@@ -618,7 +618,7 @@ service cloud.firestore {
                       && request.resource.data.keys().hasOnly(['messageId', 'mediaKind', 'action', 'createdAt', 'updatedAt', 'createdBy'])
                       && request.resource.data.createdBy == request.auth.uid
                       && request.resource.data.messageId is string
-                      && request.resource.data.mediaKind in ['image', 'video', 'link', 'document', 'voice']
+                      && request.resource.data.mediaKind in ['image', 'video', 'link', 'document', 'voice', 'text']
                       && request.resource.data.action == 'deleted_for_me';
         allow update: if isAuthenticated()
                       && isChatMember(chatId)
@@ -626,7 +626,7 @@ service cloud.firestore {
                       && request.resource.data.keys().hasOnly(['messageId', 'mediaKind', 'action', 'createdAt', 'updatedAt', 'createdBy'])
                       && request.resource.data.createdBy == resource.data.createdBy
                       && request.resource.data.messageId == resource.data.messageId
-                      && request.resource.data.mediaKind in ['image', 'video', 'link', 'document', 'voice']
+                      && request.resource.data.mediaKind in ['image', 'video', 'link', 'document', 'voice', 'text']
                       && request.resource.data.action == 'deleted_for_me';
         allow delete: if isAuthenticated()
                       && isChatMember(chatId)
