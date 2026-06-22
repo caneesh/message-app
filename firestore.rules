@@ -1074,6 +1074,98 @@ service cloud.firestore {
                       && isChatMember(chatId)
                       && uid == request.auth.uid;
       }
+
+      // Video Calls subcollection
+      match /calls/{callId} {
+        // Helper: Get chat members
+        function getChatMembers() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+        }
+
+        // Helper: Check if receiverId is the other chat member
+        function isValidReceiver(receiverId) {
+          let members = getChatMembers();
+          return receiverId in members && receiverId != request.auth.uid;
+        }
+
+        // Helper: Validate call has only allowed fields
+        function hasOnlyAllowedCallFields() {
+          return request.resource.data.keys().hasOnly([
+            'chatId', 'createdBy', 'receiverId', 'status', 'type',
+            'createdAt', 'updatedAt', 'answeredAt', 'endedAt', 'endedBy',
+            'offer', 'answer'
+          ]);
+        }
+
+        // Helper: Validate call status
+        function isValidCallStatus() {
+          return request.resource.data.status in ['ringing', 'accepted', 'rejected', 'ended', 'missed', 'failed'];
+        }
+
+        // Read: Only chat members can read calls
+        allow read: if isAuthenticated() && isChatMember(chatId);
+
+        // Create: Only chat members can create calls
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && hasOnlyAllowedCallFields()
+                      && request.resource.data.chatId == chatId
+                      && request.resource.data.createdBy == request.auth.uid
+                      && isValidReceiver(request.resource.data.receiverId)
+                      && request.resource.data.status == 'ringing'
+                      && request.resource.data.type in ['video', 'voice'];
+
+        // Update: Only chat members can update calls (status changes, offer/answer)
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && hasOnlyAllowedCallFields()
+                      && request.resource.data.chatId == resource.data.chatId
+                      && request.resource.data.createdBy == resource.data.createdBy
+                      && request.resource.data.receiverId == resource.data.receiverId
+                      && request.resource.data.type == resource.data.type
+                      && isValidCallStatus();
+
+        // Delete: Not allowed (calls are just status-updated to ended)
+        allow delete: if false;
+
+        // Caller ICE candidates subcollection
+        match /callerCandidates/{candidateId} {
+          function hasOnlyAllowedCandidateFields() {
+            return request.resource.data.keys().hasOnly([
+              'candidate', 'sdpMid', 'sdpMLineIndex', 'usernameFragment', 'createdAt', 'createdBy'
+            ]);
+          }
+
+          allow read: if isAuthenticated() && isChatMember(chatId);
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && hasOnlyAllowedCandidateFields()
+                        && request.resource.data.createdBy == request.auth.uid
+                        && request.resource.data.candidate is string
+                        && (request.resource.data.sdpMid == null || request.resource.data.sdpMid is string)
+                        && (request.resource.data.sdpMLineIndex == null || request.resource.data.sdpMLineIndex is number);
+          allow update, delete: if false;
+        }
+
+        // Receiver ICE candidates subcollection
+        match /receiverCandidates/{candidateId} {
+          function hasOnlyAllowedCandidateFields() {
+            return request.resource.data.keys().hasOnly([
+              'candidate', 'sdpMid', 'sdpMLineIndex', 'usernameFragment', 'createdAt', 'createdBy'
+            ]);
+          }
+
+          allow read: if isAuthenticated() && isChatMember(chatId);
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && hasOnlyAllowedCandidateFields()
+                        && request.resource.data.createdBy == request.auth.uid
+                        && request.resource.data.candidate is string
+                        && (request.resource.data.sdpMid == null || request.resource.data.sdpMid is string)
+                        && (request.resource.data.sdpMLineIndex == null || request.resource.data.sdpMLineIndex is number);
+          allow update, delete: if false;
+        }
+      }
     }
 
     // Invites - read-only for authenticated users, writes managed by Cloud Functions

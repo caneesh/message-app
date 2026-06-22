@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { db, PRIVATE_CHAT_ID, VAPID_KEY, requestNotificationPermission } from '../firebase/firebaseConfig'
-import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp, getDoc } from 'firebase/firestore'
 import AppShell from '../components/AppShell'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
@@ -31,8 +31,45 @@ import ThoughtsPage from './ThoughtsPage'
 import PanicLogoutButton from '../components/PanicLogoutButton'
 import { useUnreadThoughts } from '../hooks/useUnreadThoughts'
 import { useUnreadComments } from '../hooks/useUnreadComments'
+import {
+  CallProvider,
+  useCall,
+  CALL_STATE,
+  VideoCallButton,
+  VoiceCallButton,
+  IncomingCallModal,
+  OutgoingCallModal,
+  ActiveVideoCall,
+  ActiveVoiceCall,
+} from '../calls'
 
 const STALE_TYPING_MS = 5000
+
+function CallOverlay() {
+  const { callState, isVoiceCall } = useCall()
+
+  if (callState === CALL_STATE.INCOMING) {
+    return <IncomingCallModal />
+  }
+  if (callState === CALL_STATE.OUTGOING) {
+    return <OutgoingCallModal />
+  }
+  if (callState === CALL_STATE.CONNECTING || callState === CALL_STATE.CONNECTED) {
+    return isVoiceCall ? <ActiveVoiceCall /> : <ActiveVideoCall />
+  }
+  if (callState === CALL_STATE.ENDED) {
+    return (
+      <div className="call-modal-overlay">
+        <div className="call-modal">
+          <div className="call-modal-content">
+            <p className="call-status">Call ended</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  return null
+}
 
 function ChatPage() {
   const { currentUser, logout } = useAuth()
@@ -57,6 +94,7 @@ function ChatPage() {
   const [scrollToMessageId, setScrollToMessageId] = useState(null)
   const [showSecretToolbar, setShowSecretToolbar] = useState(false)
   const [secretCodeBuffer, setSecretCodeBuffer] = useState('')
+  const [otherUserId, setOtherUserId] = useState(null)
 
   // Secret code listener for toolbar icons 🥚
   const SECRET_CODE = '335042249'
@@ -205,6 +243,26 @@ function ChatPage() {
     localStorage.setItem('darkMode', darkMode)
   }, [darkMode])
 
+  useEffect(() => {
+    if (!PRIVATE_CHAT_ID || !currentUser?.uid) return
+
+    const fetchOtherUser = async () => {
+      try {
+        const chatDoc = await getDoc(doc(db, 'chats', PRIVATE_CHAT_ID))
+        if (chatDoc.exists()) {
+          const members = chatDoc.data().members || []
+          const otherId = members.find((id) => id !== currentUser.uid)
+          if (otherId) {
+            setOtherUserId(otherId)
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching chat members:', err)
+      }
+    }
+    fetchOtherUser()
+  }, [currentUser?.uid])
+
   const toggleDarkMode = () => setDarkMode(!darkMode)
 
   useEffect(() => {
@@ -274,6 +332,8 @@ function ChatPage() {
               </div>
             )}
             <div className="chat-toolbar">
+              <VoiceCallButton />
+              <VideoCallButton />
               <button
                 className={`thoughts-btn ${totalThoughtsBadge > 0 ? 'thoughts-btn-badge' : ''}`}
                 onClick={() => setShowThoughts(true)}
@@ -416,8 +476,13 @@ function ChatPage() {
   }
 
   return (
-    <>
+    <CallProvider
+      chatId={PRIVATE_CHAT_ID}
+      currentUser={currentUser}
+      otherUserId={otherUserId}
+    >
       <PanicLogoutButton />
+      <CallOverlay />
       <AppShell
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -433,7 +498,7 @@ function ChatPage() {
       >
         {renderContent()}
       </AppShell>
-    </>
+    </CallProvider>
   )
 }
 

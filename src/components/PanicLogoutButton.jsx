@@ -1,5 +1,10 @@
-import { useState } from 'react'
+import { useState, useContext } from 'react'
 import { useAuth } from '../auth/AuthContext'
+
+let callContextRef = null
+export function setCallContextRef(ctx) {
+  callContextRef = ctx
+}
 
 function PanicLogoutButton() {
   const { logout } = useAuth()
@@ -11,6 +16,15 @@ function PanicLogoutButton() {
     setLoggingOut(true)
 
     try {
+      // End any active call first
+      if (callContextRef?.endCall) {
+        try {
+          await callContextRef.endCall()
+        } catch (e) {
+          // Ignore call end errors during panic logout
+        }
+      }
+
       // Clear app lock state
       localStorage.removeItem('appLocked')
       localStorage.removeItem('lockTimestamp')
