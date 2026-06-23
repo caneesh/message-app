@@ -1,18 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { getThoughtPreview } from '../utils/thoughtUtils'
+import { getThoughtPreview, getMoodDisplay } from '../utils/thoughtUtils'
 import { getThoughtReadStatus, isUnreadStatus } from '../utils/thoughtUnreadUtils'
 import { getThoughtReadReceipt, getThoughtReadState } from '../services/thoughtService'
 import { useThoughtUnreadComments } from '../hooks/useUnreadComments'
 import { db } from '../firebase/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore'
-
-const MOOD_EMOJI = {
-  normal: '💭',
-  warm: '🌤️',
-  love: '💕',
-  quiet: '🌙',
-  missing: '💫'
-}
 
 function WaxSeal({ size = 'medium' }) {
   const sizeMap = { small: 24, medium: 40, large: 56 }
@@ -76,7 +68,7 @@ function ReadStatusLabel({ receipt, receiptsLoaded, receiptsError }) {
   return <span className="my-thought-read-status">Read {Math.round(receipt.readPercent)}%</span>
 }
 
-function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, chatId }) {
+function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, chatId, activeFilter, readStates: parentReadStates, readStatesLoading: parentReadStatesLoading, searchQuery }) {
   const [readReceipts, setReadReceipts] = useState({})
   const [receiptsLoaded, setReceiptsLoaded] = useState(false)
   const [receiptsError, setReceiptsError] = useState(false)
@@ -84,6 +76,10 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
   const [myReadStatesLoaded, setMyReadStatesLoaded] = useState(false)
   const [otherMemberUid, setOtherMemberUid] = useState(null)
   const { unreadMap: unreadCommentsMap } = useThoughtUnreadComments(chatId, currentUser?.uid, thoughts)
+
+  // Use parent-provided read states if available, otherwise use local
+  const effectiveReadStates = parentReadStates || myReadStates
+  const effectiveReadStatesLoaded = parentReadStates ? !parentReadStatesLoading : myReadStatesLoaded
 
   const prevChatIdRef = useRef(chatId)
   const prevUserIdRef = useRef(currentUser?.uid)
@@ -237,8 +233,8 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
       myThoughts.push(thought)
     } else {
       // Only categorize if read states are loaded, otherwise treat as loading
-      if (myReadStatesLoaded) {
-        const readState = myReadStates[thought.id]
+      if (effectiveReadStatesLoaded) {
+        const readState = effectiveReadStates[thought.id]
         const status = getThoughtReadStatus(thought, readState, currentUser?.uid)
         if (isUnreadStatus(status)) {
           waitingThoughts.push({ ...thought, readStatus: status, readState })
@@ -267,7 +263,7 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
 
   // Check if we have other's thoughts but read states are still loading
   const hasOtherThoughts = thoughts.some(t => t.authorId !== currentUser?.uid)
-  const otherThoughtsLoading = hasOtherThoughts && !myReadStatesLoaded
+  const otherThoughtsLoading = hasOtherThoughts && !effectiveReadStatesLoaded
 
   return (
     <div className="thought-list">
@@ -278,10 +274,37 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
 
       {thoughts.length === 0 ? (
         <div className="thought-list-empty">
-          <span className="thought-list-empty-icon">💭</span>
-          <p>No thoughts shared yet.</p>
+          <span className="thought-list-empty-icon">
+            {searchQuery ? '🔍' :
+             activeFilter === 'unread' ? '✓' :
+             activeFilter === 'partial' ? '📖' :
+             activeFilter === 'finished' ? '📚' :
+             activeFilter === 'saved' ? '💜' :
+             activeFilter === 'archived' ? '📦' :
+             activeFilter === 'mine' ? '✏️' :
+             activeFilter === 'theirs' ? '💌' : '💭'}
+          </span>
+          <p>
+            {searchQuery ? 'No thoughts matched your search.' :
+             activeFilter === 'unread' ? 'All caught up!' :
+             activeFilter === 'partial' ? 'No thoughts in progress.' :
+             activeFilter === 'finished' ? 'No finished thoughts yet.' :
+             activeFilter === 'saved' ? 'No saved thoughts yet.' :
+             activeFilter === 'archived' ? 'No archived thoughts.' :
+             activeFilter === 'mine' ? 'You haven\'t shared any thoughts yet.' :
+             activeFilter === 'theirs' ? 'No thoughts from them yet.' :
+             'No thoughts shared yet.'}
+          </p>
           <p className="thought-list-empty-hint">
-            Share your reflections, feelings, or longer messages here.
+            {searchQuery ? 'Try a different search term.' :
+             activeFilter === 'unread' ? 'You\'ve read all the thoughts waiting for you.' :
+             activeFilter === 'partial' ? 'Start reading a thought to see it here.' :
+             activeFilter === 'finished' ? 'Thoughts you\'ve fully read will appear here.' :
+             activeFilter === 'saved' ? 'Tap the heart on any thought to save it here.' :
+             activeFilter === 'archived' ? 'Archived thoughts will appear here.' :
+             activeFilter === 'mine' ? 'Tap the + button to share your first thought.' :
+             activeFilter === 'theirs' ? 'When they share thoughts, they\'ll appear here.' :
+             'Share your reflections, feelings, or longer messages here.'}
           </p>
         </div>
       ) : (
@@ -401,12 +424,12 @@ function ThoughtList({ thoughts, loading, onSelect, onNewThought, currentUser, c
                   const receipt = readReceipts[thought.id]
                   const unreadComments = unreadCommentsMap[thought.id]
                   const commentCount = thought.commentsSummary?.commentCount || 0
-                  const moodEmoji = MOOD_EMOJI[thought.mood] || MOOD_EMOJI.normal
+                  const moodInfo = getMoodDisplay(thought.mood)
 
                   return (
                     <li key={thought.id}>
                       <button className="my-thought-card" onClick={() => onSelect(thought)}>
-                        <span className="my-thought-mood">{moodEmoji}</span>
+                        <span className="my-thought-mood" title={moodInfo.label}>{moodInfo.emoji}</span>
                         <div className="my-thought-content">
                           <span className="my-thought-title">{thought.title || 'Untitled'}</span>
                           <ReadStatusLabel

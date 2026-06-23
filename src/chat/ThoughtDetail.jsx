@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getThoughtReadState, updateThoughtReadState, softDeleteThought, getThoughtReadReceipt } from '../services/thoughtService'
-import { calculateReadPercent, buildThoughtQuote, getThoughtPreview } from '../utils/thoughtUtils'
+import { calculateReadPercent, buildThoughtQuote, getThoughtPreview, getMoodDisplay } from '../utils/thoughtUtils'
 import { db } from '../firebase/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore'
 import ThoughtComments from './ThoughtComments'
@@ -13,14 +13,16 @@ import {
   acceptRemovalRequest,
   dismissRemovalRequest
 } from '../services/thoughtRemovalService'
-
-const MOOD_EMOJI = {
-  normal: '💭',
-  warm: '🌤️',
-  love: '💕',
-  quiet: '🌙',
-  missing: '💫'
-}
+import { saveThought, unsaveThought } from '../services/thoughtSavedService'
+import { createThoughtReminder, getRemindersForThought, cancelThoughtReminder } from '../services/thoughtReminderService'
+import {
+  THOUGHT_REACTIONS,
+  setThoughtReaction,
+  removeThoughtReaction,
+  getThoughtReactions,
+  countReactionsByType
+} from '../services/thoughtReactionService'
+import { archiveThought, unarchiveThought } from '../services/thoughtArchiveService'
 
 const VISIBILITY_DELAY_MS = 500
 const DEBOUNCE_MS = 1500
@@ -48,7 +50,11 @@ function ThoughtDetail({
   onEdit,
   onDeleted,
   onRemovalAccepted,
-  onTalkInChat
+  onTalkInChat,
+  isSaved,
+  onSaveToggle,
+  isArchived,
+  onArchiveToggle
 }) {
   const [readBlockIds, setReadBlockIds] = useState(new Set())
   const [currentVisibleBlock, setCurrentVisibleBlock] = useState(null)
@@ -56,6 +62,14 @@ function ThoughtDetail({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [readerReceipt, setReaderReceipt] = useState(null)
   const [otherMemberUid, setOtherMemberUid] = useState(null)
+  const [savingThought, setSavingThought] = useState(false)
+  const [archivingThought, setArchivingThought] = useState(false)
+  const [showReminderMenu, setShowReminderMenu] = useState(false)
+  const [activeReminders, setActiveReminders] = useState([])
+  const [settingReminder, setSettingReminder] = useState(false)
+  const [reactions, setReactions] = useState([])
+  const [myReaction, setMyReaction] = useState(null)
+  const [showReactionPicker, setShowReactionPicker] = useState(false)
 
   // Removal request state
   const [showRemovalModal, setShowRemovalModal] = useState(false)
@@ -85,6 +99,34 @@ function ThoughtDetail({
     }
     fetchRequest()
   }, [thought?.id, chatId, isRemoved])
+
+  // Fetch active reminders for this thought
+  useEffect(() => {
+    if (!thought?.id || !currentUser?.uid || !chatId || isRemoved) return
+
+    const fetchReminders = async () => {
+      const result = await getRemindersForThought(chatId, currentUser.uid, thought.id)
+      if (result.success) {
+        setActiveReminders(result.reminders)
+      }
+    }
+    fetchReminders()
+  }, [thought?.id, currentUser?.uid, chatId, isRemoved])
+
+  // Fetch reactions for this thought
+  useEffect(() => {
+    if (!thought?.id || !chatId || isRemoved) return
+
+    const fetchReactions = async () => {
+      const result = await getThoughtReactions(chatId, thought.id)
+      if (result.success) {
+        setReactions(result.reactions)
+        const mine = result.reactions.find(r => r.uid === currentUser?.uid)
+        setMyReaction(mine?.reaction || null)
+      }
+    }
+    fetchReactions()
+  }, [thought?.id, chatId, isRemoved, currentUser?.uid])
 
   useEffect(() => {
     if (!thought?.id || !currentUser?.uid || !chatId || isRemoved) return
@@ -271,7 +313,7 @@ function ThoughtDetail({
     }
   }
 
-  const moodEmoji = MOOD_EMOJI[thought.mood] || MOOD_EMOJI.normal
+  const moodInfo = getMoodDisplay(thought.mood)
 
   const getBlockClass = (block) => {
     const classes = ['thought-detail-paragraph']
@@ -384,6 +426,83 @@ function ThoughtDetail({
   const isRequester = pendingRequest?.requestedBy === currentUser?.uid
   const showRemovalButton = !isAuthor && !pendingRequest && !removalSuccess
 
+  const handleSaveToggle = async () => {
+    if (!thought?.id || !currentUser?.uid || savingThought) return
+    setSavingThought(true)
+    try {
+      if (isSaved) {
+        await unsaveThought(chatId, currentUser.uid, thought.id)
+      } else {
+        await saveThought(chatId, currentUser.uid, thought.id)
+      }
+      onSaveToggle?.()
+    } finally {
+      setSavingThought(false)
+    }
+  }
+
+  const handleArchiveToggle = async () => {
+    if (!thought?.id || !currentUser?.uid || archivingThought) return
+    setArchivingThought(true)
+    try {
+      if (isArchived) {
+        await unarchiveThought(chatId, currentUser.uid, thought.id)
+      } else {
+        await archiveThought(chatId, currentUser.uid, thought.id)
+      }
+      onArchiveToggle?.()
+      if (!isArchived) {
+        onClose()
+      }
+    } finally {
+      setArchivingThought(false)
+    }
+  }
+
+  const handleSetReminder = async (hoursFromNow, label) => {
+    if (!thought?.id || !currentUser?.uid || settingReminder) return
+    setSettingReminder(true)
+    try {
+      const remindAt = new Date()
+      remindAt.setHours(remindAt.getHours() + hoursFromNow)
+      await createThoughtReminder(chatId, currentUser.uid, thought.id, remindAt, label)
+      const result = await getRemindersForThought(chatId, currentUser.uid, thought.id)
+      if (result.success) setActiveReminders(result.reminders)
+      setShowReminderMenu(false)
+    } finally {
+      setSettingReminder(false)
+    }
+  }
+
+  const handleCancelReminder = async (reminderId) => {
+    if (!currentUser?.uid) return
+    await cancelThoughtReminder(chatId, currentUser.uid, reminderId)
+    setActiveReminders(prev => prev.filter(r => r.id !== reminderId))
+  }
+
+  const hasActiveReminder = activeReminders.length > 0
+  const reactionCounts = countReactionsByType(reactions)
+
+  const handleReactionSelect = async (reactionKey) => {
+    if (!thought?.id || !currentUser?.uid) return
+    setShowReactionPicker(false)
+
+    if (myReaction === reactionKey) {
+      // Remove reaction
+      await removeThoughtReaction(chatId, thought.id, currentUser.uid)
+      setMyReaction(null)
+      setReactions(prev => prev.filter(r => r.uid !== currentUser.uid))
+    } else {
+      // Set/change reaction
+      await setThoughtReaction(chatId, thought.id, currentUser.uid, reactionKey)
+      setMyReaction(reactionKey)
+      setReactions(prev => {
+        const filtered = prev.filter(r => r.uid !== currentUser.uid)
+        return [...filtered, { uid: currentUser.uid, reaction: reactionKey }]
+      })
+    }
+  }
+
   return (
     <div className="thought-detail-overlay" onClick={onClose}>
       <div className="thought-detail" onClick={(e) => e.stopPropagation()}>
@@ -391,7 +510,7 @@ function ThoughtDetail({
           <button className="thought-detail-back" onClick={onClose} aria-label="Back">
             ←
           </button>
-          <span className="thought-detail-mood">{moodEmoji}</span>
+          <span className="thought-detail-mood" title={moodInfo.label}>{moodInfo.emoji}</span>
           {isAuthor && onEdit && (
             <button
               className="thought-detail-edit-btn"
@@ -411,6 +530,61 @@ function ThoughtDetail({
               🗑
             </button>
           )}
+          <button
+            className={`thought-detail-save-btn ${isSaved ? 'saved' : ''}`}
+            onClick={handleSaveToggle}
+            disabled={savingThought}
+            title={isSaved ? 'Remove from saved' : 'Save to Heart'}
+          >
+            {isSaved ? '💜' : '🤍'}
+          </button>
+          <div className="thought-reminder-container">
+            <button
+              className={`thought-detail-reminder-btn ${hasActiveReminder ? 'active' : ''}`}
+              onClick={() => setShowReminderMenu(!showReminderMenu)}
+              title={hasActiveReminder ? 'Reminder set' : 'Remind me'}
+            >
+              {hasActiveReminder ? '🔔' : '🔕'}
+            </button>
+            {showReminderMenu && (
+              <div className="thought-reminder-menu">
+                <button onClick={() => handleSetReminder(1, 'In 1 hour')} disabled={settingReminder}>
+                  In 1 hour
+                </button>
+                <button onClick={() => handleSetReminder(3, 'In 3 hours')} disabled={settingReminder}>
+                  In 3 hours
+                </button>
+                <button onClick={() => handleSetReminder(8, 'Tonight')} disabled={settingReminder}>
+                  Tonight
+                </button>
+                <button onClick={() => handleSetReminder(24, 'Tomorrow')} disabled={settingReminder}>
+                  Tomorrow
+                </button>
+                {hasActiveReminder && (
+                  <>
+                    <div className="reminder-menu-divider" />
+                    {activeReminders.map(r => (
+                      <button
+                        key={r.id}
+                        className="reminder-cancel-btn"
+                        onClick={() => handleCancelReminder(r.id)}
+                      >
+                        Cancel reminder
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          <button
+            className={`thought-detail-archive-btn ${isArchived ? 'archived' : ''}`}
+            onClick={handleArchiveToggle}
+            disabled={archivingThought}
+            title={isArchived ? 'Unarchive' : 'Archive'}
+          >
+            {isArchived ? '📥' : '📦'}
+          </button>
           {onReplyToThought && !isAuthor && (
             <button
               className="thought-detail-reply-btn"
@@ -525,6 +699,50 @@ function ThoughtDetail({
             {blocks.length === 0 && thought.body && (
               <p className="thought-detail-paragraph">{thought.body}</p>
             )}
+          </div>
+
+          {/* Reactions Row */}
+          <div className="thought-reactions-section">
+            <div className="thought-reactions-display">
+              {THOUGHT_REACTIONS.map(r => {
+                const count = reactionCounts[r.key] || 0
+                if (count === 0 && myReaction !== r.key) return null
+                return (
+                  <button
+                    key={r.key}
+                    className={`thought-reaction-pill ${myReaction === r.key ? 'mine' : ''}`}
+                    onClick={() => handleReactionSelect(r.key)}
+                    title={r.label}
+                  >
+                    <span className="reaction-emoji">{r.emoji}</span>
+                    {count > 0 && <span className="reaction-count">{count}</span>}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="thought-reaction-picker-container">
+              <button
+                className="thought-reaction-add-btn"
+                onClick={() => setShowReactionPicker(!showReactionPicker)}
+                title="Add reaction"
+              >
+                +
+              </button>
+              {showReactionPicker && (
+                <div className="thought-reaction-picker">
+                  {THOUGHT_REACTIONS.map(r => (
+                    <button
+                      key={r.key}
+                      className={`reaction-option ${myReaction === r.key ? 'selected' : ''}`}
+                      onClick={() => handleReactionSelect(r.key)}
+                      title={r.label}
+                    >
+                      {r.emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <ThoughtComments

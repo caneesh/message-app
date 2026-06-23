@@ -94,8 +94,31 @@ export function calculateReadPercent(readBlockIds, totalBlocks) {
  * @returns {boolean} - True if valid
  */
 export function isValidMood(mood) {
-  const validMoods = ['normal', 'warm', 'love', 'quiet', 'missing']
+  const validMoods = [
+    'normal', 'warm', 'love', 'quiet', 'missing',
+    'happy', 'hurt', 'romantic', 'confused', 'memory', 'question', 'important'
+  ]
   return validMoods.includes(mood)
+}
+
+export const MOOD_OPTIONS = [
+  { value: 'normal', label: 'Normal', emoji: '💭' },
+  { value: 'happy', label: 'Happy', emoji: '😊' },
+  { value: 'missing', label: 'Missing you', emoji: '💫' },
+  { value: 'hurt', label: 'Hurt', emoji: '💔' },
+  { value: 'romantic', label: 'Romantic', emoji: '💕' },
+  { value: 'confused', label: 'Confused', emoji: '🤔' },
+  { value: 'memory', label: 'Memory', emoji: '🌅' },
+  { value: 'question', label: 'Question', emoji: '❓' },
+  { value: 'important', label: 'Important', emoji: '⭐' },
+  { value: 'quiet', label: 'Quiet', emoji: '🌙' },
+  { value: 'warm', label: 'Warm', emoji: '🌤️' },
+  { value: 'love', label: 'Love', emoji: '❤️' }
+]
+
+export function getMoodDisplay(mood) {
+  const found = MOOD_OPTIONS.find(m => m.value === mood)
+  return found || MOOD_OPTIONS[0]
 }
 
 /**
@@ -114,5 +137,7 @@ export default {
   buildThoughtQuote,
   calculateReadPercent,
   isValidMood,
-  isValidStatus
+  isValidStatus,
+  MOOD_OPTIONS,
+  getMoodDisplay
 }

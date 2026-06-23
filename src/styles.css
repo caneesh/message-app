@@ -9242,6 +9242,338 @@ body.dark-mode .thoughts-tab.active .thoughts-tab-count {
   color: #E0738F;
 }
 
+/* Thought Filter Chips */
+.thoughts-filter-chips {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #FBF6F3;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.thoughts-filter-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.thoughts-filter-chip {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid rgba(42, 34, 44, 0.15);
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #7B6B78;
+  cursor: pointer;
+  border-radius: 999px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.thoughts-filter-chip:hover {
+  background: rgba(42, 34, 44, 0.04);
+  border-color: rgba(42, 34, 44, 0.25);
+}
+
+.thoughts-filter-chip.active {
+  background: #2A222C;
+  color: #fff;
+  border-color: #2A222C;
+}
+
+.thoughts-filter-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.thoughts-filter-chip:not(.active) .thoughts-filter-count {
+  background: #C24E72;
+  color: #fff;
+}
+
+body.dark-mode .thoughts-filter-chips {
+  background: #1a1820;
+}
+
+body.dark-mode .thoughts-filter-chip {
+  color: #aaa;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+body.dark-mode .thoughts-filter-chip:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+body.dark-mode .thoughts-filter-chip.active {
+  background: #E0738F;
+  color: #1a1820;
+  border-color: #E0738F;
+}
+
+body.dark-mode .thoughts-filter-chip:not(.active) .thoughts-filter-count {
+  background: #E0738F;
+  color: #1a1820;
+}
+
+/* Continue Reading Card */
+.continue-reading-card {
+  margin: 12px 16px 0;
+  padding: 16px;
+  background: linear-gradient(135deg, #FFF5E6 0%, #FFEBD4 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(194, 78, 114, 0.1);
+}
+
+body.dark-mode .continue-reading-card {
+  background: linear-gradient(135deg, #2d2228 0%, #352530 100%);
+  border-color: rgba(224, 115, 143, 0.2);
+}
+
+.continue-reading-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.continue-reading-icon {
+  font-size: 1.2rem;
+}
+
+.continue-reading-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2A222C;
+}
+
+body.dark-mode .continue-reading-title {
+  color: #f0e8f0;
+}
+
+.continue-reading-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.continue-reading-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.continue-reading-stat .stat-count {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #C24E72;
+}
+
+body.dark-mode .continue-reading-stat .stat-count {
+  color: #E0738F;
+}
+
+.continue-reading-stat .stat-label {
+  font-size: 0.8rem;
+  color: #7B6B78;
+}
+
+body.dark-mode .continue-reading-stat .stat-label {
+  color: #999;
+}
+
+.continue-reading-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.continue-reading-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.continue-reading-btn--primary {
+  background: #C24E72;
+  color: #fff;
+}
+
+.continue-reading-btn--primary:hover {
+  background: #A83D5E;
+}
+
+body.dark-mode .continue-reading-btn--primary {
+  background: #E0738F;
+  color: #1a1820;
+}
+
+body.dark-mode .continue-reading-btn--primary:hover {
+  background: #c95d79;
+}
+
+/* Mood Filter */
+.thoughts-mood-filter {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #FBF6F3;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  border-top: 1px solid rgba(42, 34, 44, 0.06);
+}
+
+.thoughts-mood-filter::-webkit-scrollbar {
+  display: none;
+}
+
+.thoughts-mood-chip {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid rgba(42, 34, 44, 0.1);
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  color: #7B6B78;
+  cursor: pointer;
+  border-radius: 999px;
+  transition: all 0.2s;
+}
+
+.thoughts-mood-chip:hover {
+  background: rgba(42, 34, 44, 0.04);
+}
+
+.thoughts-mood-chip.active {
+  background: #FBE3EC;
+  color: #C24E72;
+  border-color: #FBE3EC;
+}
+
+body.dark-mode .thoughts-mood-filter {
+  background: #1a1820;
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+body.dark-mode .thoughts-mood-chip {
+  color: #aaa;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .thoughts-mood-chip:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-mode .thoughts-mood-chip.active {
+  background: #3d2030;
+  color: #E0738F;
+  border-color: #3d2030;
+}
+
+/* Search Bar */
+.thoughts-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px 0;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid rgba(42, 34, 44, 0.1);
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+
+.thoughts-search-bar:focus-within {
+  border-color: #C24E72;
+}
+
+body.dark-mode .thoughts-search-bar {
+  background: #252028;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .thoughts-search-bar:focus-within {
+  border-color: #E0738F;
+}
+
+.thoughts-search-icon {
+  font-size: 0.9rem;
+  opacity: 0.5;
+}
+
+.thoughts-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  color: #2A222C;
+  outline: none;
+}
+
+.thoughts-search-input::placeholder {
+  color: #7B6B78;
+}
+
+body.dark-mode .thoughts-search-input {
+  color: #f0e8f0;
+}
+
+body.dark-mode .thoughts-search-input::placeholder {
+  color: #888;
+}
+
+.thoughts-search-clear {
+  background: rgba(42, 34, 44, 0.1);
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: #7B6B78;
+  transition: all 0.2s;
+}
+
+.thoughts-search-clear:hover {
+  background: rgba(42, 34, 44, 0.2);
+}
+
+body.dark-mode .thoughts-search-clear {
+  background: rgba(255, 255, 255, 0.1);
+  color: #aaa;
+}
+
+body.dark-mode .thoughts-search-clear:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.thoughts-search-results {
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  color: #7B6B78;
+}
+
+body.dark-mode .thoughts-search-results {
+  color: #888;
+}
+
 .thoughts-page-content {
   flex: 1;
   overflow-y: auto;
@@ -10268,6 +10600,283 @@ body.dark-mode .draft-action-continue:hover:not(:disabled) { background: #404050
 .thought-detail-removal-btn:hover {
   background: rgba(194, 78, 114, 0.1);
   color: #C24E72;
+}
+
+.thought-detail-save-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.2s;
+}
+
+.thought-detail-save-btn:hover {
+  background: rgba(147, 51, 234, 0.1);
+}
+
+.thought-detail-save-btn.saved {
+  transform: scale(1.1);
+}
+
+.thought-detail-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.thought-detail-archive-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.2s;
+}
+
+.thought-detail-archive-btn:hover {
+  background: rgba(42, 34, 44, 0.08);
+}
+
+.thought-detail-archive-btn.archived {
+  background: rgba(234, 179, 8, 0.1);
+}
+
+.thought-detail-archive-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Reminder Button and Menu */
+.thought-reminder-container {
+  position: relative;
+}
+
+.thought-detail-reminder-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.2s;
+}
+
+.thought-detail-reminder-btn:hover {
+  background: rgba(234, 179, 8, 0.1);
+}
+
+.thought-detail-reminder-btn.active {
+  background: rgba(234, 179, 8, 0.15);
+}
+
+.thought-reminder-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 8px 0;
+  min-width: 150px;
+  z-index: 100;
+}
+
+body.dark-mode .thought-reminder-menu {
+  background: #2A222C;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.thought-reminder-menu button {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 0.9rem;
+  color: #2A222C;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+body.dark-mode .thought-reminder-menu button {
+  color: #f0e8f0;
+}
+
+.thought-reminder-menu button:hover {
+  background: rgba(42, 34, 44, 0.05);
+}
+
+body.dark-mode .thought-reminder-menu button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.thought-reminder-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reminder-menu-divider {
+  height: 1px;
+  background: rgba(42, 34, 44, 0.1);
+  margin: 8px 0;
+}
+
+body.dark-mode .reminder-menu-divider {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.reminder-cancel-btn {
+  color: #C24E72 !important;
+}
+
+/* Thought Reactions */
+.thought-reactions-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  margin-top: 16px;
+  border-top: 1px solid rgba(42, 34, 44, 0.06);
+}
+
+body.dark-mode .thought-reactions-section {
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+.thought-reactions-display {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.thought-reaction-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(42, 34, 44, 0.05);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.thought-reaction-pill:hover {
+  background: rgba(42, 34, 44, 0.1);
+}
+
+.thought-reaction-pill.mine {
+  background: rgba(194, 78, 114, 0.1);
+  border-color: rgba(194, 78, 114, 0.3);
+}
+
+body.dark-mode .thought-reaction-pill {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.dark-mode .thought-reaction-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .thought-reaction-pill.mine {
+  background: rgba(224, 115, 143, 0.15);
+  border-color: rgba(224, 115, 143, 0.3);
+}
+
+.reaction-emoji {
+  font-size: 0.95rem;
+}
+
+.reaction-count {
+  font-size: 0.75rem;
+  color: #7B6B78;
+  font-weight: 500;
+}
+
+body.dark-mode .reaction-count {
+  color: #999;
+}
+
+.thought-reaction-picker-container {
+  position: relative;
+  margin-left: auto;
+}
+
+.thought-reaction-add-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(42, 34, 44, 0.05);
+  border: 1px dashed rgba(42, 34, 44, 0.2);
+  cursor: pointer;
+  font-size: 1rem;
+  color: #7B6B78;
+  transition: all 0.2s;
+}
+
+.thought-reaction-add-btn:hover {
+  background: rgba(42, 34, 44, 0.1);
+  border-color: rgba(42, 34, 44, 0.4);
+}
+
+body.dark-mode .thought-reaction-add-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #aaa;
+}
+
+body.dark-mode .thought-reaction-add-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.thought-reaction-picker {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 8px 12px;
+  display: flex;
+  gap: 4px;
+  z-index: 100;
+}
+
+body.dark-mode .thought-reaction-picker {
+  background: #2A222C;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.reaction-option {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.2s;
+}
+
+.reaction-option:hover {
+  background: rgba(42, 34, 44, 0.08);
+  transform: scale(1.15);
+}
+
+.reaction-option.selected {
+  background: rgba(194, 78, 114, 0.15);
+}
+
+body.dark-mode .reaction-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .reaction-option.selected {
+  background: rgba(224, 115, 143, 0.2);
 }
 
 /* Delete Confirmation */

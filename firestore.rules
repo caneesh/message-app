@@ -765,7 +765,7 @@ service cloud.firestore {
 
         // Helper: Validate mood value
         function isValidThoughtMood() {
-          return request.resource.data.mood in ['normal', 'warm', 'love', 'quiet', 'missing'];
+          return request.resource.data.mood in ['normal', 'warm', 'love', 'quiet', 'missing', 'happy', 'hurt', 'romantic', 'confused', 'memory', 'question', 'important'];
         }
 
         // Helper: Validate status value
@@ -880,6 +880,22 @@ service cloud.firestore {
                         );
 
           allow delete: if false;
+        }
+
+        // Thought Reactions subcollection - doc ID must equal user's uid
+        match /reactions/{reactionId} {
+          allow read: if isAuthenticated() && isChatMember(chatId);
+
+          allow create, update: if isAuthenticated()
+                                && isChatMember(chatId)
+                                && reactionId == request.auth.uid
+                                && request.resource.data.keys().hasOnly(['uid', 'reaction', 'createdAt', 'updatedAt'])
+                                && request.resource.data.uid == request.auth.uid
+                                && request.resource.data.reaction in ['heart', 'comfort', 'sad', 'beautiful', 'thanks'];
+
+          allow delete: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && reactionId == request.auth.uid;
         }
 
         // Thought Comments subcollection
@@ -1021,6 +1037,96 @@ service cloud.firestore {
                       && uid == request.auth.uid;
       }
 
+      // Per-user Saved Thoughts
+      // Path: chats/{chatId}/thoughtUserState/{uid}/saved/{thoughtId}
+      match /thoughtUserState/{uid}/saved/{thoughtId} {
+        function hasOnlyAllowedSavedFields() {
+          return request.resource.data.keys().hasOnly(['thoughtId', 'userId', 'saved', 'createdAt', 'updatedAt']);
+        }
+
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+
+        allow create, update: if isAuthenticated()
+                              && isChatMember(chatId)
+                              && uid == request.auth.uid
+                              && hasOnlyAllowedSavedFields()
+                              && request.resource.data.thoughtId == thoughtId
+                              && request.resource.data.userId == request.auth.uid
+                              && request.resource.data.saved is bool;
+
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Per-user Archived Thoughts
+      // Path: chats/{chatId}/thoughtUserState/{uid}/archived/{thoughtId}
+      match /thoughtUserState/{uid}/archived/{thoughtId} {
+        function hasOnlyAllowedArchivedFields() {
+          return request.resource.data.keys().hasOnly(['thoughtId', 'userId', 'archived', 'createdAt', 'updatedAt']);
+        }
+
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+
+        allow create, update: if isAuthenticated()
+                              && isChatMember(chatId)
+                              && uid == request.auth.uid
+                              && hasOnlyAllowedArchivedFields()
+                              && request.resource.data.thoughtId == thoughtId
+                              && request.resource.data.userId == request.auth.uid
+                              && request.resource.data.archived is bool;
+
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Per-user Thought Reminders
+      // Path: chats/{chatId}/thoughtReminders/{uid}/items/{reminderId}
+      match /thoughtReminders/{uid}/items/{reminderId} {
+        function hasOnlyAllowedReminderFields() {
+          return request.resource.data.keys().hasOnly(['reminderId', 'thoughtId', 'userId', 'remindAt', 'status', 'note', 'createdAt', 'updatedAt', 'completedAt']);
+        }
+
+        function isValidReminderStatus() {
+          return request.resource.data.status in ['active', 'completed', 'cancelled'];
+        }
+
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedReminderFields()
+                      && request.resource.data.reminderId == reminderId
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.thoughtId is string
+                      && request.resource.data.remindAt is timestamp
+                      && isValidReminderStatus()
+                      && (!('note' in request.resource.data) || request.resource.data.note == null || (request.resource.data.note is string && request.resource.data.note.size() <= 300));
+
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && hasOnlyAllowedReminderFields()
+                      && request.resource.data.reminderId == resource.data.reminderId
+                      && request.resource.data.thoughtId == resource.data.thoughtId
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.remindAt is timestamp
+                      && isValidReminderStatus()
+                      && (!('note' in request.resource.data) || request.resource.data.note == null || (request.resource.data.note is string && request.resource.data.note.size() <= 300));
+
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
       // Thought Drafts - private to each user
       // Path: chats/{chatId}/thoughtDrafts/{uid}/items/{draftId}
       match /thoughtDrafts/{uid}/items/{draftId} {
@@ -1031,7 +1137,7 @@ service cloud.firestore {
 
         // Helper: Validate mood value for drafts
         function isValidDraftMood() {
-          return request.resource.data.mood in ['normal', 'warm', 'love', 'quiet', 'missing'];
+          return request.resource.data.mood in ['normal', 'warm', 'love', 'quiet', 'missing', 'happy', 'hurt', 'romantic', 'confused', 'memory', 'question', 'important'];
         }
 
         // Helper: Validate blocks array for drafts

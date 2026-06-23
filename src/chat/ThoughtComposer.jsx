@@ -6,14 +6,7 @@ import {
   deleteThoughtDraft,
   publishThoughtDraft
 } from '../services/thoughtService'
-
-const MOODS = [
-  { value: 'normal', label: 'Normal', emoji: '💭' },
-  { value: 'warm', label: 'Warm', emoji: '🌤️' },
-  { value: 'love', label: 'Love', emoji: '💕' },
-  { value: 'quiet', label: 'Quiet', emoji: '🌙' },
-  { value: 'missing', label: 'Missing', emoji: '💫' }
-]
+import { MOOD_OPTIONS } from '../utils/thoughtUtils'
 
 const MAX_TITLE_LENGTH = 120
 const MAX_BODY_LENGTH = 10000
@@ -219,7 +212,7 @@ function ThoughtComposer({ currentUser, chatId, onClose, onCreated, draft = null
           <div className="thought-composer-mood">
             <label>Mood</label>
             <div className="thought-composer-mood-options">
-              {MOODS.map((m) => (
+              {MOOD_OPTIONS.map((m) => (
                 <button
                   key={m.value}
                   type="button"
