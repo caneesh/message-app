@@ -11,6 +11,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
@@ -133,6 +134,7 @@ export async function getThought(chatId, thoughtId) {
       return { success: false, error: 'Thought has been deleted' }
     }
 
+    // Return removed_from_both thoughts so UI can show placeholder
     return { success: true, thought }
   } catch (error) {
     console.error('Error getting thought:', error)
@@ -419,6 +421,247 @@ export async function listThoughtsForExport(chatId, scope, currentUserId) {
   }
 }
 
+// ================================
+// DRAFT FUNCTIONS
+// ================================
+
+/**
+ * Save a new thought draft
+ * @param {string} chatId - The chat ID
+ * @param {string} userId - The author's user ID
+ * @param {Object} data - Draft data { title, body, mood }
+ * @returns {Object} - { success, draftId, error }
+ */
+export async function saveThoughtDraft(chatId, userId, { title, body, mood = 'normal' }) {
+  if (!chatId || !userId) {
+    return { success: false, error: 'Missing chatId or userId' }
+  }
+
+  if (title && title.length > MAX_TITLE_LENGTH) {
+    return { success: false, error: `Title exceeds maximum length of ${MAX_TITLE_LENGTH} characters` }
+  }
+
+  if (body && body.length > MAX_BODY_LENGTH) {
+    return { success: false, error: `Body exceeds maximum length of ${MAX_BODY_LENGTH} characters` }
+  }
+
+  if (!isValidMood(mood)) {
+    return { success: false, error: 'Invalid mood value' }
+  }
+
+  const blocks = body ? splitThoughtIntoBlocks(body) : []
+  if (blocks.length > MAX_BLOCKS) {
+    return { success: false, error: `Too many paragraphs. Maximum is ${MAX_BLOCKS}` }
+  }
+
+  try {
+    const draftsRef = collection(db, 'chats', chatId, 'thoughtDrafts', userId, 'items')
+    const draftData = {
+      chatId,
+      authorId: userId,
+      title: title?.trim() || '',
+      body: body?.trim() || '',
+      blocks,
+      mood,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }
+
+    const docRef = await addDoc(draftsRef, draftData)
+    return { success: true, draftId: docRef.id }
+  } catch (error) {
+    console.error('Error saving thought draft:', error)
+    return { success: false, error: error.message || 'Failed to save draft' }
+  }
+}
+
+/**
+ * List all drafts for a user in a chat
+ * @param {string} chatId - The chat ID
+ * @param {string} userId - The user's ID
+ * @returns {Object} - { success, drafts, error }
+ */
+export async function listThoughtDrafts(chatId, userId) {
+  if (!chatId || !userId) {
+    return { success: false, error: 'Missing chatId or userId', drafts: [] }
+  }
+
+  try {
+    const draftsRef = collection(db, 'chats', chatId, 'thoughtDrafts', userId, 'items')
+    const q = query(draftsRef, orderBy('updatedAt', 'desc'))
+
+    const snapshot = await getDocs(q)
+    const drafts = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }))
+
+    return { success: true, drafts }
+  } catch (error) {
+    console.error('Error listing thought drafts:', error)
+    return { success: false, error: error.message || 'Failed to list drafts', drafts: [] }
+  }
+}
+
+/**
+ * Get a single draft by ID
+ * @param {string} chatId - The chat ID
+ * @param {string} userId - The user's ID
+ * @param {string} draftId - The draft ID
+ * @returns {Object} - { success, draft, error }
+ */
+export async function getThoughtDraft(chatId, userId, draftId) {
+  if (!chatId || !userId || !draftId) {
+    return { success: false, error: 'Missing required parameters' }
+  }
+
+  try {
+    const draftRef = doc(db, 'chats', chatId, 'thoughtDrafts', userId, 'items', draftId)
+    const snapshot = await getDoc(draftRef)
+
+    if (!snapshot.exists()) {
+      return { success: false, error: 'Draft not found' }
+    }
+
+    return { success: true, draft: { id: snapshot.id, ...snapshot.data() } }
+  } catch (error) {
+    console.error('Error getting thought draft:', error)
+    return { success: false, error: error.message || 'Failed to get draft' }
+  }
+}
+
+/**
+ * Update an existing draft
+ * @param {string} chatId - The chat ID
+ * @param {string} userId - The user's ID
+ * @param {string} draftId - The draft ID
+ * @param {Object} updates - Fields to update { title, body, mood }
+ * @returns {Object} - { success, error }
+ */
+export async function updateThoughtDraft(chatId, userId, draftId, updates) {
+  if (!chatId || !userId || !draftId) {
+    return { success: false, error: 'Missing required parameters' }
+  }
+
+  try {
+    const draftRef = doc(db, 'chats', chatId, 'thoughtDrafts', userId, 'items', draftId)
+    const snapshot = await getDoc(draftRef)
+
+    if (!snapshot.exists()) {
+      return { success: false, error: 'Draft not found' }
+    }
+
+    const updateData = { updatedAt: serverTimestamp() }
+
+    if (updates.title !== undefined) {
+      if (updates.title && updates.title.length > MAX_TITLE_LENGTH) {
+        return { success: false, error: `Title exceeds maximum length of ${MAX_TITLE_LENGTH} characters` }
+      }
+      updateData.title = updates.title?.trim() || ''
+    }
+
+    if (updates.body !== undefined) {
+      if (updates.body && updates.body.length > MAX_BODY_LENGTH) {
+        return { success: false, error: `Body exceeds maximum length of ${MAX_BODY_LENGTH} characters` }
+      }
+      updateData.body = updates.body?.trim() || ''
+      updateData.blocks = updates.body ? splitThoughtIntoBlocks(updates.body) : []
+      if (updateData.blocks.length > MAX_BLOCKS) {
+        return { success: false, error: `Too many paragraphs. Maximum is ${MAX_BLOCKS}` }
+      }
+    }
+
+    if (updates.mood !== undefined) {
+      if (!isValidMood(updates.mood)) {
+        return { success: false, error: 'Invalid mood value' }
+      }
+      updateData.mood = updates.mood
+    }
+
+    await updateDoc(draftRef, updateData)
+    return { success: true }
+  } catch (error) {
+    console.error('Error updating thought draft:', error)
+    return { success: false, error: error.message || 'Failed to update draft' }
+  }
+}
+
+/**
+ * Delete a draft
+ * @param {string} chatId - The chat ID
+ * @param {string} userId - The user's ID
+ * @param {string} draftId - The draft ID
+ * @returns {Object} - { success, error }
+ */
+export async function deleteThoughtDraft(chatId, userId, draftId) {
+  if (!chatId || !userId || !draftId) {
+    return { success: false, error: 'Missing required parameters' }
+  }
+
+  try {
+    const draftRef = doc(db, 'chats', chatId, 'thoughtDrafts', userId, 'items', draftId)
+    await deleteDoc(draftRef)
+    return { success: true }
+  } catch (error) {
+    console.error('Error deleting thought draft:', error)
+    return { success: false, error: error.message || 'Failed to delete draft' }
+  }
+}
+
+/**
+ * Publish a draft as a shared thought
+ * @param {string} chatId - The chat ID
+ * @param {string} userId - The user's ID
+ * @param {string} draftId - The draft ID
+ * @returns {Object} - { success, thoughtId, error }
+ */
+export async function publishThoughtDraft(chatId, userId, draftId) {
+  if (!chatId || !userId || !draftId) {
+    return { success: false, error: 'Missing required parameters' }
+  }
+
+  try {
+    // Get the draft
+    const draftRef = doc(db, 'chats', chatId, 'thoughtDrafts', userId, 'items', draftId)
+    const draftSnapshot = await getDoc(draftRef)
+
+    if (!draftSnapshot.exists()) {
+      return { success: false, error: 'Draft not found' }
+    }
+
+    const draft = draftSnapshot.data()
+
+    // Validate the draft has content
+    if (!draft.body || draft.body.trim().length === 0) {
+      return { success: false, error: 'Cannot publish empty draft' }
+    }
+
+    // Create the shared thought
+    const thoughtsRef = collection(db, 'chats', chatId, 'thoughts')
+    const thoughtData = {
+      chatId,
+      authorId: userId,
+      title: draft.title || '',
+      body: draft.body,
+      blocks: draft.blocks || splitThoughtIntoBlocks(draft.body),
+      mood: draft.mood || 'normal',
+      status: 'shared',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }
+
+    const thoughtDocRef = await addDoc(thoughtsRef, thoughtData)
+
+    // Delete the draft after successful publish
+    await deleteDoc(draftRef)
+
+    return { success: true, thoughtId: thoughtDocRef.id }
+  } catch (error) {
+    console.error('Error publishing thought draft:', error)
+    return { success: false, error: error.message || 'Failed to publish draft' }
+  }
+}
+
 export default {
   createThought,
   listThoughts,
@@ -428,5 +671,11 @@ export default {
   getThoughtReadState,
   updateThoughtReadState,
   getThoughtReadReceipt,
-  listThoughtsForExport
+  listThoughtsForExport,
+  saveThoughtDraft,
+  listThoughtDrafts,
+  getThoughtDraft,
+  updateThoughtDraft,
+  deleteThoughtDraft,
+  publishThoughtDraft
 }

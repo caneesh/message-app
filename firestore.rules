@@ -1231,5 +1231,56 @@ service cloud.firestore {
                     && request.resource.data.keys().hasAll(['uid', 'requestedAt', 'status']);
       allow update, delete: if false;
     }
+
+    // Standalone Thoughts collection (for Thoughts app)
+    match /thoughts/{thoughtId} {
+      // Helper: Check if user owns or is shared with
+      function canAccessThought() {
+        let data = resource.data;
+        return request.auth.uid == data.userId || request.auth.uid in data.sharedWith;
+      }
+
+      // Helper: Check if user can access for create
+      function canAccessNewThought() {
+        let data = request.resource.data;
+        return request.auth.uid == data.userId;
+      }
+
+      // Helper: Validate thought fields
+      function hasValidThoughtFields() {
+        let data = request.resource.data;
+        return data.keys().hasOnly(['userId', 'title', 'body', 'preview', 'status', 'sharedWith', 'readBy', 'createdAt', 'sentAt'])
+            && data.title is string
+            && data.title.size() <= 200
+            && data.body is string
+            && data.body.size() <= 10000
+            && data.preview is string
+            && data.preview.size() <= 150
+            && data.status in ['draft', 'shared']
+            && data.sharedWith is list;
+      }
+
+      // Read: Owner or shared with
+      allow read: if isAuthenticated() && canAccessThought();
+
+      // Create: Only owner
+      allow create: if isAuthenticated()
+                    && canAccessNewThought()
+                    && hasValidThoughtFields();
+
+      // Update: Owner can edit, shared users can mark as read
+      allow update: if isAuthenticated()
+                    && canAccessThought()
+                    && (
+                      // Owner can update anything
+                      request.auth.uid == resource.data.userId
+                      // Shared user can only update readBy field
+                      || (request.auth.uid in resource.data.sharedWith
+                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']))
+                    );
+
+      // Delete: Only owner
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
   }
 }

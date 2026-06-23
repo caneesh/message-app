@@ -20,6 +20,17 @@ export function useUnreadThoughts(chatId, userId) {
 
     const checkUnreadThoughts = async () => {
       try {
+        // Get hidden thought IDs for this user
+        const hiddenIds = new Set()
+        try {
+          const hiddenRef = collection(db, 'chats', chatId, 'thoughtUserState', userId, 'items')
+          const hiddenQuery = query(hiddenRef, where('state', '==', 'hidden_due_to_removal_request'))
+          const hiddenSnap = await getDocs(hiddenQuery)
+          hiddenSnap.docs.forEach(doc => hiddenIds.add(doc.id))
+        } catch {
+          // Ignore errors fetching hidden state
+        }
+
         const thoughtsRef = collection(db, 'chats', chatId, 'thoughts')
         const q = query(
           thoughtsRef,
@@ -38,6 +49,9 @@ export function useUnreadThoughts(chatId, userId) {
 
           // Skip thoughts authored by the current user
           if (thought.authorId === userId) continue
+
+          // Skip hidden thoughts
+          if (hiddenIds.has(thought.id)) continue
 
           try {
             // Check private read state for more accurate status

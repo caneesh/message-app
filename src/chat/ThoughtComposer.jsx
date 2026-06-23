@@ -1,5 +1,11 @@
-import { useState } from 'react'
-import { createThought } from '../services/thoughtService'
+import { useState, useEffect } from 'react'
+import {
+  createThought,
+  saveThoughtDraft,
+  updateThoughtDraft,
+  deleteThoughtDraft,
+  publishThoughtDraft
+} from '../services/thoughtService'
 
 const MOODS = [
   { value: 'normal', label: 'Normal', emoji: '💭' },
@@ -12,22 +18,100 @@ const MOODS = [
 const MAX_TITLE_LENGTH = 120
 const MAX_BODY_LENGTH = 10000
 
-function ThoughtComposer({ currentUser, chatId, onClose, onCreated }) {
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [mood, setMood] = useState('normal')
+function ThoughtComposer({ currentUser, chatId, onClose, onCreated, draft = null, onDraftSaved, onDraftDeleted }) {
+  const [title, setTitle] = useState(draft?.title || '')
+  const [body, setBody] = useState(draft?.body || '')
+  const [mood, setMood] = useState(draft?.mood || 'normal')
   const [submitting, setSubmitting] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [deletingDraft, setDeletingDraft] = useState(false)
   const [error, setError] = useState('')
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
+  const [draftSavedMessage, setDraftSavedMessage] = useState('')
 
+  const isEditingDraft = !!draft?.id
   const hasContent = title.trim() || body.trim()
 
+  const hasUnsavedChanges = () => {
+    if (!draft) return hasContent
+    return title !== (draft.title || '') || body !== (draft.body || '') || mood !== (draft.mood || 'normal')
+  }
+
   const handleClose = () => {
-    if (hasContent) {
-      if (!window.confirm('Discard your thought? Changes will be lost.')) {
-        return
-      }
+    if (hasUnsavedChanges()) {
+      setShowExitConfirm(true)
+      return
     }
     onClose()
+  }
+
+  const handleSaveDraft = async () => {
+    setError('')
+    setSavingDraft(true)
+
+    try {
+      let result
+      if (isEditingDraft) {
+        result = await updateThoughtDraft(chatId, currentUser.uid, draft.id, {
+          title: title.trim(),
+          body: body.trim(),
+          mood
+        })
+      } else {
+        result = await saveThoughtDraft(chatId, currentUser.uid, {
+          title: title.trim(),
+          body: body.trim(),
+          mood
+        })
+      }
+
+      if (result.success) {
+        setDraftSavedMessage('Draft saved')
+        setTimeout(() => setDraftSavedMessage(''), 2000)
+        onDraftSaved?.()
+      } else {
+        setError(result.error || 'Failed to save draft')
+      }
+    } catch (err) {
+      setError('Failed to save draft')
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  const handleDeleteDraft = async () => {
+    if (!isEditingDraft) return
+    if (!window.confirm('Delete this draft? This cannot be undone.')) return
+
+    setDeletingDraft(true)
+    try {
+      const result = await deleteThoughtDraft(chatId, currentUser.uid, draft.id)
+      if (result.success) {
+        onDraftDeleted?.()
+        onClose()
+      } else {
+        setError(result.error || 'Failed to delete draft')
+      }
+    } catch (err) {
+      setError('Failed to delete draft')
+    } finally {
+      setDeletingDraft(false)
+    }
+  }
+
+  const handleExitSaveDraft = async () => {
+    setShowExitConfirm(false)
+    await handleSaveDraft()
+    onClose()
+  }
+
+  const handleExitDiscard = () => {
+    setShowExitConfirm(false)
+    onClose()
+  }
+
+  const handleExitCancel = () => {
+    setShowExitConfirm(false)
   }
 
   const handleSubmit = async (e) => {
@@ -52,20 +136,32 @@ function ThoughtComposer({ currentUser, chatId, onClose, onCreated }) {
 
     setSubmitting(true)
 
-    const result = await createThought(chatId, currentUser.uid, {
-      title: title.trim(),
-      body: trimmedBody,
-      mood
-    })
+    let result
+    if (isEditingDraft) {
+      // Publish the draft
+      result = await publishThoughtDraft(chatId, currentUser.uid, draft.id)
+    } else {
+      // Create new thought directly
+      result = await createThought(chatId, currentUser.uid, {
+        title: title.trim(),
+        body: trimmedBody,
+        mood
+      })
+    }
 
     if (result.success) {
       onCreated?.()
+      if (isEditingDraft) {
+        onDraftDeleted?.()
+      }
       onClose()
     } else {
       setError(result.error || 'Failed to share thought.')
       setSubmitting(false)
     }
   }
+
+  const isBusy = submitting || savingDraft || deletingDraft
 
   return (
     <div className="thought-composer-overlay" onClick={handleClose}>
@@ -74,11 +170,23 @@ function ThoughtComposer({ currentUser, chatId, onClose, onCreated }) {
           <button className="thought-composer-back" onClick={handleClose} aria-label="Close">
             ←
           </button>
-          <h2>New Thought</h2>
+          <h2>{isEditingDraft ? 'Edit Draft' : 'New Thought'}</h2>
+          {isEditingDraft && (
+            <button
+              type="button"
+              className="thought-composer-delete-draft"
+              onClick={handleDeleteDraft}
+              disabled={isBusy}
+              title="Delete draft"
+            >
+              🗑
+            </button>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="thought-composer-form">
           {error && <div className="thought-composer-error">{error}</div>}
+          {draftSavedMessage && <div className="thought-composer-success">{draftSavedMessage}</div>}
 
           <div className="thought-composer-field">
             <input
@@ -88,7 +196,7 @@ function ThoughtComposer({ currentUser, chatId, onClose, onCreated }) {
               onChange={(e) => setTitle(e.target.value)}
               maxLength={MAX_TITLE_LENGTH}
               className="thought-composer-title"
-              disabled={submitting}
+              disabled={isBusy}
             />
           </div>
 
@@ -100,7 +208,7 @@ function ThoughtComposer({ currentUser, chatId, onClose, onCreated }) {
               maxLength={MAX_BODY_LENGTH}
               className="thought-composer-body"
               rows={10}
-              disabled={submitting}
+              disabled={isBusy}
               autoFocus
             />
             <div className="thought-composer-char-count">
@@ -117,7 +225,7 @@ function ThoughtComposer({ currentUser, chatId, onClose, onCreated }) {
                   type="button"
                   className={`thought-mood-btn ${mood === m.value ? 'active' : ''}`}
                   onClick={() => setMood(m.value)}
-                  disabled={submitting}
+                  disabled={isBusy}
                   title={m.label}
                 >
                   {m.emoji}
@@ -131,20 +239,48 @@ function ThoughtComposer({ currentUser, chatId, onClose, onCreated }) {
               type="button"
               className="thought-composer-cancel"
               onClick={handleClose}
-              disabled={submitting}
+              disabled={isBusy}
             >
               Cancel
             </button>
             <button
+              type="button"
+              className="thought-composer-draft"
+              onClick={handleSaveDraft}
+              disabled={isBusy || !hasContent}
+            >
+              {savingDraft ? 'Saving...' : 'Save Draft'}
+            </button>
+            <button
               type="submit"
               className="thought-composer-submit"
-              disabled={submitting || !body.trim()}
+              disabled={isBusy || !body.trim()}
             >
               {submitting ? 'Sharing...' : 'Share Thought'}
             </button>
           </div>
         </form>
       </div>
+
+      {showExitConfirm && (
+        <div className="thought-exit-confirm-overlay" onClick={handleExitCancel}>
+          <div className="thought-exit-confirm" onClick={(e) => e.stopPropagation()}>
+            <h3>Save this thought as a draft?</h3>
+            <p>Your changes will be lost if you don't save.</p>
+            <div className="thought-exit-confirm-actions">
+              <button className="thought-exit-btn discard" onClick={handleExitDiscard}>
+                Discard
+              </button>
+              <button className="thought-exit-btn cancel" onClick={handleExitCancel}>
+                Cancel
+              </button>
+              <button className="thought-exit-btn save" onClick={handleExitSaveDraft}>
+                Save Draft
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

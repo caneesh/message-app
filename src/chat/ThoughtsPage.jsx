@@ -1,18 +1,33 @@
 import { useState, useEffect } from 'react'
-import { listThoughts, getThought } from '../services/thoughtService'
+import { listThoughts, getThought, listThoughtDrafts } from '../services/thoughtService'
+import { getHiddenThoughtIds } from '../services/thoughtRemovalService'
 import ThoughtList from './ThoughtList'
 import ThoughtComposer from './ThoughtComposer'
 import ThoughtDetail from './ThoughtDetail'
 import ThoughtEditor from './ThoughtEditor'
+import ThoughtDraftList from './ThoughtDraftList'
 
-function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialThoughtId, initialBlockId }) {
+function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialThoughtId, initialBlockId, onTalkInChat }) {
+  const [activeTab, setActiveTab] = useState('shared')
   const [thoughts, setThoughts] = useState([])
+  const [hiddenIds, setHiddenIds] = useState(new Set())
+  const [drafts, setDrafts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [draftsLoading, setDraftsLoading] = useState(false)
   const [showComposer, setShowComposer] = useState(false)
+  const [editingDraft, setEditingDraft] = useState(null)
   const [selectedThought, setSelectedThought] = useState(null)
   const [editingThought, setEditingThought] = useState(null)
   const [highlightBlockId, setHighlightBlockId] = useState(null)
   const [thoughtUnavailable, setThoughtUnavailable] = useState(false)
+
+  const fetchHiddenIds = async () => {
+    if (!currentUser?.uid) return
+    const result = await getHiddenThoughtIds(chatId, currentUser.uid)
+    if (result.success) {
+      setHiddenIds(new Set(result.hiddenIds))
+    }
+  }
 
   const fetchThoughts = async () => {
     setLoading(true)
@@ -23,9 +38,21 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
     setLoading(false)
   }
 
+  const fetchDrafts = async () => {
+    if (!currentUser?.uid) return
+    setDraftsLoading(true)
+    const result = await listThoughtDrafts(chatId, currentUser.uid)
+    if (result.success) {
+      setDrafts(result.drafts)
+    }
+    setDraftsLoading(false)
+  }
+
   useEffect(() => {
     fetchThoughts()
-  }, [chatId])
+    fetchDrafts()
+    fetchHiddenIds()
+  }, [chatId, currentUser?.uid])
 
   useEffect(() => {
     if (initialThoughtId) {
@@ -43,16 +70,30 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
     }
   }, [initialThoughtId, initialBlockId, chatId])
 
+  // Filter out hidden thoughts for the current user
+  const visibleThoughts = thoughts.filter(t => !hiddenIds.has(t.id))
+
   const handleNewThought = () => {
+    setEditingDraft(null)
     setShowComposer(true)
   }
 
   const handleComposerClose = () => {
     setShowComposer(false)
+    setEditingDraft(null)
   }
 
   const handleThoughtCreated = () => {
     fetchThoughts()
+    fetchDrafts()
+  }
+
+  const handleDraftSaved = () => {
+    fetchDrafts()
+  }
+
+  const handleDraftDeleted = () => {
+    fetchDrafts()
   }
 
   const handleSelectThought = (thought) => {
@@ -60,9 +101,17 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
     setHighlightBlockId(null)
   }
 
+  const handleSelectDraft = (draft) => {
+    setEditingDraft(draft)
+    setShowComposer(true)
+  }
+
   const handleDetailClose = () => {
     setSelectedThought(null)
     setHighlightBlockId(null)
+    // Refresh to catch any state changes
+    fetchThoughts()
+    fetchHiddenIds()
   }
 
   const handleReplyToThought = (replyData) => {
@@ -89,6 +138,17 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
     fetchThoughts()
   }
 
+  const handleRemovalAccepted = () => {
+    fetchThoughts()
+    fetchHiddenIds()
+  }
+
+  const handleTalkInChat = (data) => {
+    if (onTalkInChat) {
+      onTalkInChat(data)
+    }
+  }
+
   return (
     <div className="thoughts-page-overlay" onClick={onClose}>
       <div className="thoughts-page" onClick={(e) => e.stopPropagation()}>
@@ -100,6 +160,23 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
           <span className="thoughts-page-icon">💭</span>
         </div>
 
+        <div className="thoughts-page-tabs">
+          <button
+            className={`thoughts-tab ${activeTab === 'shared' ? 'active' : ''}`}
+            onClick={() => setActiveTab('shared')}
+          >
+            Shared
+            {visibleThoughts.length > 0 && <span className="thoughts-tab-count">{visibleThoughts.length}</span>}
+          </button>
+          <button
+            className={`thoughts-tab ${activeTab === 'drafts' ? 'active' : ''}`}
+            onClick={() => setActiveTab('drafts')}
+          >
+            Drafts
+            {drafts.length > 0 && <span className="thoughts-tab-count">{drafts.length}</span>}
+          </button>
+        </div>
+
         {thoughtUnavailable && (
           <div className="thought-unavailable-notice">
             <span className="thought-unavailable-icon">💭</span>
@@ -108,13 +185,27 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
           </div>
         )}
 
-        {!thoughtUnavailable && (
+        {!thoughtUnavailable && activeTab === 'shared' && (
           <div className="thoughts-page-content">
             <ThoughtList
-              thoughts={thoughts}
+              thoughts={visibleThoughts}
               loading={loading}
               onSelect={handleSelectThought}
               onNewThought={handleNewThought}
+              currentUser={currentUser}
+              chatId={chatId}
+            />
+          </div>
+        )}
+
+        {!thoughtUnavailable && activeTab === 'drafts' && (
+          <div className="thoughts-page-content">
+            <ThoughtDraftList
+              drafts={drafts}
+              loading={draftsLoading}
+              onSelect={handleSelectDraft}
+              onNewDraft={handleNewThought}
+              onDraftDeleted={handleDraftDeleted}
               currentUser={currentUser}
               chatId={chatId}
             />
@@ -127,6 +218,9 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
             chatId={chatId}
             onClose={handleComposerClose}
             onCreated={handleThoughtCreated}
+            draft={editingDraft}
+            onDraftSaved={handleDraftSaved}
+            onDraftDeleted={handleDraftDeleted}
           />
         )}
 
@@ -140,6 +234,8 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
             highlightBlockId={highlightBlockId}
             onEdit={handleEdit}
             onDeleted={handleDeleted}
+            onRemovalAccepted={handleRemovalAccepted}
+            onTalkInChat={handleTalkInChat}
           />
         )}
 

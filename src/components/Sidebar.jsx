@@ -20,8 +20,10 @@ import {
   ChevronRightIcon,
   WarmthIcon,
 } from './icons'
+import { filterNavCategories, filterNavItems } from '../config/simpleMode'
 
-const navCategories = [
+// All available nav categories (Temporary simple mode: re-enable extra sections later)
+const allNavCategories = [
   {
     label: 'Core',
     items: [
@@ -72,9 +74,15 @@ const navCategories = [
   },
 ]
 
-const navItems = navCategories.flatMap((cat) => cat.items)
+// Filtered categories based on simple mode
+const navCategories = filterNavCategories(allNavCategories)
+const allNavItems = allNavCategories.flatMap((cat) => cat.items)
+const navItems = filterNavItems(allNavItems)
 
 function Sidebar({ activeTab, onTabChange, collapsed, onToggleCollapse }) {
+  // Get filtered categories for rendering
+  const visibleCategories = filterNavCategories(allNavCategories)
+
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
@@ -110,7 +118,7 @@ function Sidebar({ activeTab, onTabChange, collapsed, onToggleCollapse }) {
         </button>
       </div>
       <nav className="sidebar-nav" role="navigation" aria-label="Main navigation">
-        {navCategories.map((category) => (
+        {visibleCategories.map((category) => (
           <div key={category.label} className="nav-category">
             {!collapsed && (
               <div className="nav-category-label">{category.label}</div>
