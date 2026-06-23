@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { db, storage } from '../firebase/firebaseConfig'
 import {
   collection,
@@ -26,6 +26,8 @@ import { isImageContentType, isVideoContentType } from '../utils/messageExtracto
 import { isEmojiOnlyMessage } from '../utils/emojiUtils'
 import ZoomableImagePreview from './ZoomableImagePreview'
 import { bulkDeleteForMe, bulkDeleteForEveryone, canDeleteAllForEveryone } from '../services/messageService'
+import { useSavedMessages } from '../hooks/useSavedMessages'
+import { useMessageReminders, getReminderTime } from '../hooks/useMessageReminders'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -52,8 +54,25 @@ function ReplyQuoteThumbnail({ chatId, fileInfo }) {
 
 const PREVIEW_MAX_LENGTH = 80
 const MESSAGE_LIMIT = 100
-const ALLOWED_REACTIONS = ['👍', '❤️', '❤️‍🔥', '😂', '😮', '😢', '🙏']
+const ALLOWED_REACTIONS = ['❤️', '🤗', '😢', '✨', '🙏', '😂', '❤️‍🔥']
+const WARM_REACTION_LABELS = {
+  '❤️': 'Felt this',
+  '🤗': 'Comfort',
+  '😢': 'This hurt',
+  '✨': 'Beautiful',
+  '🙏': 'Thank you',
+  '😂': 'Funny',
+  '❤️‍🔥': 'Intense love',
+}
 const INTENSE_LOVE_EMOJI = '❤️‍🔥'
+const MESSAGE_INTENTS = [
+  { value: 'normal', label: 'Normal', icon: '' },
+  { value: 'important', label: 'Important', icon: '❗' },
+  { value: 'need_reply', label: 'Need reply', icon: '💬' },
+  { value: 'just_sharing', label: 'Just sharing', icon: '💭' },
+  { value: 'sensitive', label: 'Sensitive', icon: '🤫' },
+  { value: 'love', label: 'Love', icon: '💕' },
+]
 const CONVERSION_TYPES = ['reminder', 'decision', 'memory', 'promise']
 const EMOTIONAL_RECEIPTS = [
   { value: 'understood', label: 'I understood' },
@@ -113,6 +132,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const [editingId, setEditingId] = useState(null)
   const [editText, setEditText] = useState('')
   const [friendLastReadAt, setFriendLastReadAt] = useState(null)
+  const [myLastReadAtOnMount, setMyLastReadAtOnMount] = useState(null)
+  const [newMessagesCount, setNewMessagesCount] = useState(0)
+  const [firstUnreadId, setFirstUnreadId] = useState(null)
+  const [hasScrolledToUnread, setHasScrolledToUnread] = useState(false)
   const [showPinnedPanel, setShowPinnedPanel] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(null)
   const [convertModal, setConvertModal] = useState(null)
@@ -147,6 +170,23 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     deleteForMe,
     undoDelete
   } = useDeletedMediaForMe(chatId, currentUser?.uid)
+  const {
+    isSaved,
+    toggleSave,
+    savedMessages: savedMessagesList
+  } = useSavedMessages(chatId, currentUser?.uid)
+  const {
+    hasReminder,
+    getReminders,
+    createReminder,
+    cancelReminder
+  } = useMessageReminders(chatId, currentUser?.uid)
+  const [showReminderPicker, setShowReminderPicker] = useState(null)
+  const [showSavedMessages, setShowSavedMessages] = useState(false)
+  const [showEditHistory, setShowEditHistory] = useState(null)
+  const [editHistory, setEditHistory] = useState([])
+  const [loadingEditHistory, setLoadingEditHistory] = useState(false)
+  const [showHurtModal, setShowHurtModal] = useState(null)
   const messagesEndRef = useRef(null)
   const messagesStartRef = useRef(null)
   const messageListRef = useRef(null)
@@ -264,11 +304,49 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     return unsubscribe
   }, [chatId])
 
+  // Scroll to first unread on initial load, or to bottom if no unread
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (!messages.length || hasScrolledToUnread || loading) return
 
-  // Handle scroll position to show/hide floating buttons
+    if (firstUnreadId && messageRefs.current[firstUnreadId]) {
+      const element = messageRefs.current[firstUnreadId]
+      element.scrollIntoView({ behavior: 'auto', block: 'start' })
+      setHasScrolledToUnread(true)
+    } else if (!firstUnreadId && myLastReadAtOnMount !== null) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+      setHasScrolledToUnread(true)
+    }
+  }, [messages, firstUnreadId, hasScrolledToUnread, loading, myLastReadAtOnMount])
+
+  // Track new messages arriving while scrolled up
+  const previousMessagesLengthRef = useRef(0)
+  useEffect(() => {
+    if (!messages.length || !hasScrolledToUnread) {
+      previousMessagesLengthRef.current = messages.length
+      return
+    }
+
+    const container = messageListRef.current
+    if (!container) return
+
+    const { scrollHeight, scrollTop, clientHeight } = container
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+
+    const newMsgCount = messages.length - previousMessagesLengthRef.current
+    if (newMsgCount > 0 && !isNearBottom) {
+      const newMessages = messages.slice(-newMsgCount)
+      const othersMessages = newMessages.filter(m => m.senderId !== currentUser.uid)
+      if (othersMessages.length > 0) {
+        setNewMessagesCount(prev => prev + othersMessages.length)
+      }
+    } else if (isNearBottom) {
+      setNewMessagesCount(0)
+    }
+
+    previousMessagesLengthRef.current = messages.length
+  }, [messages, hasScrolledToUnread, currentUser.uid])
+
+  // Handle scroll position to show/hide floating buttons and clear new messages indicator
   useEffect(() => {
     const container = messageListRef.current
     if (!container) return
@@ -282,6 +360,11 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
       setShowScrollTop(distanceFromTop > 200)
       // Show "go to bottom" button when scrolled up more than 200px from bottom
       setShowScrollBottom(distanceFromBottom > 200)
+
+      // Clear new messages indicator when near bottom
+      if (distanceFromBottom < 100) {
+        setNewMessagesCount(0)
+      }
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
@@ -296,6 +379,16 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setNewMessagesCount(0)
+  }
+
+  const scrollToFirstUnread = () => {
+    if (firstUnreadId && messageRefs.current[firstUnreadId]) {
+      messageRefs.current[firstUnreadId].scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      scrollToBottom()
+    }
+    setNewMessagesCount(0)
   }
 
   // Handle external scroll-to-message request (from SharedMedia)
@@ -331,9 +424,47 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     return unsubscribe
   }, [chatId, currentUser.uid])
 
-  // Update own lastReadAt when viewing chat
+  // Fetch initial lastReadAt on mount (before updating it)
   useEffect(() => {
-    const updateLastReadAt = async () => {
+    const fetchInitialReadState = async () => {
+      try {
+        const chatRef = doc(db, 'chats', chatId)
+        const chatSnap = await getDoc(chatRef)
+        if (chatSnap.exists()) {
+          const lastReadAt = chatSnap.data().lastReadAt || {}
+          if (lastReadAt[currentUser.uid]) {
+            setMyLastReadAtOnMount(lastReadAt[currentUser.uid])
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching initial read state:', err)
+      }
+    }
+    fetchInitialReadState()
+  }, [chatId, currentUser.uid])
+
+  // Calculate first unread message
+  useEffect(() => {
+    if (!messages.length || !myLastReadAtOnMount) {
+      setFirstUnreadId(null)
+      return
+    }
+    const myLastReadMs = myLastReadAtOnMount.toMillis?.() || 0
+    const firstUnread = messages.find((msg) => {
+      if (msg.senderId === currentUser.uid) return false
+      const msgMs = msg.createdAt?.toMillis?.() || 0
+      return msgMs > myLastReadMs
+    })
+    setFirstUnreadId(firstUnread?.id || null)
+  }, [messages, myLastReadAtOnMount, currentUser.uid])
+
+  // Update own lastReadAt when viewing chat (debounced, only when at bottom)
+  const lastReadAtUpdateRef = useRef(null)
+  useEffect(() => {
+    if (lastReadAtUpdateRef.current) {
+      clearTimeout(lastReadAtUpdateRef.current)
+    }
+    lastReadAtUpdateRef.current = setTimeout(async () => {
       try {
         const chatRef = doc(db, 'chats', chatId)
         const chatSnap = await getDoc(chatRef)
@@ -349,8 +480,12 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
       } catch (err) {
         console.error('Error updating lastReadAt:', err)
       }
+    }, 1000)
+    return () => {
+      if (lastReadAtUpdateRef.current) {
+        clearTimeout(lastReadAtUpdateRef.current)
+      }
     }
-    updateLastReadAt()
   }, [chatId, currentUser.uid, messages])
 
   // Subscribe to pinned messages
@@ -460,6 +595,18 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
 
     try {
       const messageRef = doc(db, 'chats', chatId, 'messages', message.id)
+
+      // Save previous text to edit history
+      const historyRef = collection(db, 'chats', chatId, 'messages', message.id, 'editHistory')
+      await addDoc(historyRef, {
+        versionId: '',
+        previousText: message.text,
+        editedBy: currentUser.uid,
+        editedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      })
+
+      // Update the message
       await updateDoc(messageRef, {
         text: trimmedText,
         edited: true,
@@ -768,6 +915,75 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     await undoDelete(messageId)
   }
 
+  const handleSaveToHeart = async (messageId) => {
+    setShowMoreMenu(null)
+    setMobileActionSheet(null)
+    await toggleSave(messageId)
+  }
+
+  const handleReminderOption = async (messageId, option) => {
+    setShowReminderPicker(null)
+    setShowMoreMenu(null)
+    setMobileActionSheet(null)
+    if (option === 'custom') {
+      return
+    }
+    const remindAt = getReminderTime(option)
+    if (remindAt) {
+      await createReminder(messageId, remindAt)
+    }
+  }
+
+  const handleCancelReminder = async (messageId) => {
+    const msgReminders = getReminders(messageId)
+    for (const reminder of msgReminders) {
+      await cancelReminder(reminder.id)
+    }
+    setShowMoreMenu(null)
+    setMobileActionSheet(null)
+  }
+
+  const handleViewEditHistory = async (messageId) => {
+    setLoadingEditHistory(true)
+    setShowEditHistory(messageId)
+    try {
+      const historyRef = collection(db, 'chats', chatId, 'messages', messageId, 'editHistory')
+      const q = query(historyRef, orderBy('editedAt', 'desc'))
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setEditHistory(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setLoadingEditHistory(false)
+      }, () => {
+        setEditHistory([])
+        setLoadingEditHistory(false)
+      })
+      return unsubscribe
+    } catch (err) {
+      console.error('Error loading edit history:', err)
+      setEditHistory([])
+      setLoadingEditHistory(false)
+    }
+  }
+
+  const handleHurtAction = (action, message) => {
+    setShowHurtModal(null)
+    setShowMoreMenu(null)
+    setMobileActionSheet(null)
+
+    switch (action) {
+      case 'hide':
+        deleteForMe(message.id)
+        break
+      case 'reply_gently':
+        onReply(message)
+        break
+      case 'talk':
+        onReply(message)
+        break
+      default:
+        break
+    }
+  }
+
   const closeMobileActionSheet = () => {
     setMobileActionSheet(null)
   }
@@ -835,6 +1051,81 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const canDeleteSelectedForEveryone = () => {
     const messagesArray = Array.from(selectedMessages.values())
     return canDeleteAllForEveryone(messagesArray, currentUser.uid)
+  }
+
+  const handleExportSelected = () => {
+    if (selectedMessages.size === 0) return
+
+    const messagesArray = Array.from(selectedMessages.values())
+      .filter(msg => !isDeletedForMe(msg.id))
+      .sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || 0
+        const bTime = b.createdAt?.toMillis?.() || 0
+        return aTime - bTime
+      })
+
+    // Build export data
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      messageCount: messagesArray.length,
+      messages: messagesArray.map(msg => ({
+        id: msg.id,
+        type: msg.type,
+        text: msg.text || '',
+        senderId: msg.senderId,
+        senderPhone: msg.senderPhone,
+        createdAt: msg.createdAt?.toDate?.()?.toISOString() || null,
+        ...(msg.type === 'voice' && msg.transcriptText ? { transcriptText: msg.transcriptText } : {}),
+        ...(msg.file ? { fileName: msg.file.fileName, contentType: msg.file.contentType } : {}),
+        ...(msg.replyTo ? { replyTo: { textPreview: msg.replyTo.textPreview } } : {}),
+        ...(msg.messageIntent && msg.messageIntent !== 'normal' ? { messageIntent: msg.messageIntent } : {}),
+      }))
+    }
+
+    // Build markdown version
+    let markdown = `# Exported Messages\n\n`
+    markdown += `Exported on: ${new Date().toLocaleString()}\n`
+    markdown += `Message count: ${messagesArray.length}\n\n---\n\n`
+
+    messagesArray.forEach(msg => {
+      const isOwn = msg.senderId === currentUser.uid
+      const senderLabel = isOwn ? 'You' : 'Friend'
+      const time = msg.createdAt?.toDate?.()?.toLocaleString() || 'Unknown time'
+
+      markdown += `**${senderLabel}** - ${time}\n\n`
+
+      if (msg.type === 'voice' && msg.transcriptText) {
+        markdown += `*Voice transcript:* ${msg.transcriptText}\n\n`
+      } else if (msg.file) {
+        markdown += `📎 *File:* ${msg.file.fileName}\n\n`
+      } else {
+        markdown += `${msg.text}\n\n`
+      }
+
+      markdown += `---\n\n`
+    })
+
+    // Create JSON download
+    const jsonBlob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const jsonUrl = URL.createObjectURL(jsonBlob)
+    const jsonLink = document.createElement('a')
+    jsonLink.href = jsonUrl
+    jsonLink.download = `messages-export-${new Date().toISOString().split('T')[0]}.json`
+    jsonLink.click()
+    URL.revokeObjectURL(jsonUrl)
+
+    // Create Markdown download
+    setTimeout(() => {
+      const mdBlob = new Blob([markdown], { type: 'text/markdown' })
+      const mdUrl = URL.createObjectURL(mdBlob)
+      const mdLink = document.createElement('a')
+      mdLink.href = mdUrl
+      mdLink.download = `messages-export-${new Date().toISOString().split('T')[0]}.md`
+      mdLink.click()
+      URL.revokeObjectURL(mdUrl)
+    }, 100)
+
+    exitSelectionMode()
   }
 
   const scrollToMessage = (messageId) => {
@@ -1036,15 +1327,24 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     return <div className="message-text">{linkifyText(message.text)}</div>
   }
 
-  // Filter messages by search query
+  // Filter messages by search query (includes text, links, file names, and voice transcripts)
   const filteredMessages = searchQuery.trim()
     ? messages.filter((msg) => {
+        if (isDeletedForMe(msg.id)) return false
         const query = searchQuery.toLowerCase()
-        if (msg.type === 'text' && msg.text) {
-          return msg.text.toLowerCase().includes(query)
+        // Text messages
+        if (msg.text && msg.text.toLowerCase().includes(query)) {
+          return true
         }
-        if (msg.type === 'file' && msg.file?.fileName) {
-          return msg.file.fileName.toLowerCase().includes(query)
+        // File names
+        if (msg.file?.fileName && msg.file.fileName.toLowerCase().includes(query)) {
+          return true
+        }
+        // Voice note transcripts
+        if (msg.type === 'voice' && msg.transcriptionStatus === 'completed' && msg.transcriptText) {
+          if (msg.transcriptText.toLowerCase().includes(query)) {
+            return true
+          }
         }
         return false
       })
@@ -1072,6 +1372,13 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
             {selectedMessages.size} selected
           </span>
           <button
+            className="selection-bar-export"
+            onClick={handleExportSelected}
+            disabled={selectedMessages.size === 0}
+          >
+            📤 Export
+          </button>
+          <button
             className="selection-bar-delete"
             onClick={() => setShowDeleteModal(true)}
             disabled={selectedMessages.size === 0 || bulkDeleting}
@@ -1091,13 +1398,22 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           ↑
         </button>
       )}
-      {showScrollBottom && (
+      {showScrollBottom && !newMessagesCount && (
         <button
           className="scroll-fab scroll-fab-bottom"
           onClick={scrollToBottom}
           aria-label="Go to latest message"
         >
           ↓
+        </button>
+      )}
+      {newMessagesCount > 0 && (
+        <button
+          className="new-messages-indicator"
+          onClick={scrollToFirstUnread}
+          aria-label={`${newMessagesCount} new ${newMessagesCount === 1 ? 'message' : 'messages'}`}
+        >
+          {newMessagesCount} new {newMessagesCount === 1 ? 'message' : 'messages'} ↓
         </button>
       )}
 
@@ -1147,10 +1463,16 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           const emojiOnly = isTextMessage && isEmojiOnlyMessage(message.text)
 
           const isSelected = selectedMessages.has(message.id)
+          const isFirstUnread = firstUnreadId === message.id
 
           return (
-            <div
-              key={message.id}
+            <React.Fragment key={message.id}>
+              {isFirstUnread && (
+                <div className="unread-divider">
+                  <span className="unread-divider-text">New messages</span>
+                </div>
+              )}
+              <div
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
               className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVideoMessage ? 'video-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''} ${emojiOnly ? 'message--emoji-only' : ''} ${isSelected ? 'selected' : ''}`}
               onClick={selectionMode ? () => toggleMessageSelection(message) : undefined}
@@ -1440,9 +1762,30 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                 </div>
               ) : (
                 <>
+                  {message.messageIntent && message.messageIntent !== 'normal' && message.messageIntent !== 'love' && (
+                    <div className={`message-intent-badge ${message.messageIntent}`}>
+                      {MESSAGE_INTENTS.find(i => i.value === message.messageIntent)?.icon}
+                      {' '}
+                      {MESSAGE_INTENTS.find(i => i.value === message.messageIntent)?.label}
+                    </div>
+                  )}
                   <div className="message-text">{linkifyText(message.text)}</div>
-                  {message.edited && <span className="edited-label">edited</span>}
+                  {message.edited && (
+                    <span
+                      className="edited-label"
+                      onClick={() => handleViewEditHistory(message.id)}
+                      title="View edit history"
+                    >
+                      edited
+                    </span>
+                  )}
                 </>
+              )}
+              {(isSaved(message.id) || hasReminder(message.id)) && (
+                <div className="message-indicators">
+                  {isSaved(message.id) && <span className="message-indicator saved" title="Saved to Heart">❤️</span>}
+                  {hasReminder(message.id) && <span className="message-indicator reminder" title="Reply reminder set">⏰</span>}
+                </div>
               )}
               {renderReactions(message.id)}
               {renderEmotionalReceipts(message.id)}
@@ -1455,6 +1798,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                 )}
               </div>
             </div>
+            </React.Fragment>
           )
         })
       )}
@@ -1580,6 +1924,24 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                 </button>
               )}
               <div className="action-sheet-divider" />
+              <button className="action-sheet-btn" onClick={() => handleSaveToHeart(mobileActionSheet.message.id)}>
+                {isSaved(mobileActionSheet.message.id) ? '💔 Remove from Saved' : '❤️ Save to Heart'}
+              </button>
+              {hasReminder(mobileActionSheet.message.id) ? (
+                <button className="action-sheet-btn" onClick={() => handleCancelReminder(mobileActionSheet.message.id)}>
+                  🔕 Cancel Reminder
+                </button>
+              ) : (
+                <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowReminderPicker(mobileActionSheet.message.id) }}>
+                  ⏰ Reply Later
+                </button>
+              )}
+              {!mobileActionSheet.isOwn && (
+                <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowHurtModal(mobileActionSheet.message) }}>
+                  💔 This hurt me
+                </button>
+              )}
+              <div className="action-sheet-divider" />
               <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); openConvertModal(mobileActionSheet.message, 'reminder') }}>
                 ⏰ Save as Reminder
               </button>
@@ -1669,6 +2031,153 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
             {bulkDeleting && (
               <div className="bulk-delete-progress">Deleting...</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Reminder Picker Modal */}
+      {showReminderPicker && (
+        <div className="modal-overlay" onClick={() => setShowReminderPicker(null)}>
+          <div className="modal-content reminder-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Reply Later</h3>
+            <p className="modal-body">When should we remind you?</p>
+            <div className="reminder-options">
+              <button className="reminder-option" onClick={() => handleReminderOption(showReminderPicker, 'later_today')}>
+                <span className="reminder-option-icon">🕐</span>
+                <span>Later today</span>
+              </button>
+              <button className="reminder-option" onClick={() => handleReminderOption(showReminderPicker, 'tonight')}>
+                <span className="reminder-option-icon">🌙</span>
+                <span>Tonight</span>
+              </button>
+              <button className="reminder-option" onClick={() => handleReminderOption(showReminderPicker, 'tomorrow')}>
+                <span className="reminder-option-icon">☀️</span>
+                <span>Tomorrow</span>
+              </button>
+            </div>
+            <button className="modal-cancel-btn" onClick={() => setShowReminderPicker(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* This Hurt Me Modal */}
+      {showHurtModal && (
+        <div className="modal-overlay" onClick={() => setShowHurtModal(null)}>
+          <div className="modal-content hurt-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">This hurt me</h3>
+            <p className="modal-body">Take a moment. What would feel right?</p>
+            <div className="hurt-options">
+              <button className="hurt-option" onClick={() => handleHurtAction('hide', showHurtModal)}>
+                <span className="hurt-option-icon">🙈</span>
+                <span className="hurt-option-text">
+                  <strong>Hide from my view</strong>
+                  <small>Remove from your chat only</small>
+                </span>
+              </button>
+              <button className="hurt-option" onClick={() => handleHurtAction('reply_gently', showHurtModal)}>
+                <span className="hurt-option-icon">💬</span>
+                <span className="hurt-option-text">
+                  <strong>Reply gently</strong>
+                  <small>Open composer to respond</small>
+                </span>
+              </button>
+              <button className="hurt-option" onClick={() => handleHurtAction('talk', showHurtModal)}>
+                <span className="hurt-option-icon">🤝</span>
+                <span className="hurt-option-text">
+                  <strong>Talk about this</strong>
+                  <small>"Can we talk about this?"</small>
+                </span>
+              </button>
+            </div>
+            <button className="modal-cancel-btn" onClick={() => setShowHurtModal(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit History Modal */}
+      {showEditHistory && (
+        <div className="modal-overlay" onClick={() => { setShowEditHistory(null); setEditHistory([]) }}>
+          <div className="modal-content edit-history-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Edit History</h3>
+            <div className="edit-history-content">
+              {loadingEditHistory ? (
+                <div className="edit-history-loading">Loading...</div>
+              ) : editHistory.length === 0 ? (
+                <div className="edit-history-empty">No history available</div>
+              ) : (
+                editHistory.map((entry) => (
+                  <div key={entry.id} className="edit-history-item">
+                    <div className="edit-history-text">{entry.previousText}</div>
+                    <div className="edit-history-time">
+                      {entry.editedAt?.toDate?.().toLocaleString() || 'Unknown time'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <button className="modal-cancel-btn" onClick={() => { setShowEditHistory(null); setEditHistory([]) }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Saved Messages Panel */}
+      {showSavedMessages && (
+        <div className="modal-overlay" onClick={() => setShowSavedMessages(false)}>
+          <div className="modal-content saved-messages-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">❤️ Saved Messages</h3>
+            <div className="saved-messages-content">
+              {savedMessagesList.length === 0 ? (
+                <div className="saved-messages-empty">
+                  <p>No saved messages yet.</p>
+                  <p>Tap "Save to Heart" on any message to save it here.</p>
+                </div>
+              ) : (
+                savedMessagesList.map((saved) => {
+                  const message = messages.find(m => m.id === saved.messageId)
+                  return (
+                    <div key={saved.id} className="saved-message-item">
+                      {message ? (
+                        <>
+                          <div className="saved-message-text">{truncateText(message.text, 150)}</div>
+                          <div className="saved-message-actions">
+                            <button
+                              className="saved-message-view"
+                              onClick={() => {
+                                setShowSavedMessages(false)
+                                if (messageRefs.current[message.id]) {
+                                  messageRefs.current[message.id].scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                  setHighlightedMessageId(message.id)
+                                  setTimeout(() => setHighlightedMessageId(null), 2000)
+                                }
+                              }}
+                            >
+                              View in chat
+                            </button>
+                            <button
+                              className="saved-message-remove"
+                              onClick={() => toggleSave(saved.messageId)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="saved-message-unavailable">Message no longer available</div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <button className="modal-cancel-btn" onClick={() => setShowSavedMessages(false)}>
+              Close
+            </button>
           </div>
         </div>
       )}

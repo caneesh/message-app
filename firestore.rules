@@ -14,7 +14,13 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef', 'transcriptionStatus', 'transcriptText', 'transcriptCreatedAt', 'transcriptUpdatedAt', 'transcriptRequestedBy', 'transcriptErrorCode']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef', 'transcriptionStatus', 'transcriptText', 'transcriptCreatedAt', 'transcriptUpdatedAt', 'transcriptRequestedBy', 'transcriptErrorCode', 'messageIntent']);
+    }
+
+    // Helper: Validate optional messageIntent field (priority labels)
+    function isValidMessageIntent() {
+      let data = request.resource.data;
+      return !('messageIntent' in data) || data.messageIntent in ['normal', 'important', 'need_reply', 'just_sharing', 'sensitive', 'love'];
     }
 
     // Helper: Validate optional thoughtRef field
@@ -188,7 +194,8 @@ service cloud.firestore {
                       && isValidBaseMessage()
                       && (isValidTextMessage() || isValidFileMessage() || isValidVideoMessage() || isValidVoiceMessage() || isValidSpecialMessage())
                       && isValidReplyTo()
-                      && isValidThoughtRef();
+                      && isValidThoughtRef()
+                      && isValidMessageIntent();
         allow update: if isAuthenticated()
                       && isChatMember(chatId)
                       && (isValidMessageEdit() || isValidTranscriptionRequest());
@@ -203,7 +210,7 @@ service cloud.firestore {
                                 && reactionId == request.auth.uid
                                 && request.resource.data.keys().hasOnly(['uid', 'emoji', 'createdAt'])
                                 && request.resource.data.uid == request.auth.uid
-                                && request.resource.data.emoji in ['👍', '❤️', '❤️‍🔥', '😂', '😮', '😢', '🙏']
+                                && request.resource.data.emoji in ['👍', '❤️', '❤️‍🔥', '😂', '😮', '😢', '🙏', '🤗', '✨']
                                 && request.resource.data.emoji is string;
           allow delete: if isAuthenticated()
                         && isChatMember(chatId)
@@ -223,6 +230,78 @@ service cloud.firestore {
                         && isChatMember(chatId)
                         && receiptId == request.auth.uid;
         }
+
+        // Edit history subcollection
+        match /editHistory/{versionId} {
+          allow read: if isAuthenticated() && isChatMember(chatId);
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && request.resource.data.keys().hasOnly(['versionId', 'previousText', 'editedBy', 'editedAt', 'createdAt'])
+                        && request.resource.data.editedBy == request.auth.uid
+                        && request.resource.data.previousText is string
+                        && request.resource.data.previousText.size() <= 5000;
+          allow update, delete: if false;
+        }
+
+        // Message removal requests (for "This hurt me" feature)
+        match /removalRequests/{requestId} {
+          allow read: if isAuthenticated() && isChatMember(chatId);
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && request.resource.data.keys().hasOnly(['requestId', 'chatId', 'messageId', 'requestedBy', 'requestedAt', 'feeling', 'note', 'status', 'resolvedBy', 'resolvedAt', 'resolution'])
+                        && request.resource.data.requestedBy == request.auth.uid
+                        && request.resource.data.status == 'pending'
+                        && request.resource.data.feeling in ['hurt', 'upset', 'angry', 'overwhelmed', 'need_space', 'prefer_not_to_say']
+                        && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 300));
+          allow update: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && resource.data.requestedBy != request.auth.uid
+                        && request.resource.data.status in ['accepted', 'dismissed']
+                        && request.resource.data.resolvedBy == request.auth.uid;
+          allow delete: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && resource.data.requestedBy == request.auth.uid
+                        && resource.data.status == 'pending';
+        }
+      }
+
+      // Per-user message state (saved messages)
+      match /messageUserState/{uid}/saved/{messageId} {
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+        allow create, update: if isAuthenticated()
+                              && isChatMember(chatId)
+                              && uid == request.auth.uid
+                              && request.resource.data.keys().hasOnly(['messageId', 'userId', 'saved', 'createdAt', 'updatedAt'])
+                              && request.resource.data.userId == request.auth.uid
+                              && request.resource.data.saved == true;
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Message reminders (Reply Later feature)
+      match /messageReminders/{uid}/items/{reminderId} {
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+        allow create: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && request.resource.data.keys().hasOnly(['reminderId', 'messageId', 'userId', 'remindAt', 'status', 'note', 'createdAt', 'updatedAt', 'completedAt'])
+                      && request.resource.data.userId == request.auth.uid
+                      && request.resource.data.status == 'active'
+                      && request.resource.data.remindAt is timestamp
+                      && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 300));
+        allow update: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid
+                      && resource.data.userId == request.auth.uid
+                      && request.resource.data.status in ['active', 'completed', 'cancelled'];
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
       }
 
       // Typing indicator subcollection - doc ID must equal user's uid

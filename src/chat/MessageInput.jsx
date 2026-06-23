@@ -124,6 +124,15 @@ const EMOJI_LIST = [
   '⭐', '🔥', '💫', '🎀', '🎁', '🍫', '🍰', '🧁',
 ]
 
+const MESSAGE_INTENTS = [
+  { value: 'normal', label: 'Normal', icon: '' },
+  { value: 'important', label: 'Important', icon: '❗' },
+  { value: 'need_reply', label: 'Needs reply', icon: '💬' },
+  { value: 'just_sharing', label: 'Just sharing', icon: '💭' },
+  { value: 'sensitive', label: 'Sensitive', icon: '🤫' },
+  { value: 'love', label: 'Love', icon: '💕' },
+]
+
 function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeThoughtReply, clearThoughtReply }) {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -138,6 +147,8 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
   const [isVoiceRecording, setIsVoiceRecording] = useState(false)
   const [showSpecialComposer, setShowSpecialComposer] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [messageIntent, setMessageIntent] = useState('normal')
+  const [showIntentPicker, setShowIntentPicker] = useState(false)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -224,6 +235,10 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
         createdAt: serverTimestamp(),
       }
 
+      if (messageIntent && messageIntent !== 'normal') {
+        messageData.messageIntent = messageIntent
+      }
+
       if (activeReplyTo) {
         messageData.replyTo = {
           messageId: activeReplyTo.messageId,
@@ -248,6 +263,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
 
       await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
       setText('')
+      setMessageIntent('normal')
       clearReply()
       if (clearThoughtReply) clearThoughtReply()
       if (typingTimeoutRef.current) {
@@ -651,6 +667,36 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
             >
               😊
             </button>
+            <div className="intent-picker-container">
+              <button
+                type="button"
+                className={`intent-btn ${messageIntent !== 'normal' ? 'intent-active' : ''}`}
+                onClick={() => setShowIntentPicker(!showIntentPicker)}
+                disabled={sending}
+                title="Message type"
+                aria-label="Set message type"
+              >
+                {MESSAGE_INTENTS.find(i => i.value === messageIntent)?.icon || '🏷️'}
+              </button>
+              {showIntentPicker && (
+                <div className="intent-picker">
+                  {MESSAGE_INTENTS.map((intent) => (
+                    <button
+                      key={intent.value}
+                      type="button"
+                      className={`intent-option ${messageIntent === intent.value ? 'active' : ''}`}
+                      onClick={() => {
+                        setMessageIntent(intent.value)
+                        setShowIntentPicker(false)
+                      }}
+                    >
+                      {intent.icon && <span className="intent-icon">{intent.icon}</span>}
+                      {intent.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {trimmedText.length > 5 && (
               <>
                 <button

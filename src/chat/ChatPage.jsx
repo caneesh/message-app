@@ -334,6 +334,24 @@ function ChatPage() {
             <div className="chat-toolbar">
               <VoiceCallButton />
               <VideoCallButton />
+              <div className="chat-search-container">
+                <input
+                  type="text"
+                  className="chat-search-input"
+                  placeholder="Search messages..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                  <button
+                    className="chat-search-clear"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
               <button
                 className={`thoughts-btn ${totalThoughtsBadge > 0 ? 'thoughts-btn-badge' : ''}`}
                 onClick={() => setShowThoughts(true)}

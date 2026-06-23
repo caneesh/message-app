@@ -1,5 +1,6 @@
 {
   "projects": {
+    "default": "ctask-manager",
     "staging": "message-app-40a70"
   },
   "targets": {},
