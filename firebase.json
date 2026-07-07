@@ -17,6 +17,7 @@
     ]
   },
   "hosting": {
+    "site": "ctask-manager",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [

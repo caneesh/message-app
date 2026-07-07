@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { db } from '../firebase/firebaseConfig'
-import { collection, query, orderBy, limit, getDocs, startAfter, where, onSnapshot } from 'firebase/firestore'
+import { collection, query, orderBy, limit, getDocs, startAfter, where, onSnapshot, collectionGroup } from 'firebase/firestore'
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
 import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
+import { useMessageClearState } from '../hooks/useMessageClearState'
 import ZoomableImagePreview from './ZoomableImagePreview'
 import VoiceNoteTranscript from './VoiceNoteTranscript'
 import { requestTranscription } from '../services/transcriptionService'
@@ -396,7 +397,19 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
   const [textHasMore, setTextHasMore] = useState(true)
   const [textLastDoc, setTextLastDoc] = useState(null)
 
+  // Bundled attachments (from attachment_bundle messages)
+  const [bundledMedia, setBundledMedia] = useState([])
+  const [bundledDocs, setBundledDocs] = useState([])
+
   const { isDeletedForMe, deleteForMe } = useDeletedMediaForMe(chatId, currentUser?.uid)
+  const { isCleared: isMessageCleared } = useMessageClearState(chatId, currentUser?.uid)
+
+  // Combined check for hidden messages (deleted for me OR cleared by Clear All)
+  // Handles both regular messages (msg.id) and bundled attachments (msg.messageId)
+  const isHidden = useCallback((message) => {
+    const id = message.id || message.messageId
+    return isDeletedForMe(id) || isMessageCleared(message)
+  }, [isDeletedForMe, isMessageCleared])
 
   const handleDeleteForMe = useCallback(async (message) => {
     if (!window.confirm('Delete this from your view? It will still be visible to the other person.')) {
@@ -502,6 +515,70 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
       setMediaLoadingMore(false)
     }
   }, [chatId, mediaLastDoc])
+
+  // Load attachments from attachment bundles
+  const loadBundledAttachments = useCallback(async () => {
+    if (!chatId) return
+
+    try {
+      // First get all attachment_bundle messages
+      const messagesRef = collection(db, 'chats', chatId, 'messages')
+      const bundleQuery = query(
+        messagesRef,
+        where('type', '==', 'attachment_bundle'),
+        where('status', '==', 'sent'),
+        orderBy('createdAt', 'desc'),
+        limit(50)
+      )
+
+      const bundleSnapshot = await getDocs(bundleQuery)
+      const mediaAttachments = []
+      const docAttachments = []
+
+      // For each bundle, fetch its attachments
+      for (const bundleDoc of bundleSnapshot.docs) {
+        const messageId = bundleDoc.id
+        const attachmentsRef = collection(db, 'chats', chatId, 'messages', messageId, 'attachments')
+        const attachmentsQuery = query(attachmentsRef, orderBy('order', 'asc'))
+        const attachmentsSnapshot = await getDocs(attachmentsQuery)
+
+        attachmentsSnapshot.docs.forEach(attDoc => {
+          const att = { id: attDoc.id, messageId, ...attDoc.data() }
+          // Transform to match existing item structure
+          const item = {
+            id: `${messageId}_${att.id}`,
+            messageId,
+            attachmentId: att.id,
+            type: 'bundled_attachment',
+            file: {
+              storagePath: att.storagePath,
+              fileName: att.fileName,
+              contentType: att.contentType,
+              size: att.size,
+            },
+            createdAt: att.createdAt,
+            senderId: att.uploadedBy,
+          }
+
+          if (att.kind === 'image' || att.kind === 'video') {
+            mediaAttachments.push(item)
+          } else if (att.kind === 'document') {
+            docAttachments.push(item)
+          }
+        })
+      }
+
+      setBundledMedia(mediaAttachments)
+      setBundledDocs(docAttachments)
+    } catch (err) {
+      console.error('Error loading bundled attachments:', err)
+    }
+  }, [chatId])
+
+  // Load bundled attachments on mount
+  useEffect(() => {
+    loadBundledAttachments()
+  }, [loadBundledAttachments])
 
   // Load voice notes
   const loadVoice = useCallback(async (isInitial = true) => {
@@ -656,22 +733,28 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
     loadMedia(true)
   }, [chatId])
 
-  // Filter out deleted items from each category
-  const filteredMediaItems = useMemo(() =>
-    mediaItems.filter(msg => !isDeletedForMe(msg.id)),
-    [mediaItems, isDeletedForMe]
-  )
+  // Filter out deleted items from each category, include bundled attachments
+  const filteredMediaItems = useMemo(() => {
+    const regularMedia = mediaItems.filter(msg => !isHidden(msg))
+    const bundled = bundledMedia.filter(msg => !isHidden(msg))
+    // Combine and sort by createdAt descending
+    return [...regularMedia, ...bundled].sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0
+      const bTime = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0
+      return bTime - aTime
+    })
+  }, [mediaItems, bundledMedia, isHidden])
 
   const filteredVoiceItems = useMemo(() =>
-    voiceItems.filter(msg => !isDeletedForMe(msg.id)),
-    [voiceItems, isDeletedForMe]
+    voiceItems.filter(msg => !isHidden(msg)),
+    [voiceItems, isHidden]
   )
 
-  // Extract links from text messages, filter out deleted
+  // Extract links from text messages, filter out deleted/cleared
   const linkItems = useMemo(() => {
     const links = []
     textMessages.forEach(msg => {
-      if (msg.type === 'text' && msg.text && !isDeletedForMe(msg.id)) {
+      if (msg.type === 'text' && msg.text && !isHidden(msg)) {
         const extractedLinks = extractLinksFromText(msg.text)
         extractedLinks.forEach(link => {
           links.push({ message: msg, link })
@@ -679,18 +762,25 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
       }
     })
     return links
-  }, [textMessages, isDeletedForMe])
+  }, [textMessages, isHidden])
 
-  // Extract documents from file messages, filter out deleted
+  // Extract documents from file messages, filter out deleted/cleared, include bundled
   const documentItems = useMemo(() => {
-    return textMessages.filter(msg => {
+    const regularDocs = textMessages.filter(msg => {
       if (msg.type !== 'file' || !msg.file) return false
-      if (isDeletedForMe(msg.id)) return false
+      if (isHidden(msg)) return false
       const contentType = msg.file.contentType || ''
       return isDocumentContentType(contentType) ||
         (!isImageContentType(contentType) && !isVideoContentType(contentType))
     })
-  }, [textMessages, isDeletedForMe])
+    const bundled = bundledDocs.filter(msg => !isHidden(msg))
+    // Combine and sort by createdAt descending
+    return [...regularDocs, ...bundled].sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0
+      const bTime = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0
+      return bTime - aTime
+    })
+  }, [textMessages, bundledDocs, isHidden])
 
   // Filter by search
   const filteredItems = useMemo(() => {

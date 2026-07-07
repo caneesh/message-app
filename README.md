@@ -154,6 +154,8 @@ More than just a chat app - this is a complete private space for couples, close 
 - Convert messages to reminders/decisions/memories
 - Export messages and thoughts to JSON
 - Simple mode (hide advanced features)
+- Panic logout button for quick sign out
+- Multi-message delete (select and delete multiple messages at once)
 
 ## Project Structure
 

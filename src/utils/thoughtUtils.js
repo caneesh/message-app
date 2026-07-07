@@ -73,19 +73,43 @@ export function buildThoughtQuote(blockText) {
 }
 
 /**
+ * Get only readable (non-empty paragraph) blocks from a thought
+ * @param {Object} thought - The thought object with blocks array
+ * @returns {Array} - Array of readable block objects
+ */
+export function getReadableBlocks(thought) {
+  if (!thought?.blocks || !Array.isArray(thought.blocks)) return []
+  return thought.blocks.filter(block =>
+    block.type === 'paragraph' && block.text && block.text.trim().length > 0
+  )
+}
+
+/**
  * Calculate read progress percentage
  * @param {Array} readBlockIds - Array of block IDs that have been read
- * @param {number} totalBlocks - Total number of blocks in the thought
+ * @param {number} totalBlocks - Total number of readable blocks in the thought
  * @returns {number} - Percentage from 0 to 100
  */
 export function calculateReadPercent(readBlockIds, totalBlocks) {
-  if (!totalBlocks || totalBlocks <= 0) return 0
+  if (!totalBlocks || totalBlocks <= 0) return 100 // No blocks = fully read
   if (!readBlockIds || !Array.isArray(readBlockIds)) return 0
 
   const readCount = readBlockIds.length
   const percent = Math.round((readCount / totalBlocks) * 100)
 
   return Math.min(100, Math.max(0, percent))
+}
+
+/**
+ * Calculate read percent ensuring it never decreases (monotonic)
+ * @param {number} previousPercent - Previously stored percentage
+ * @param {number} newPercent - Newly calculated percentage
+ * @returns {number} - The higher of the two values
+ */
+export function mergeReadPercent(previousPercent, newPercent) {
+  const prev = previousPercent ?? 0
+  const next = newPercent ?? 0
+  return Math.max(prev, next)
 }
 
 /**
@@ -135,7 +159,9 @@ export default {
   splitThoughtIntoBlocks,
   getThoughtPreview,
   buildThoughtQuote,
+  getReadableBlocks,
   calculateReadPercent,
+  mergeReadPercent,
   isValidMood,
   isValidStatus,
   MOOD_OPTIONS,

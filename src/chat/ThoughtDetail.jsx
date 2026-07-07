@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getThoughtReadState, updateThoughtReadState, softDeleteThought, getThoughtReadReceipt } from '../services/thoughtService'
-import { calculateReadPercent, buildThoughtQuote, getThoughtPreview, getMoodDisplay } from '../utils/thoughtUtils'
+import { calculateReadPercent, buildThoughtQuote, getThoughtPreview, getMoodDisplay, getReadableBlocks } from '../utils/thoughtUtils'
 import { db } from '../firebase/firebaseConfig'
 import { doc, getDoc } from 'firebase/firestore'
 import ThoughtComments from './ThoughtComments'
@@ -83,7 +83,9 @@ function ThoughtDetail({
   const observerRef = useRef(null)
 
   const blocks = thought?.blocks || []
-  const totalBlocks = blocks.length
+  // Only count non-empty paragraph blocks for read percentage
+  const readableBlocks = getReadableBlocks(thought)
+  const totalReadableBlocks = readableBlocks.length
   const isAuthor = thought?.authorId === currentUser?.uid
   const isRemoved = thought?.status === 'removed_from_both'
 
@@ -193,8 +195,15 @@ function ThoughtDetail({
       if (thought?.authorId === currentUser?.uid) return
 
       const readBlockIdsArray = Array.from(blockIds)
-      const readPercent = calculateReadPercent(readBlockIdsArray, totalBlocks)
 
+      // Find which readable blocks have been read
+      const readableBlockIds = readableBlocks.map(b => b.blockId)
+      const readReadableBlockIds = readBlockIdsArray.filter(id => readableBlockIds.includes(id))
+
+      // Calculate percentage based on readable blocks only
+      let readPercent = calculateReadPercent(readReadableBlockIds, totalReadableBlocks)
+
+      // Find the highest read block index
       let lastReadBlockIndex = -1
       for (let i = 0; i < blocks.length; i++) {
         if (blockIds.has(blocks[i].blockId)) {
@@ -202,13 +211,32 @@ function ThoughtDetail({
         }
       }
 
+      // If user read the last readable block, force 100%
+      const lastReadableBlock = readableBlocks[readableBlocks.length - 1]
+      if (lastReadableBlock && blockIds.has(lastReadableBlock.blockId)) {
+        readPercent = 100
+      }
+
+      // Debug logging
+      console.log('[THOUGHT_READ] saveReadState:', {
+        thoughtId: thought.id?.slice?.(-6),
+        totalBlocks: blocks.length,
+        totalReadableBlocks,
+        readBlockCount: readBlockIdsArray.length,
+        readReadableCount: readReadableBlockIds.length,
+        lastReadBlockIndex,
+        readPercent,
+        readableBlockIds: readableBlockIds.map(id => id?.slice?.(-8)),
+        readBlockIds: readBlockIdsArray.map(id => id?.slice?.(-8)),
+      })
+
       await updateThoughtReadState(chatId, currentUser.uid, thought.id, {
         readBlockIds: readBlockIdsArray,
         readPercent,
         lastReadBlockIndex
       })
     }, DEBOUNCE_MS)
-  }, [thought?.id, thought?.authorId, currentUser?.uid, chatId, blocks, totalBlocks, isRemoved])
+  }, [thought?.id, thought?.authorId, currentUser?.uid, chatId, blocks, readableBlocks, totalReadableBlocks, isRemoved])
 
   const markBlockAsRead = useCallback((blockId) => {
     setReadBlockIds((prev) => {
@@ -223,6 +251,7 @@ function ThoughtDetail({
   useEffect(() => {
     if (!blocks.length || isRemoved || isAuthor) return
 
+    // Use lower threshold (0.3) to more reliably mark blocks as read
     observerRef.current = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -245,7 +274,7 @@ function ThoughtDetail({
           }
         })
       },
-      { threshold: 0.5 }
+      { threshold: 0.3 }
     )
 
     Object.values(blockRefs.current).forEach((el) => {
@@ -262,6 +291,44 @@ function ThoughtDetail({
       visibilityTimers.current = {}
     }
   }, [blocks, markBlockAsRead, isRemoved, isAuthor])
+
+  // Mark all blocks as read when user scrolls to bottom of thought
+  useEffect(() => {
+    if (!blocks.length || isRemoved || isAuthor) return
+
+    const contentEl = document.querySelector('.thought-detail-content')
+    if (!contentEl) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = contentEl
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 50
+
+      if (isNearBottom && readableBlocks.length > 0) {
+        // Mark all readable blocks as read when user reaches bottom
+        setReadBlockIds((prev) => {
+          const newSet = new Set(prev)
+          let changed = false
+          readableBlocks.forEach(block => {
+            if (!newSet.has(block.blockId)) {
+              newSet.add(block.blockId)
+              changed = true
+            }
+          })
+          if (changed) {
+            console.log('[THOUGHT_READ] User reached bottom, marking all blocks read')
+            saveReadState(newSet)
+          }
+          return newSet
+        })
+      }
+    }
+
+    contentEl.addEventListener('scroll', handleScroll, { passive: true })
+    // Check initial state
+    handleScroll()
+
+    return () => contentEl.removeEventListener('scroll', handleScroll)
+  }, [blocks, readableBlocks, isRemoved, isAuthor, saveReadState])
 
   useEffect(() => {
     return () => {

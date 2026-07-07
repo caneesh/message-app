@@ -50,7 +50,7 @@ service firebase.storage {
 
     // Helper: File size limit (5 MB for images/docs, 100 MB for videos)
     function isWithinSizeLimit() {
-      return request.resource.size <= 5 * 1024 * 1024;
+      return request.resource.size <= 25 * 1024 * 1024;
     }
 
     function isWithinVideoSizeLimit() {
@@ -80,6 +80,21 @@ service firebase.storage {
       allow write: if isAuthenticated()
                    && isAllowedVoiceContentType()
                    && isWithinSizeLimit();
+
+      // Delete: any authenticated user
+      allow delete: if isAuthenticated();
+    }
+
+    // Chat attachment bundles path: chatAttachments/{chatId}/{messageId}/{attachmentId}/{fileName}
+    match /chatAttachments/{chatId}/{messageId}/{attachmentId}/{fileName} {
+      // Read: any authenticated user (Firestore rules protect message access)
+      allow read: if isAuthenticated();
+
+      // Write: authenticated users with valid file type and size
+      allow write: if isAuthenticated()
+                   && (((isImageContentType() || isDocumentContentType()) && isWithinSizeLimit())
+                       || (isVideoContentType() && isWithinVideoSizeLimit())
+                       || (isAllowedVoiceContentType() && isWithinSizeLimit()));
 
       // Delete: any authenticated user
       allow delete: if isAuthenticated();

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { db, storage } from '../firebase/firebaseConfig'
-import { collection, addDoc, doc, setDoc, deleteDoc, getDoc, query, where, orderBy, limit, getDocs, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, doc, setDoc, deleteDoc, getDoc, query, where, orderBy, limit, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { ref, uploadBytesResumable } from 'firebase/storage'
 import ToneRepairAiButton from './ToneRepairAiButton'
 import VoiceRecorder from './VoiceRecorder'
@@ -31,6 +31,8 @@ function ReplyThumbnail({ chatId, fileInfo }) {
 }
 
 const MAX_MESSAGE_LENGTH = 2000
+const MAX_FILES_PER_MESSAGE = 10
+const MAX_TOTAL_BUNDLE_SIZE = 100 * 1024 * 1024 // 100 MB
 
 const HARSH_PATTERNS = [
   { pattern: /why didn't you/gi, softer: "Just checking — were you able to" },
@@ -75,7 +77,7 @@ const softenMessage = (text) => {
 }
 
 const STRESSED_MOODS = ['😟', '😴']
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
+const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25 MB
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100 MB
 const ALLOWED_TYPES = [
   'image/jpeg',
@@ -97,6 +99,19 @@ const ALL_ALLOWED_TYPES = [...ALLOWED_TYPES, ...VIDEO_TYPES]
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+}
+
+function getFileKind(contentType) {
+  if (contentType.startsWith('image/')) return 'image'
+  if (contentType.startsWith('video/')) return 'video'
+  if (contentType.startsWith('audio/')) return 'audio'
+  return 'document'
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
 const TYPING_TIMEOUT = 2000
@@ -128,6 +143,7 @@ const MESSAGE_INTENTS = [
   { value: 'normal', label: 'Normal', icon: '' },
   { value: 'important', label: 'Important', icon: '❗' },
   { value: 'need_reply', label: 'Needs reply', icon: '💬' },
+  { value: 'urgent', label: 'Urgent', icon: '🔴' },
   { value: 'just_sharing', label: 'Just sharing', icon: '💭' },
   { value: 'sensitive', label: 'Sensitive', icon: '🤫' },
   { value: 'love', label: 'Love', icon: '💕' },
@@ -149,6 +165,9 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [messageIntent, setMessageIntent] = useState('normal')
   const [showIntentPicker, setShowIntentPicker] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState([]) // Multi-file attachment queue
+  const [uploadingBundle, setUploadingBundle] = useState(false)
+  const [bundleUploadProgress, setBundleUploadProgress] = useState({}) // { fileId: progress }
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -375,27 +394,268 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
   }
 
   const handleFileSelect = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
 
     // Reset input
     e.target.value = ''
 
+    // Check if adding files would exceed limit
+    const totalFilesAfterAdd = pendingFiles.length + files.length
+    if (totalFilesAfterAdd > MAX_FILES_PER_MESSAGE) {
+      setError(`Maximum ${MAX_FILES_PER_MESSAGE} files per message. You have ${pendingFiles.length} selected.`)
+      return
+    }
+
+    const validFiles = []
+    const currentTotalSize = pendingFiles.reduce((sum, f) => sum + f.file.size, 0)
+    let newTotalSize = currentTotalSize
+
+    for (const file of files) {
+      const fileType = file.type || ''
+      const isImage = fileType.startsWith('image/')
+      const isVideo = fileType.startsWith('video/')
+      const isDocument = ['application/pdf', 'text/plain'].includes(fileType)
+
+      // Validate file type
+      if (!isImage && !isVideo && !isDocument) {
+        setError(`${file.name}: Unsupported file type. Allowed: Images, Videos, PDF, TXT`)
+        continue
+      }
+
+      // Validate individual file size
+      const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_FILE_SIZE
+      if (file.size > maxSize) {
+        setError(`${file.name}: File too large. Maximum size is ${isVideo ? '100' : '25'} MB.`)
+        continue
+      }
+
+      // Validate total bundle size
+      if (newTotalSize + file.size > MAX_TOTAL_BUNDLE_SIZE) {
+        setError(`Total attachment size exceeds 100 MB limit.`)
+        break
+      }
+
+      newTotalSize += file.size
+      validFiles.push({
+        id: generateId(),
+        file,
+        kind: getFileKind(fileType),
+        preview: isImage ? URL.createObjectURL(file) : null,
+        status: 'pending', // pending, uploading, uploaded, failed
+        progress: 0,
+      })
+    }
+
+    if (validFiles.length > 0) {
+      setPendingFiles(prev => [...prev, ...validFiles])
+      setError('')
+    }
+  }
+
+  const removePendingFile = (fileId) => {
+    setPendingFiles(prev => {
+      const file = prev.find(f => f.id === fileId)
+      if (file?.preview) {
+        URL.revokeObjectURL(file.preview)
+      }
+      return prev.filter(f => f.id !== fileId)
+    })
+  }
+
+  const clearAllPendingFiles = () => {
+    pendingFiles.forEach(f => {
+      if (f.preview) URL.revokeObjectURL(f.preview)
+    })
+    setPendingFiles([])
+  }
+
+  const sendAttachmentBundle = async () => {
+    if (pendingFiles.length === 0 || uploadingBundle) return
+
+    setError('')
+    setUploadingBundle(true)
+    setBundleUploadProgress({})
+
+    try {
+      // If only one file, use existing single-file upload behavior
+      if (pendingFiles.length === 1) {
+        const pf = pendingFiles[0]
+        const file = pf.file
+        const fileId = pf.id
+        const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const storagePath = `chatFiles/${chatId}/${fileId}/${safeFileName}`
+        const storageRef = ref(storage, storagePath)
+
+        setBundleUploadProgress({ [fileId]: 0 })
+
+        const uploadTask = uploadBytesResumable(storageRef, file)
+
+        await new Promise((resolve, reject) => {
+          uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
+              setBundleUploadProgress({ [fileId]: progress })
+            },
+            reject,
+            resolve
+          )
+        })
+
+        const isVideo = file.type.startsWith('video/')
+        const messageData = {
+          type: isVideo ? 'video' : 'file',
+          text: '',
+          senderId: currentUser.uid,
+          senderPhone: currentUser.phoneNumber,
+          createdAt: serverTimestamp(),
+          file: {
+            storagePath,
+            fileName: file.name,
+            contentType: file.type,
+            size: file.size,
+          },
+        }
+
+        if (activeReplyTo) {
+          messageData.replyTo = {
+            messageId: activeReplyTo.messageId,
+            senderId: activeReplyTo.senderId,
+            textPreview: activeReplyTo.textPreview,
+          }
+          if (activeReplyTo.fileInfo) {
+            messageData.replyTo.fileInfo = activeReplyTo.fileInfo
+          }
+        }
+
+        await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+        clearReply()
+        clearAllPendingFiles()
+        return
+      }
+
+      // Multiple files: create attachment bundle
+      const firstImageFile = pendingFiles.find(f => f.kind === 'image')
+      const firstPreviewPath = firstImageFile
+        ? `chatAttachments/${chatId}/temp/${firstImageFile.id}/${firstImageFile.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+        : null
+
+      // Create message document with uploading status
+      const messageData = {
+        type: 'attachment_bundle',
+        text: '',
+        senderId: currentUser.uid,
+        senderPhone: currentUser.phoneNumber,
+        createdAt: serverTimestamp(),
+        attachmentCount: pendingFiles.length,
+        firstPreviewStoragePath: firstPreviewPath,
+        status: 'uploading',
+      }
+
+      if (activeReplyTo) {
+        messageData.replyTo = {
+          messageId: activeReplyTo.messageId,
+          senderId: activeReplyTo.senderId,
+          textPreview: activeReplyTo.textPreview,
+        }
+        if (activeReplyTo.fileInfo) {
+          messageData.replyTo.fileInfo = activeReplyTo.fileInfo
+        }
+      }
+
+      const messageRef = await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+      const messageId = messageRef.id
+
+      // Upload files with controlled concurrency (2 at a time)
+      const uploadFile = async (pf, order) => {
+        const file = pf.file
+        const attachmentId = pf.id
+        const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const storagePath = `chatAttachments/${chatId}/${messageId}/${attachmentId}/${safeFileName}`
+        const storageRef = ref(storage, storagePath)
+
+        setBundleUploadProgress(prev => ({ ...prev, [attachmentId]: 0 }))
+
+        const uploadTask = uploadBytesResumable(storageRef, file)
+
+        await new Promise((resolve, reject) => {
+          uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
+              setBundleUploadProgress(prev => ({ ...prev, [attachmentId]: progress }))
+            },
+            reject,
+            resolve
+          )
+        })
+
+        // Create attachment document in subcollection
+        await setDoc(doc(db, 'chats', chatId, 'messages', messageId, 'attachments', attachmentId), {
+          attachmentId,
+          messageId,
+          chatId,
+          uploadedBy: currentUser.uid,
+          storagePath,
+          fileName: file.name,
+          contentType: file.type,
+          size: file.size,
+          kind: pf.kind,
+          order,
+          createdAt: serverTimestamp(),
+        })
+
+        return storagePath
+      }
+
+      // Upload with concurrency limit of 2
+      const results = []
+      for (let i = 0; i < pendingFiles.length; i += 2) {
+        const batch = pendingFiles.slice(i, i + 2)
+        const batchResults = await Promise.all(
+          batch.map((pf, idx) => uploadFile(pf, i + idx))
+        )
+        results.push(...batchResults)
+      }
+
+      // Update message with first preview path and sent status
+      const actualFirstPreviewPath = pendingFiles.find(f => f.kind === 'image')
+        ? results[pendingFiles.findIndex(f => f.kind === 'image')]
+        : null
+
+      await updateDoc(doc(db, 'chats', chatId, 'messages', messageId), {
+        status: 'sent',
+        firstPreviewStoragePath: actualFirstPreviewPath,
+        updatedAt: serverTimestamp(),
+      })
+
+      clearReply()
+      clearAllPendingFiles()
+    } catch (err) {
+      console.error('Failed to send attachment bundle:', err)
+      setError('Failed to upload files. Please try again.')
+    } finally {
+      setUploadingBundle(false)
+      setBundleUploadProgress({})
+    }
+  }
+
+  // Legacy single file upload for backward compatibility (called when no pending files)
+  const handleLegacySingleFileUpload = async (file) => {
     const fileType = file.type || ''
     const isImage = fileType.startsWith('image/')
     const isVideo = fileType.startsWith('video/')
     const isDocument = ['application/pdf', 'text/plain'].includes(fileType)
 
-    // Validate file type - be permissive with image/* and video/*
     if (!isImage && !isVideo && !isDocument) {
       setError('Unsupported file type. Allowed: Images, Videos, PDF, TXT')
       return
     }
 
-    // Validate file size
     const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_FILE_SIZE
     if (file.size > maxSize) {
-      setError(`File too large. Maximum size is ${isVideo ? '100' : '5'} MB.`)
+      setError(`File too large. Maximum size is ${isVideo ? '100' : '25'} MB.`)
       return
     }
 
@@ -404,13 +664,11 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
     setUploadProgress(0)
 
     try {
-      // Generate a unique ID for the file path
       const fileId = generateId()
       const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const storagePath = `chatFiles/${chatId}/${fileId}/${safeFileName}`
       const storageRef = ref(storage, storagePath)
 
-      // Upload file with progress
       const uploadTask = uploadBytesResumable(storageRef, file)
 
       uploadTask.on(
@@ -513,6 +771,70 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
       {isOverLimit && (
         <div className="input-error">
           Message too long ({trimmedText.length}/{MAX_MESSAGE_LENGTH})
+        </div>
+      )}
+      {/* Attachment Tray */}
+      {pendingFiles.length > 0 && (
+        <div className="attachment-tray">
+          <div className="attachment-tray-header">
+            <span className="attachment-tray-count">
+              {pendingFiles.length} file{pendingFiles.length > 1 ? 's' : ''} · {formatFileSize(pendingFiles.reduce((sum, f) => sum + f.file.size, 0))}
+            </span>
+            <button
+              type="button"
+              className="attachment-tray-clear"
+              onClick={clearAllPendingFiles}
+              disabled={uploadingBundle}
+              title="Clear all"
+            >
+              ✕ Clear
+            </button>
+          </div>
+          <div className="attachment-tray-items">
+            {pendingFiles.map((pf) => (
+              <div key={pf.id} className={`attachment-tray-item ${pf.kind}`}>
+                {pf.kind === 'image' && pf.preview ? (
+                  <img src={pf.preview} alt={pf.file.name} className="attachment-tray-preview" />
+                ) : pf.kind === 'video' ? (
+                  <div className="attachment-tray-icon">🎬</div>
+                ) : pf.kind === 'audio' ? (
+                  <div className="attachment-tray-icon">🎵</div>
+                ) : (
+                  <div className="attachment-tray-icon">📄</div>
+                )}
+                <div className="attachment-tray-info">
+                  <span className="attachment-tray-name">{pf.file.name}</span>
+                  <span className="attachment-tray-size">{formatFileSize(pf.file.size)}</span>
+                </div>
+                {uploadingBundle && bundleUploadProgress[pf.id] !== undefined ? (
+                  <div className="attachment-tray-progress">
+                    <div
+                      className="attachment-tray-progress-bar"
+                      style={{ width: `${bundleUploadProgress[pf.id]}%` }}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="attachment-tray-remove"
+                    onClick={() => removePendingFile(pf.id)}
+                    disabled={uploadingBundle}
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="attachment-tray-send"
+            onClick={sendAttachmentBundle}
+            disabled={uploadingBundle || pendingFiles.length === 0}
+          >
+            {uploadingBundle ? 'Uploading...' : `Send ${pendingFiles.length} file${pendingFiles.length > 1 ? 's' : ''}`}
+          </button>
         </div>
       )}
       {showMoodNudge && partnerMood && (
@@ -623,6 +945,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
           ref={fileInputRef}
           onChange={handleFileSelect}
           accept="image/*,video/*,.pdf,.txt"
+          multiple
           style={{
             position: 'absolute',
             width: '1px',

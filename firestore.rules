@@ -14,13 +14,13 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef', 'transcriptionStatus', 'transcriptText', 'transcriptCreatedAt', 'transcriptUpdatedAt', 'transcriptRequestedBy', 'transcriptErrorCode', 'messageIntent']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef', 'transcriptionStatus', 'transcriptText', 'transcriptCreatedAt', 'transcriptUpdatedAt', 'transcriptRequestedBy', 'transcriptErrorCode', 'messageIntent', 'attachmentCount', 'firstPreviewStoragePath', 'status', 'updatedAt', 'revealTitle', 'revealPrompt', 'hiddenContent', 'revealKind']);
     }
 
     // Helper: Validate optional messageIntent field (priority labels)
     function isValidMessageIntent() {
       let data = request.resource.data;
-      return !('messageIntent' in data) || data.messageIntent in ['normal', 'important', 'need_reply', 'just_sharing', 'sensitive', 'love'];
+      return !('messageIntent' in data) || data.messageIntent in ['normal', 'important', 'need_reply', 'urgent', 'just_sharing', 'sensitive', 'love'];
     }
 
     // Helper: Validate optional thoughtRef field
@@ -71,9 +71,49 @@ service cloud.firestore {
     function isValidBaseMessage() {
       let data = request.resource.data;
       return data.senderId == request.auth.uid
-          && data.type in ['text', 'file', 'video', 'voice', 'special']
-          && data.text is string
-          && data.text.size() <= 5000;
+          && data.type in ['text', 'file', 'video', 'voice', 'special', 'attachment_bundle', 'reveal']
+          && (data.type == 'reveal' || (data.text is string && data.text.size() <= 5000));
+    }
+
+    // Helper: Validate attachment bundle message
+    function isValidAttachmentBundleMessage() {
+      let data = request.resource.data;
+      return data.type == 'attachment_bundle'
+          && data.attachmentCount is number
+          && data.attachmentCount >= 1
+          && data.attachmentCount <= 10
+          && data.status in ['uploading', 'sent', 'failed']
+          && (!('firstPreviewStoragePath' in data) || data.firstPreviewStoragePath == null || data.firstPreviewStoragePath is string);
+    }
+
+    // Helper: Validate attachment bundle status update
+    function isValidAttachmentBundleUpdate() {
+      let existing = resource.data;
+      let incoming = request.resource.data;
+      return existing.type == 'attachment_bundle'
+          && existing.senderId == request.auth.uid
+          && incoming.senderId == existing.senderId
+          && incoming.senderPhone == existing.senderPhone
+          && incoming.type == existing.type
+          && incoming.attachmentCount == existing.attachmentCount
+          && incoming.status in ['uploading', 'sent', 'failed']
+          && incoming.diff(existing).affectedKeys().hasOnly(['status', 'firstPreviewStoragePath', 'updatedAt']);
+    }
+
+    // Helper: Validate attachment document
+    function isValidAttachment() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['attachmentId', 'messageId', 'chatId', 'uploadedBy', 'storagePath', 'fileName', 'contentType', 'size', 'kind', 'order', 'createdAt'])
+          && data.uploadedBy == request.auth.uid
+          && data.storagePath is string
+          && data.fileName is string
+          && data.contentType is string
+          && data.size is number
+          && data.size <= 100 * 1024 * 1024
+          && data.kind in ['image', 'video', 'audio', 'document']
+          && data.order is number
+          && data.order >= 0
+          && data.order < 10;
     }
 
     // Helper: Validate special message
@@ -89,6 +129,20 @@ service cloud.firestore {
           && (!('isLocked' in data) || data.isLocked is bool)
           && (!('requiresReveal' in data) || data.requiresReveal is bool)
           && (!('expiresOnView' in data) || data.expiresOnView is bool);
+    }
+
+    // Helper: Validate reveal message (hidden answer/content)
+    function isValidRevealMessage() {
+      let data = request.resource.data;
+      return data.type == 'reveal'
+          && data.revealPrompt is string
+          && data.revealPrompt.size() > 0
+          && data.revealPrompt.size() <= 1000
+          && data.hiddenContent is string
+          && data.hiddenContent.size() > 0
+          && data.hiddenContent.size() <= 3000
+          && (!('revealTitle' in data) || (data.revealTitle is string && data.revealTitle.size() <= 120))
+          && (!('revealKind' in data) || data.revealKind in ['puzzle', 'surprise', 'spoiler', 'secret', 'question']);
     }
 
     // Helper: Validate text message
@@ -108,7 +162,7 @@ service cloud.firestore {
           && data.file.fileName is string
           && data.file.contentType is string
           && data.file.size is number
-          && data.file.size <= 5 * 1024 * 1024;
+          && data.file.size <= 25 * 1024 * 1024;
     }
 
     // Helper: Validate video message
@@ -192,15 +246,24 @@ service cloud.firestore {
                       && isChatMember(chatId)
                       && hasOnlyAllowedFields()
                       && isValidBaseMessage()
-                      && (isValidTextMessage() || isValidFileMessage() || isValidVideoMessage() || isValidVoiceMessage() || isValidSpecialMessage())
+                      && (isValidTextMessage() || isValidFileMessage() || isValidVideoMessage() || isValidVoiceMessage() || isValidSpecialMessage() || isValidRevealMessage() || isValidAttachmentBundleMessage())
                       && isValidReplyTo()
                       && isValidThoughtRef()
                       && isValidMessageIntent();
         allow update: if isAuthenticated()
                       && isChatMember(chatId)
-                      && (isValidMessageEdit() || isValidTranscriptionRequest());
+                      && (isValidMessageEdit() || isValidTranscriptionRequest() || isValidAttachmentBundleUpdate());
         allow delete: if isAuthenticated()
                       && isChatMember(chatId);
+
+        // Attachments subcollection for attachment bundles
+        match /attachments/{attachmentId} {
+          allow read: if isAuthenticated() && isChatMember(chatId);
+          allow create: if isAuthenticated()
+                        && isChatMember(chatId)
+                        && isValidAttachment();
+          allow update, delete: if false;
+        }
 
         // Reactions subcollection - doc ID must equal user's uid
         match /reactions/{reactionId} {
@@ -299,6 +362,37 @@ service cloud.firestore {
                       && uid == request.auth.uid
                       && resource.data.userId == request.auth.uid
                       && request.resource.data.status in ['active', 'completed', 'cancelled'];
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Message clear state (soft delete per user) - doc ID must equal user's uid
+      match /messageClearState/{uid} {
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+        allow create, update: if isAuthenticated()
+                              && isChatMember(chatId)
+                              && uid == request.auth.uid
+                              && request.resource.data.keys().hasOnly(['clearedAt', 'clearedBy', 'messageCount', 'mediaCount', 'updatedAt', 'clearHistory'])
+                              && request.resource.data.clearedBy == request.auth.uid;
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
+      // Message reveal state (tracks which reveal messages user has revealed) - doc ID must equal user's uid
+      match /messageRevealState/{uid} {
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+        allow create, update: if isAuthenticated()
+                              && isChatMember(chatId)
+                              && uid == request.auth.uid
+                              && request.resource.data.keys().hasOnly(['userId', 'revealedMessageIds', 'updatedAt'])
+                              && request.resource.data.userId == request.auth.uid
+                              && request.resource.data.revealedMessageIds is list;
         allow delete: if isAuthenticated()
                       && isChatMember(chatId)
                       && uid == request.auth.uid;

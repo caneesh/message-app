@@ -283,6 +283,7 @@ export async function getThoughtReadState(chatId, uid, thoughtId) {
 /**
  * Update the user's private read state for a thought
  * Also updates the shared read receipt summary (without detailed block info)
+ * IMPORTANT: Read percentage is monotonic - it never decreases
  * @param {string} chatId - The chat ID
  * @param {string} uid - The user's ID
  * @param {string} thoughtId - The thought ID
@@ -297,15 +298,34 @@ export async function updateThoughtReadState(chatId, uid, thoughtId, readState) 
   try {
     const readStateRef = doc(db, 'chats', chatId, 'thoughtReadState', uid, 'items', thoughtId)
     const snapshot = await getDoc(readStateRef)
+    const existingData = snapshot.exists() ? snapshot.data() : null
 
     const now = serverTimestamp()
-    const readPercent = Math.max(0, Math.min(100, readState.readPercent ?? 0))
+    const incomingPercent = Math.max(0, Math.min(100, readState.readPercent ?? 0))
+    const existingPercent = existingData?.readPercent ?? 0
+
+    // Enforce monotonicity: never decrease read percentage
+    const finalReadPercent = Math.max(existingPercent, incomingPercent)
+
+    // Debug logging
+    console.log('[THOUGHT_READ] updateThoughtReadState:', {
+      thoughtId: thoughtId?.slice?.(-6),
+      uid: uid?.slice?.(-6),
+      incomingPercent,
+      existingPercent,
+      finalReadPercent,
+      readBlockCount: readState.readBlockIds?.length || 0,
+    })
+
     const data = {
       thoughtId,
       readerId: uid,
-      lastReadBlockIndex: readState.lastReadBlockIndex ?? 0,
-      readBlockIds: readState.readBlockIds ?? [],
-      readPercent,
+      lastReadBlockIndex: Math.max(
+        existingData?.lastReadBlockIndex ?? -1,
+        readState.lastReadBlockIndex ?? -1
+      ),
+      readBlockIds: readState.readBlockIds ?? existingData?.readBlockIds ?? [],
+      readPercent: finalReadPercent,
       lastReadAt: now,
       updatedAt: now
     }
@@ -317,12 +337,17 @@ export async function updateThoughtReadState(chatId, uid, thoughtId, readState) 
       await updateDoc(readStateRef, data)
     }
 
+    // Update shared receipt with same monotonic logic
     const receiptRef = doc(db, 'chats', chatId, 'thoughtReadReceipts', thoughtId, 'readers', uid)
     const receiptSnapshot = await getDoc(receiptRef)
+    const existingReceipt = receiptSnapshot.exists() ? receiptSnapshot.data() : null
+    const existingReceiptPercent = existingReceipt?.readPercent ?? 0
+    const finalReceiptPercent = Math.max(existingReceiptPercent, incomingPercent)
+
     const receiptData = {
       thoughtId,
       readerId: uid,
-      readPercent,
+      readPercent: finalReceiptPercent,
       lastReadAt: now,
       updatedAt: now
     }
@@ -331,6 +356,7 @@ export async function updateThoughtReadState(chatId, uid, thoughtId, readState) 
       receiptData.firstOpenedAt = now
       await setDoc(receiptRef, receiptData)
     } else {
+      // Only update if percentage increased or timestamp update needed
       await updateDoc(receiptRef, receiptData)
     }
 

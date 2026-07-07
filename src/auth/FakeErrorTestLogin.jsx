@@ -4,6 +4,8 @@
  * Hidden test login flow using fake error pages.
  * Flow: 400 error → tap "400" 3x → tap top-left → 500 error → double-tap invisible zones
  *
+ * Wrong-tap lockout: If user taps wrong areas too many times, lock for 1 minute.
+ *
  * DO NOT ENABLE IN PRODUCTION.
  */
 
@@ -17,6 +19,14 @@ const ENV = {
   phoneHCL: import.meta.env.VITE_TEST_PHONE_HCL || '+11231231235',
   code: import.meta.env.VITE_TEST_CODE || '123456',
   allowedHosts: (import.meta.env.VITE_TEST_LOGIN_ALLOWED_HOSTS || 'localhost,127.0.0.1').split(',').map(h => h.trim()),
+}
+
+// Lockout configuration - DEV/STAGING ONLY
+const LOCKOUT_CONFIG = {
+  maxWrongTaps: 2,
+  lockoutDurationMs: 60 * 1000, // 1 minute
+  sequenceTimeoutMs: 5000, // 5 seconds between taps
+  sessionStorageKey: 'hiddenLoginLockedUntil',
 }
 
 function isAllowedHostname() {
@@ -49,16 +59,106 @@ const STATES = {
   LOGGING_IN: 'loggingIn',
 }
 
+// DEV/STAGING ONLY - Lockout helpers
+function getStoredLockoutTime() {
+  try {
+    const stored = sessionStorage.getItem(LOCKOUT_CONFIG.sessionStorageKey)
+    return stored ? parseInt(stored, 10) : 0
+  } catch {
+    return 0
+  }
+}
+
+function setStoredLockoutTime(timestamp) {
+  try {
+    if (timestamp > 0) {
+      sessionStorage.setItem(LOCKOUT_CONFIG.sessionStorageKey, String(timestamp))
+    } else {
+      sessionStorage.removeItem(LOCKOUT_CONFIG.sessionStorageKey)
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 function FakeErrorTestLogin() {
   const { startPhoneLogin, confirmPhoneCode } = useAuth()
   const [state, setState] = useState(STATES.ERROR_400)
   const [clickCount400, setClickCount400] = useState(0)
   const [loginError, setLoginError] = useState(null)
 
+  // DEV/STAGING ONLY - Wrong tap lockout state
+  const [wrongTapCount, setWrongTapCount] = useState(0)
+  const [lockedUntil, setLockedUntil] = useState(() => getStoredLockoutTime())
+  const lastTapAtRef = useRef(0)
+
   // Double-tap tracking for 500 screen zones
   const topZoneTapRef = useRef({ count: 0, lastTap: 0 })
   const bottomZoneTapRef = useRef({ count: 0, lastTap: 0 })
   const resetTimer400 = useRef(null)
+  const sequenceTimeoutRef = useRef(null)
+
+  // DEV/STAGING ONLY - Check if currently locked
+  const isCurrentlyLocked = useCallback(() => {
+    const now = Date.now()
+    if (lockedUntil > now) {
+      return true
+    }
+    // Clear expired lockout
+    if (lockedUntil > 0 && lockedUntil <= now) {
+      setLockedUntil(0)
+      setStoredLockoutTime(0)
+      setWrongTapCount(0)
+    }
+    return false
+  }, [lockedUntil])
+
+  // DEV/STAGING ONLY - Lock the hidden login flow
+  const lockHiddenLogin = useCallback(() => {
+    const lockUntil = Date.now() + LOCKOUT_CONFIG.lockoutDurationMs
+    setLockedUntil(lockUntil)
+    setStoredLockoutTime(lockUntil)
+    // Reset gesture state
+    setState(STATES.ERROR_400)
+    setClickCount400(0)
+    setWrongTapCount(0)
+    if (import.meta.env.DEV) {
+      console.warn('[FakeErrorTestLogin] Locked for 1 minute due to wrong taps')
+    }
+  }, [])
+
+  // DEV/STAGING ONLY - Record a wrong tap
+  const recordWrongTap = useCallback(() => {
+    const newCount = wrongTapCount + 1
+    setWrongTapCount(newCount)
+
+    if (import.meta.env.DEV) {
+      console.log('[FakeErrorTestLogin] Wrong tap count:', newCount)
+    }
+
+    if (newCount > LOCKOUT_CONFIG.maxWrongTaps) {
+      lockHiddenLogin()
+    }
+  }, [wrongTapCount, lockHiddenLogin])
+
+  // DEV/STAGING ONLY - Reset gesture state
+  const resetGesture = useCallback(() => {
+    setState(STATES.ERROR_400)
+    setClickCount400(0)
+    if (sequenceTimeoutRef.current) {
+      clearTimeout(sequenceTimeoutRef.current)
+      sequenceTimeoutRef.current = null
+    }
+    if (resetTimer400.current) {
+      clearTimeout(resetTimer400.current)
+      resetTimer400.current = null
+    }
+  }, [])
+
+  // DEV/STAGING ONLY - Reset wrong tap count on successful sequence
+  const resetWrongTaps = useCallback(() => {
+    setWrongTapCount(0)
+  }, [])
 
   // Log warning in dev only - DEV/STAGING ONLY
   useEffect(() => {
@@ -71,8 +171,25 @@ function FakeErrorTestLogin() {
   useEffect(() => {
     return () => {
       if (resetTimer400.current) clearTimeout(resetTimer400.current)
+      if (sequenceTimeoutRef.current) clearTimeout(sequenceTimeoutRef.current)
     }
   }, [])
+
+  // DEV/STAGING ONLY - Check for sequence timeout
+  const checkSequenceTimeout = useCallback(() => {
+    const now = Date.now()
+    if (lastTapAtRef.current > 0 && now - lastTapAtRef.current > LOCKOUT_CONFIG.sequenceTimeoutMs) {
+      // Sequence timed out, reset without counting as wrong tap
+      if (state === STATES.ARMED_TOP_LEFT || clickCount400 > 0) {
+        resetGesture()
+        if (import.meta.env.DEV) {
+          console.log('[FakeErrorTestLogin] Sequence timed out, resetting')
+        }
+      }
+      return true
+    }
+    return false
+  }, [state, clickCount400, resetGesture])
 
   const handleTestLogin = useCallback(async (userType) => {
     if (!isTestLoginAllowed()) return
@@ -123,9 +240,28 @@ function FakeErrorTestLogin() {
     }
   }, [state, startPhoneLogin, confirmPhoneCode])
 
+  // DEV/STAGING ONLY - Helper to check if tap is on 400 text
+  const isTapOn400 = useCallback((event) => {
+    const target = event.target
+    return target.classList.contains('fake-error-code') && target.textContent === '400'
+  }, [])
+
+  // DEV/STAGING ONLY - Helper to check if tap is in top-left zone
+  const isTapInTopLeftZone = useCallback((event) => {
+    const target = event.target
+    return target.classList.contains('fake-error-topleft-zone')
+  }, [])
+
   const handle400Click = useCallback(() => {
     if (!isTestLoginAllowed()) return
+    if (isCurrentlyLocked()) return
     if (state !== STATES.ERROR_400) return
+
+    // Check for sequence timeout first
+    checkSequenceTimeout()
+
+    // Update last tap time
+    lastTapAtRef.current = Date.now()
 
     // Clear existing reset timer
     if (resetTimer400.current) {
@@ -138,20 +274,79 @@ function FakeErrorTestLogin() {
     if (newCount >= 3) {
       setState(STATES.ARMED_TOP_LEFT)
       setClickCount400(0)
+
+      // Set timeout for top-left tap
+      sequenceTimeoutRef.current = setTimeout(() => {
+        if (state === STATES.ARMED_TOP_LEFT) {
+          resetGesture()
+          if (import.meta.env.DEV) {
+            console.log('[FakeErrorTestLogin] Top-left tap timeout, resetting')
+          }
+        }
+      }, LOCKOUT_CONFIG.sequenceTimeoutMs)
     } else {
-      // Reset count after 2 seconds of no clicks
+      // Reset count after sequence timeout
       resetTimer400.current = setTimeout(() => {
         setClickCount400(0)
-      }, 2000)
+      }, LOCKOUT_CONFIG.sequenceTimeoutMs)
     }
-  }, [state, clickCount400])
+  }, [state, clickCount400, isCurrentlyLocked, checkSequenceTimeout, resetGesture])
 
   const handleTopLeftClick = useCallback(() => {
     if (!isTestLoginAllowed()) return
+    if (isCurrentlyLocked()) return
     if (state !== STATES.ARMED_TOP_LEFT) return
 
+    // Clear sequence timeout
+    if (sequenceTimeoutRef.current) {
+      clearTimeout(sequenceTimeoutRef.current)
+      sequenceTimeoutRef.current = null
+    }
+
+    // Update last tap time
+    lastTapAtRef.current = Date.now()
+
+    // Success! Reset wrong tap count and proceed
+    resetWrongTaps()
     setState(STATES.ERROR_500)
-  }, [state])
+  }, [state, isCurrentlyLocked, resetWrongTaps])
+
+  // DEV/STAGING ONLY - Handle wrong tap on page background
+  const handlePageClick = useCallback((event) => {
+    if (!isTestLoginAllowed()) return
+    if (isCurrentlyLocked()) return
+
+    // Don't process if we're in 500 state or logging in
+    if (state === STATES.ERROR_500 || state === STATES.LOGGING_IN) return
+
+    // Check if tap was on a valid target
+    const isOn400 = isTapOn400(event)
+    const isInTopLeft = isTapInTopLeftZone(event)
+
+    // In ERROR_400 state, only 400 text is valid
+    if (state === STATES.ERROR_400) {
+      if (!isOn400) {
+        // Wrong tap - but only if the sequence has started
+        if (clickCount400 > 0) {
+          recordWrongTap()
+          resetGesture()
+        } else {
+          // First tap outside 400 when not in sequence - count as wrong tap
+          recordWrongTap()
+        }
+      }
+      return
+    }
+
+    // In ARMED_TOP_LEFT state, only top-left zone is valid
+    if (state === STATES.ARMED_TOP_LEFT) {
+      if (!isInTopLeft) {
+        recordWrongTap()
+        resetGesture()
+      }
+      return
+    }
+  }, [state, clickCount400, isCurrentlyLocked, isTapOn400, isTapInTopLeftZone, recordWrongTap, resetGesture])
 
   const handleZoneTap = useCallback((zone) => {
     if (!isTestLoginAllowed()) return
@@ -190,14 +385,21 @@ function FakeErrorTestLogin() {
   }
 
   return (
-    <div className="fake-error-page">
+    <div
+      className="fake-error-page"
+      onPointerDown={handlePageClick}
+    >
       {/* Invisible recaptcha container for Firebase Phone Auth */}
       <div id="recaptcha-container" style={{ position: 'absolute', visibility: 'hidden' }} />
+
       {/* Hidden top-left trigger zone - only active in ARMED state */}
-      {state === STATES.ARMED_TOP_LEFT && (
+      {state === STATES.ARMED_TOP_LEFT && !isCurrentlyLocked() && (
         <div
           className="fake-error-topleft-zone"
-          onClick={handleTopLeftClick}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            handleTopLeftClick()
+          }}
           style={{
             position: 'fixed',
             top: 0,
@@ -216,7 +418,12 @@ function FakeErrorTestLogin() {
         <div className="fake-error-content">
           <div
             className="fake-error-code"
-            onClick={handle400Click}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              if (!isCurrentlyLocked()) {
+                handle400Click()
+              }
+            }}
             style={{ cursor: 'default', userSelect: 'none' }}
           >
             400
@@ -232,7 +439,10 @@ function FakeErrorTestLogin() {
         <div className="fake-error-content" style={{ position: 'relative' }}>
           {/* Top invisible zone - HCSC */}
           <div
-            onClick={() => handleZoneTap('top')}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              handleZoneTap('top')
+            }}
             style={{
               position: 'fixed',
               top: 0,
@@ -247,7 +457,10 @@ function FakeErrorTestLogin() {
 
           {/* Bottom invisible zone - HCL */}
           <div
-            onClick={() => handleZoneTap('bottom')}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              handleZoneTap('bottom')
+            }}
             style={{
               position: 'fixed',
               bottom: 0,

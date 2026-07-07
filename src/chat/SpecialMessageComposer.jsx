@@ -5,8 +5,17 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 const SPECIAL_TYPES = [
   { id: 'letter', label: 'Private Letter', icon: '💌', description: 'A heartfelt letter' },
   { id: 'hold_reveal', label: 'Hold to Reveal', icon: '🙈', description: 'Hidden until they hold to see' },
+  { id: 'reveal', label: 'Reveal Message', icon: '🎁', description: 'Hidden answer revealed on tap' },
   { id: 'disappearing', label: 'Disappearing Note', icon: '✨', description: 'Fades away after time' },
   { id: 'timed_unlock', label: 'Open Later', icon: '🔒', description: 'Unlocks on a special date' },
+]
+
+const REVEAL_KINDS = [
+  { id: 'puzzle', label: 'Puzzle', icon: '🧩' },
+  { id: 'surprise', label: 'Surprise', icon: '🎉' },
+  { id: 'spoiler', label: 'Spoiler', icon: '🤐' },
+  { id: 'secret', label: 'Secret', icon: '🤫' },
+  { id: 'question', label: 'Question', icon: '❓' },
 ]
 
 const EXPIRATION_OPTIONS = [
@@ -24,21 +33,48 @@ function SpecialMessageComposer({ currentUser, chatId, onClose, onSent }) {
   const [expiration, setExpiration] = useState('24h')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  // Reveal message state
+  const [revealPrompt, setRevealPrompt] = useState('')
+  const [hiddenContent, setHiddenContent] = useState('')
+  const [revealKind, setRevealKind] = useState('secret')
 
   const handleSend = async () => {
-    if (!text.trim()) {
-      setError('Please write a message')
-      return
-    }
-
-    if (text.length > 5000) {
-      setError('Message is too long (max 5000 characters)')
-      return
-    }
-
-    if (title && title.length > 120) {
-      setError('Title is too long (max 120 characters)')
-      return
+    // Validation for reveal messages
+    if (specialType === 'reveal') {
+      if (!revealPrompt.trim()) {
+        setError('Please write a visible prompt')
+        return
+      }
+      if (!hiddenContent.trim()) {
+        setError('Please write the hidden content')
+        return
+      }
+      if (revealPrompt.length > 1000) {
+        setError('Prompt is too long (max 1000 characters)')
+        return
+      }
+      if (hiddenContent.length > 3000) {
+        setError('Hidden content is too long (max 3000 characters)')
+        return
+      }
+      if (title && title.length > 120) {
+        setError('Title is too long (max 120 characters)')
+        return
+      }
+    } else {
+      // Validation for other types
+      if (!text.trim()) {
+        setError('Please write a message')
+        return
+      }
+      if (text.length > 5000) {
+        setError('Message is too long (max 5000 characters)')
+        return
+      }
+      if (title && title.length > 120) {
+        setError('Title is too long (max 120 characters)')
+        return
+      }
     }
 
     if (specialType === 'timed_unlock' && !unlockDate) {
@@ -50,46 +86,65 @@ function SpecialMessageComposer({ currentUser, chatId, onClose, onSent }) {
     setError('')
 
     try {
-      const messageData = {
-        senderId: currentUser.uid,
-        senderPhone: currentUser.phoneNumber,
-        type: 'special',
-        specialType,
-        text: text.trim(),
-        createdAt: serverTimestamp(),
-      }
+      let messageData
 
-      if (title.trim()) {
-        messageData.title = title.trim()
-      }
-
-      if (specialType === 'letter') {
-        messageData.style = 'letter'
-      }
-
-      if (specialType === 'timed_unlock') {
-        const unlockDateTime = new Date(`${unlockDate}T${unlockTime || '00:00'}`)
-        if (unlockDateTime <= new Date()) {
-          setError('Unlock time must be in the future')
-          setSending(false)
-          return
+      if (specialType === 'reveal') {
+        // Reveal message uses different structure
+        messageData = {
+          senderId: currentUser.uid,
+          senderPhone: currentUser.phoneNumber,
+          type: 'reveal',
+          revealPrompt: revealPrompt.trim(),
+          hiddenContent: hiddenContent.trim(),
+          revealKind,
+          createdAt: serverTimestamp(),
         }
-        messageData.unlockAt = unlockDateTime
-        messageData.isLocked = true
-      }
-
-      if (specialType === 'disappearing') {
-        const option = EXPIRATION_OPTIONS.find(o => o.value === expiration)
-        if (option && option.hours > 0) {
-          const expiresAt = new Date(Date.now() + option.hours * 60 * 60 * 1000)
-          messageData.expiresAt = expiresAt
-        } else if (expiration === 'viewed') {
-          messageData.expiresOnView = true
+        if (title.trim()) {
+          messageData.revealTitle = title.trim()
         }
-      }
+      } else {
+        // Other special message types
+        messageData = {
+          senderId: currentUser.uid,
+          senderPhone: currentUser.phoneNumber,
+          type: 'special',
+          specialType,
+          text: text.trim(),
+          createdAt: serverTimestamp(),
+        }
 
-      if (specialType === 'hold_reveal') {
-        messageData.requiresReveal = true
+        if (title.trim()) {
+          messageData.title = title.trim()
+        }
+
+        if (specialType === 'letter') {
+          messageData.style = 'letter'
+        }
+
+        if (specialType === 'timed_unlock') {
+          const unlockDateTime = new Date(`${unlockDate}T${unlockTime || '00:00'}`)
+          if (unlockDateTime <= new Date()) {
+            setError('Unlock time must be in the future')
+            setSending(false)
+            return
+          }
+          messageData.unlockAt = unlockDateTime
+          messageData.isLocked = true
+        }
+
+        if (specialType === 'disappearing') {
+          const option = EXPIRATION_OPTIONS.find(o => o.value === expiration)
+          if (option && option.hours > 0) {
+            const expiresAt = new Date(Date.now() + option.hours * 60 * 60 * 1000)
+            messageData.expiresAt = expiresAt
+          } else if (expiration === 'viewed') {
+            messageData.expiresOnView = true
+          }
+        }
+
+        if (specialType === 'hold_reveal') {
+          messageData.requiresReveal = true
+        }
       }
 
       await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
@@ -167,24 +222,28 @@ function SpecialMessageComposer({ currentUser, chatId, onClose, onSent }) {
             />
           )}
 
-          <textarea
-            className="special-text-input"
-            placeholder={
-              specialType === 'letter'
-                ? "Write your letter..."
-                : specialType === 'hold_reveal'
-                ? "Write your hidden message..."
-                : specialType === 'disappearing'
-                ? "Write your disappearing note..."
-                : "Write your message..."
-            }
-            value={text}
-            onChange={e => setText(e.target.value)}
-            maxLength={5000}
-            rows={specialType === 'letter' ? 8 : 4}
-          />
+          {specialType !== 'reveal' && (
+            <>
+              <textarea
+                className="special-text-input"
+                placeholder={
+                  specialType === 'letter'
+                    ? "Write your letter..."
+                    : specialType === 'hold_reveal'
+                    ? "Write your hidden message..."
+                    : specialType === 'disappearing'
+                    ? "Write your disappearing note..."
+                    : "Write your message..."
+                }
+                value={text}
+                onChange={e => setText(e.target.value)}
+                maxLength={5000}
+                rows={specialType === 'letter' ? 8 : 4}
+              />
 
-          <div className="special-char-count">{text.length}/5000</div>
+              <div className="special-char-count">{text.length}/5000</div>
+            </>
+          )}
 
           {specialType === 'timed_unlock' && (
             <div className="special-unlock-settings">
@@ -235,6 +294,72 @@ function SpecialMessageComposer({ currentUser, chatId, onClose, onSent }) {
               </p>
             </div>
           )}
+
+          {specialType === 'reveal' && (
+            <div className="special-reveal-composer">
+              <input
+                type="text"
+                className="special-title-input"
+                placeholder="Title (optional)"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                maxLength={120}
+              />
+
+              <div className="reveal-kind-selector">
+                <label>Type:</label>
+                <div className="reveal-kind-options">
+                  {REVEAL_KINDS.map(kind => (
+                    <button
+                      key={kind.id}
+                      type="button"
+                      className={`reveal-kind-btn ${revealKind === kind.id ? 'active' : ''}`}
+                      onClick={() => setRevealKind(kind.id)}
+                    >
+                      {kind.icon} {kind.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <textarea
+                className="special-text-input"
+                placeholder={
+                  revealKind === 'puzzle' ? "Write your riddle or question..." :
+                  revealKind === 'question' ? "Write your question..." :
+                  revealKind === 'spoiler' ? "Write your spoiler warning..." :
+                  "Write what they'll see before tapping..."
+                }
+                value={revealPrompt}
+                onChange={e => setRevealPrompt(e.target.value)}
+                maxLength={1000}
+                rows={2}
+              />
+              <div className="special-char-count">{revealPrompt.length}/1000</div>
+
+              <textarea
+                className="special-text-input reveal-hidden-input"
+                placeholder={
+                  revealKind === 'puzzle' ? "Write the answer..." :
+                  revealKind === 'question' ? "Write the answer..." :
+                  "Write the hidden content..."
+                }
+                value={hiddenContent}
+                onChange={e => setHiddenContent(e.target.value)}
+                maxLength={3000}
+                rows={3}
+              />
+              <div className="special-char-count">{hiddenContent.length}/3000</div>
+
+              <p className="special-hint">
+                {revealKind === 'puzzle' && "They'll see your riddle first, then tap to reveal the answer."}
+                {revealKind === 'surprise' && "They'll see a surprise teaser, then tap to reveal your message."}
+                {revealKind === 'spoiler' && "They'll see the warning, then choose to reveal the spoiler."}
+                {revealKind === 'secret' && "They'll see your prompt, then tap to reveal the secret."}
+                {revealKind === 'question' && "They'll see your question, then tap to reveal the answer."}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="special-composer-footer">
@@ -248,7 +373,7 @@ function SpecialMessageComposer({ currentUser, chatId, onClose, onSent }) {
           <button
             className="special-send-btn"
             onClick={handleSend}
-            disabled={sending || !text.trim()}
+            disabled={sending || (specialType === 'reveal' ? (!revealPrompt.trim() || !hiddenContent.trim()) : !text.trim())}
           >
             {sending ? 'Sending...' : specialType === 'timed_unlock' ? 'Schedule' : 'Send'}
           </button>
