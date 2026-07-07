@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { db, storage } from '../firebase/firebaseConfig'
 import {
   collection,
@@ -28,6 +28,8 @@ import ZoomableImagePreview from './ZoomableImagePreview'
 import { bulkDeleteForMe, bulkDeleteForEveryone, canDeleteAllForEveryone } from '../services/messageService'
 import { useSavedMessages } from '../hooks/useSavedMessages'
 import { useMessageReminders, getReminderTime } from '../hooks/useMessageReminders'
+import { useMessageClearState } from '../hooks/useMessageClearState'
+import { useRevealState } from '../hooks/useRevealState'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -68,7 +70,8 @@ const INTENSE_LOVE_EMOJI = '❤️‍🔥'
 const MESSAGE_INTENTS = [
   { value: 'normal', label: 'Normal', icon: '' },
   { value: 'important', label: 'Important', icon: '❗' },
-  { value: 'need_reply', label: 'Need reply', icon: '💬' },
+  { value: 'need_reply', label: 'Needs reply', icon: '💬' },
+  { value: 'urgent', label: 'Urgent', icon: '🔴' },
   { value: 'just_sharing', label: 'Just sharing', icon: '💭' },
   { value: 'sensitive', label: 'Sensitive', icon: '🤫' },
   { value: 'love', label: 'Love', icon: '💕' },
@@ -135,8 +138,13 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const [myLastReadAtOnMount, setMyLastReadAtOnMount] = useState(null)
   const [newMessagesCount, setNewMessagesCount] = useState(0)
   const [firstUnreadId, setFirstUnreadId] = useState(null)
-  const [hasScrolledToUnread, setHasScrolledToUnread] = useState(false)
   const [showPinnedPanel, setShowPinnedPanel] = useState(false)
+
+  // === SCROLL STATE FLAGS ===
+  const [messagesLoaded, setMessagesLoaded] = useState(false)
+  const [readStateLoaded, setReadStateLoaded] = useState(false)
+  const [initialScrollDone, setInitialScrollDone] = useState(false)
+  const [userHasManuallyScrolled, setUserHasManuallyScrolled] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(null)
   const [convertModal, setConvertModal] = useState(null)
   const [convertTitle, setConvertTitle] = useState('')
@@ -181,6 +189,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     createReminder,
     cancelReminder
   } = useMessageReminders(chatId, currentUser?.uid)
+  const {
+    isCleared: isMessageCleared,
+    filterVisible: filterVisibleMessages,
+    loading: clearStateLoading
+  } = useMessageClearState(chatId, currentUser?.uid)
+  const {
+    isRevealed,
+    revealMessage
+  } = useRevealState(chatId, currentUser?.uid)
   const [showReminderPicker, setShowReminderPicker] = useState(null)
   const [showSavedMessages, setShowSavedMessages] = useState(false)
   const [showEditHistory, setShowEditHistory] = useState(null)
@@ -192,10 +209,36 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const messageListRef = useRef(null)
   const messageRefs = useRef({})
   const emojiInputRef = useRef(null)
+  const initialScrollPendingRef = useRef(false)
+  const scrollRetryCountRef = useRef(0)
+  const lastMessageCountRef = useRef(0)
+  const lastOwnMessageIdRef = useRef(null)
+  const scrollCorrectionTimeoutRef = useRef(null)
+  const wasNearBottomRef = useRef(true)
+  const previousLastMessageIdRef = useRef(null)
+
+  // Reset scroll state when chatId changes
+  useEffect(() => {
+    console.log('[SCROLL] ChatId changed, resetting scroll state')
+    setMessagesLoaded(false)
+    setReadStateLoaded(false)
+    setInitialScrollDone(false)
+    setUserHasManuallyScrolled(false)
+    setNewMessagesCount(0)
+    initialScrollPendingRef.current = false
+    scrollRetryCountRef.current = 0
+    lastMessageCountRef.current = 0
+    previousLastMessageIdRef.current = null
+    wasNearBottomRef.current = true
+    if (scrollCorrectionTimeoutRef.current) {
+      clearTimeout(scrollCorrectionTimeoutRef.current)
+    }
+  }, [chatId])
 
   useEffect(() => {
     setLoading(true)
     setError(null)
+    setMessagesLoaded(false)
 
     const messagesRef = collection(db, 'chats', chatId, 'messages')
     let q
@@ -226,6 +269,8 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
         }))
         setMessages(messageList)
         setLoading(false)
+        setMessagesLoaded(true)
+        console.log('[SCROLL] Messages loaded:', messageList.length)
 
         // Subscribe to reactions and emotional receipts for each message
         messageList.forEach((msg) => {
@@ -240,6 +285,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
         } else {
           setError('Failed to load messages.')
         }
+        setMessagesLoaded(true)
         setLoading(false)
       }
     )
@@ -304,117 +350,325 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     return unsubscribe
   }, [chatId])
 
-  // Scroll to first unread on initial load, or to bottom if no unread
-  useEffect(() => {
-    if (!messages.length || hasScrolledToUnread || loading) return
+  // === SCROLL HELPER: scrolls the container, not the window ===
+  const scrollToMessageById = useCallback((messageId, options = {}) => {
+    const { behavior = 'auto', block = 'start', highlight = true } = options
+    const container = messageListRef.current
+    const element = messageRefs.current[messageId]
 
-    if (firstUnreadId && messageRefs.current[firstUnreadId]) {
-      const element = messageRefs.current[firstUnreadId]
-      element.scrollIntoView({ behavior: 'auto', block: 'start' })
-      setHasScrolledToUnread(true)
-    } else if (!firstUnreadId && myLastReadAtOnMount !== null) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
-      setHasScrolledToUnread(true)
+    if (!container || !element) {
+      console.log('[SCROLL] scrollToMessageById failed - missing container or element:', {
+        messageId: messageId?.slice?.(-6),
+        hasContainer: !!container,
+        hasElement: !!element,
+      })
+      return false
     }
-  }, [messages, firstUnreadId, hasScrolledToUnread, loading, myLastReadAtOnMount])
 
-  // Track new messages arriving while scrolled up
-  const previousMessagesLengthRef = useRef(0)
+    const elementOffsetTop = element.offsetTop
+    let targetScrollTop
+
+    if (block === 'center') {
+      targetScrollTop = elementOffsetTop - (container.clientHeight / 2) + (element.offsetHeight / 2)
+    } else if (block === 'start') {
+      targetScrollTop = elementOffsetTop - 60 // padding for divider
+    } else {
+      targetScrollTop = elementOffsetTop - container.clientHeight + element.offsetHeight + 20
+    }
+
+    const maxScroll = container.scrollHeight - container.clientHeight
+    targetScrollTop = Math.max(0, Math.min(targetScrollTop, maxScroll))
+
+    container.scrollTop = targetScrollTop
+
+    console.log('[SCROLL] scrollToMessageById:', {
+      messageId: messageId?.slice?.(-6),
+      block,
+      targetScrollTop,
+      actualScrollTop: container.scrollTop,
+    })
+
+    if (highlight) {
+      setHighlightedMessageId(messageId)
+      setTimeout(() => setHighlightedMessageId(null), 2000)
+    }
+    return true
+  }, [])
+
+  // === SCROLL CONTAINER TO BOTTOM ===
+  const scrollContainerToBottom = useCallback(() => {
+    const container = messageListRef.current
+    if (!container) return false
+    const maxScroll = container.scrollHeight - container.clientHeight
+    container.scrollTop = maxScroll
+    console.log('[SCROLL] scrollContainerToBottom:', { maxScroll, actual: container.scrollTop })
+    return true
+  }, [])
+
+  // === INITIAL SCROLL EFFECT ===
   useEffect(() => {
-    if (!messages.length || !hasScrolledToUnread) {
-      previousMessagesLengthRef.current = messages.length
+    // Wait for all conditions
+    if (!messagesLoaded || !readStateLoaded) {
+      console.log('[SCROLL] Waiting for data:', { messagesLoaded, readStateLoaded })
+      return
+    }
+    if (initialScrollDone) return
+    if (scrollToMessageId) return // External scroll takes priority
+    if (initialScrollPendingRef.current) return
+
+    initialScrollPendingRef.current = true
+    scrollRetryCountRef.current = 0
+
+    console.log('[SCROLL] Starting initial scroll:', {
+      messagesCount: messages.length,
+      firstUnreadId: firstUnreadId?.slice?.(-6) || null,
+    })
+
+    const performInitialScroll = () => {
+      if (userHasManuallyScrolled) {
+        console.log('[SCROLL] Cancelled - user manually scrolled')
+        setInitialScrollDone(true)
+        initialScrollPendingRef.current = false
+        return
+      }
+
+      const container = messageListRef.current
+      if (!container || container.scrollHeight === 0) {
+        scrollRetryCountRef.current++
+        if (scrollRetryCountRef.current < 20) {
+          requestAnimationFrame(performInitialScroll)
+        } else {
+          console.log('[SCROLL] Gave up waiting for container')
+          setInitialScrollDone(true)
+          initialScrollPendingRef.current = false
+        }
+        return
+      }
+
+      if (firstUnreadId) {
+        const element = messageRefs.current[firstUnreadId]
+        if (element) {
+          const targetScrollTop = Math.max(0, element.offsetTop - 60)
+          container.scrollTop = targetScrollTop
+          setHighlightedMessageId(firstUnreadId)
+          setTimeout(() => setHighlightedMessageId(null), 2000)
+
+          console.log('[SCROLL] SUCCESS - scrolled to first unread:', {
+            messageId: firstUnreadId?.slice?.(-6),
+            targetScrollTop,
+            actualScrollTop: container.scrollTop,
+          })
+
+          // Delayed correction (cancelled if user scrolls)
+          scrollCorrectionTimeoutRef.current = setTimeout(() => {
+            if (!userHasManuallyScrolled) {
+              const c = messageListRef.current
+              if (c && Math.abs(c.scrollTop - targetScrollTop) > 50) {
+                console.log('[SCROLL] Applying delayed correction')
+                c.scrollTop = targetScrollTop
+              }
+            }
+          }, 150)
+
+          setInitialScrollDone(true)
+          initialScrollPendingRef.current = false
+        } else {
+          scrollRetryCountRef.current++
+          if (scrollRetryCountRef.current < 20) {
+            requestAnimationFrame(performInitialScroll)
+          } else {
+            console.log('[SCROLL] Element not found, scrolling to bottom')
+            scrollContainerToBottom()
+            setInitialScrollDone(true)
+            initialScrollPendingRef.current = false
+          }
+        }
+      } else {
+        // No unread - scroll to bottom
+        scrollContainerToBottom()
+        console.log('[SCROLL] SUCCESS - no unread, scrolled to bottom')
+        setInitialScrollDone(true)
+        initialScrollPendingRef.current = false
+      }
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(performInitialScroll)
+      })
+    })
+  }, [messagesLoaded, readStateLoaded, initialScrollDone, firstUnreadId, scrollToMessageId, userHasManuallyScrolled, messages.length, scrollContainerToBottom])
+
+  // === NEW MESSAGE HANDLING ===
+  useEffect(() => {
+    // Track previous last message ID for comparison
+    const currentLastMessage = messages[messages.length - 1]
+    const currentLastMessageId = currentLastMessage?.id || null
+    const previousLastMessageId = previousLastMessageIdRef.current
+
+    // Update ref for next comparison
+    previousLastMessageIdRef.current = currentLastMessageId
+
+    // Skip if no messages, not initialized, or no change in last message
+    if (!messages.length || !initialScrollDone) {
+      lastMessageCountRef.current = messages.length
       return
     }
 
-    const container = messageListRef.current
-    if (!container) return
-
-    const { scrollHeight, scrollTop, clientHeight } = container
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
-
-    const newMsgCount = messages.length - previousMessagesLengthRef.current
-    if (newMsgCount > 0 && !isNearBottom) {
-      const newMessages = messages.slice(-newMsgCount)
-      const othersMessages = newMessages.filter(m => m.senderId !== currentUser.uid)
-      if (othersMessages.length > 0) {
-        setNewMessagesCount(prev => prev + othersMessages.length)
-      }
-    } else if (isNearBottom) {
-      setNewMessagesCount(0)
+    // No new message (same last message ID)
+    if (currentLastMessageId === previousLastMessageId) {
+      lastMessageCountRef.current = messages.length
+      return
     }
 
-    previousMessagesLengthRef.current = messages.length
-  }, [messages, hasScrolledToUnread, currentUser.uid])
+    // We have a new last message
+    const newLastMessage = currentLastMessage
+    const isOwnMessage = newLastMessage?.senderId === currentUser.uid
 
-  // Handle scroll position to show/hide floating buttons and clear new messages indicator
+    // Capture the near-bottom state BEFORE this render (from scroll handler)
+    const wasNearBottom = wasNearBottomRef.current
+
+    // Debug logging
+    console.log('[SCROLL] New message detected:', {
+      currentUserId: currentUser.uid?.slice?.(-6),
+      previousLastMessageId: previousLastMessageId?.slice?.(-6) || null,
+      newLastMessageId: currentLastMessageId?.slice?.(-6),
+      newLastMessageSenderId: newLastMessage?.senderId?.slice?.(-6),
+      isOwnMessage,
+      initialScrollDone,
+      wasNearBottom,
+    })
+
+    // Calculate how many new messages
+    const prevCount = lastMessageCountRef.current
+    const newMsgCount = messages.length - prevCount
+    lastMessageCountRef.current = messages.length
+
+    // RULE B: User sent a message - ALWAYS scroll to bottom
+    if (isOwnMessage) {
+      console.log('[SCROLL] message-sent: scrolling to bottom (force)')
+      // Use double RAF to ensure DOM has rendered the new message
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollContainerToBottom()
+          // Clear any new message indicator
+          setNewMessagesCount(0)
+        })
+      })
+      return
+    }
+
+    // RULE C: Incoming message from other user
+    if (wasNearBottom) {
+      // Near bottom - auto scroll
+      console.log('[SCROLL] incoming-near-bottom: auto-scrolling')
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollContainerToBottom()
+          setNewMessagesCount(0)
+        })
+      })
+    } else {
+      // Not near bottom - show indicator, don't scroll
+      const incomingCount = newMsgCount > 0 ? newMsgCount : 1
+      setNewMessagesCount(prev => prev + incomingCount)
+      console.log('[SCROLL] incoming-not-near-bottom: showing indicator, count:', incomingCount)
+    }
+  }, [messages, initialScrollDone, currentUser.uid, scrollContainerToBottom])
+
+  // === SCROLL EVENT HANDLER ===
   useEffect(() => {
     const container = messageListRef.current
     if (!container) return
+
+    let lastScrollTop = container.scrollTop
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container
       const distanceFromTop = scrollTop
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight
 
-      // Show "go to top" button when scrolled down more than 200px
+      // Track near-bottom state BEFORE new messages arrive (for incoming message scroll decision)
+      wasNearBottomRef.current = distanceFromBottom < 150
+
+      // Detect manual scroll
+      if (initialScrollDone && Math.abs(scrollTop - lastScrollTop) > 10) {
+        if (!userHasManuallyScrolled) {
+          setUserHasManuallyScrolled(true)
+          if (scrollCorrectionTimeoutRef.current) {
+            clearTimeout(scrollCorrectionTimeoutRef.current)
+            console.log('[SCROLL] User scrolled, cancelled correction')
+          }
+        }
+      }
+      lastScrollTop = scrollTop
+
       setShowScrollTop(distanceFromTop > 200)
-      // Show "go to bottom" button when scrolled up more than 200px from bottom
       setShowScrollBottom(distanceFromBottom > 200)
 
-      // Clear new messages indicator when near bottom
       if (distanceFromBottom < 100) {
         setNewMessagesCount(0)
       }
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
-    handleScroll() // Check initial position
+    handleScroll()
 
     return () => container.removeEventListener('scroll', handleScroll)
-  }, [messages])
+  }, [messages, initialScrollDone, userHasManuallyScrolled])
 
   const scrollToTop = () => {
-    messagesStartRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = messageListRef.current
+    if (container) container.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    scrollContainerToBottom()
     setNewMessagesCount(0)
+    wasNearBottomRef.current = true
   }
 
   const scrollToFirstUnread = () => {
-    if (firstUnreadId && messageRefs.current[firstUnreadId]) {
-      messageRefs.current[firstUnreadId].scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (firstUnreadId) {
+      scrollToMessageById(firstUnreadId, { behavior: 'smooth', block: 'start' })
     } else {
-      scrollToBottom()
+      scrollContainerToBottom()
     }
     setNewMessagesCount(0)
+    // Reset manual scroll flag so future incoming messages auto-scroll
+    wasNearBottomRef.current = true
   }
 
-  // Handle external scroll-to-message request (from SharedMedia)
+  // === EXTERNAL SCROLL REQUEST (SharedMedia, search, reply) ===
   useEffect(() => {
-    if (scrollToMessageId && messageRefs.current[scrollToMessageId]) {
-      const element = messageRefs.current[scrollToMessageId]
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      setHighlightedMessageId(scrollToMessageId)
-      setTimeout(() => {
-        setHighlightedMessageId(null)
-        if (onScrollComplete) onScrollComplete()
-      }, 2000)
-    } else if (scrollToMessageId && onScrollComplete) {
-      // Message not found in current loaded messages
-      setTimeout(() => onScrollComplete(), 100)
-    }
-  }, [scrollToMessageId, onScrollComplete])
+    if (!scrollToMessageId || !messagesLoaded) return
 
-  // Subscribe to chat document for lastReadAt
+    console.log('[SCROLL] External scroll request:', scrollToMessageId?.slice?.(-6))
+
+    // External scroll takes priority
+    setInitialScrollDone(true)
+    setUserHasManuallyScrolled(true)
+
+    const tryScroll = (retries = 0) => {
+      const success = scrollToMessageById(scrollToMessageId, { behavior: 'smooth', block: 'center' })
+      if (success) {
+        setTimeout(() => onScrollComplete?.(), 2000)
+      } else if (retries < 15) {
+        requestAnimationFrame(() => tryScroll(retries + 1))
+      } else {
+        onScrollComplete?.()
+      }
+    }
+    tryScroll()
+  }, [scrollToMessageId, messagesLoaded, scrollToMessageById, onScrollComplete])
+
+  // Subscribe to chat document for friend's lastReadAt
   useEffect(() => {
     const chatRef = doc(db, 'chats', chatId)
     const unsubscribe = onSnapshot(chatRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data()
         const lastReadAt = data.lastReadAt || {}
-        // Find friend's lastReadAt (the other user)
         const friendUid = Object.keys(lastReadAt).find((uid) => uid !== currentUser.uid)
         if (friendUid && lastReadAt[friendUid]) {
           setFriendLastReadAt(lastReadAt[friendUid])
@@ -426,6 +680,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
 
   // Fetch initial lastReadAt on mount (before updating it)
   useEffect(() => {
+    setReadStateLoaded(false)
     const fetchInitialReadState = async () => {
       try {
         const chatRef = doc(db, 'chats', chatId)
@@ -434,10 +689,18 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           const lastReadAt = chatSnap.data().lastReadAt || {}
           if (lastReadAt[currentUser.uid]) {
             setMyLastReadAtOnMount(lastReadAt[currentUser.uid])
+          } else {
+            setMyLastReadAtOnMount(null)
           }
+        } else {
+          setMyLastReadAtOnMount(null)
         }
+        console.log('[SCROLL] Read state loaded')
       } catch (err) {
         console.error('Error fetching initial read state:', err)
+        setMyLastReadAtOnMount(null)
+      } finally {
+        setReadStateLoaded(true)
       }
     }
     fetchInitialReadState()
@@ -445,48 +708,65 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
 
   // Calculate first unread message
   useEffect(() => {
-    if (!messages.length || !myLastReadAtOnMount) {
+    if (!readStateLoaded) return
+
+    if (!messages.length) {
       setFirstUnreadId(null)
       return
     }
-    const myLastReadMs = myLastReadAtOnMount.toMillis?.() || 0
+
+    // If no lastReadAt, all messages from others are unread
+    const myLastReadMs = myLastReadAtOnMount?.toMillis?.() || 0
     const firstUnread = messages.find((msg) => {
       if (msg.senderId === currentUser.uid) return false
       const msgMs = msg.createdAt?.toMillis?.() || 0
-      return msgMs > myLastReadMs
+      return myLastReadAtOnMount ? msgMs > myLastReadMs : true
     })
-    setFirstUnreadId(firstUnread?.id || null)
-  }, [messages, myLastReadAtOnMount, currentUser.uid])
 
-  // Update own lastReadAt when viewing chat (debounced, only when at bottom)
+    console.log('[SCROLL] Calculated firstUnreadId:', {
+      myLastReadAt: myLastReadAtOnMount ? 'exists' : 'null',
+      firstUnreadId: firstUnread?.id?.slice?.(-6) || null,
+    })
+
+    setFirstUnreadId(firstUnread?.id || null)
+  }, [messages, myLastReadAtOnMount, currentUser.uid, readStateLoaded])
+
+  // Update own lastReadAt when viewing chat (debounced)
+  // Only after initial scroll is done and user is near bottom
   const lastReadAtUpdateRef = useRef(null)
   useEffect(() => {
+    // Don't update until initial scroll is complete
+    if (!initialScrollDone) return
+
+    // Check if user is near bottom
+    const container = messageListRef.current
+    if (container) {
+      const { scrollHeight, scrollTop, clientHeight } = container
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+      if (distanceFromBottom > 200) return
+    }
+
     if (lastReadAtUpdateRef.current) {
       clearTimeout(lastReadAtUpdateRef.current)
     }
     lastReadAtUpdateRef.current = setTimeout(async () => {
       try {
         const chatRef = doc(db, 'chats', chatId)
-        const chatSnap = await getDoc(chatRef)
-        if (chatSnap.exists()) {
-          const currentLastReadAt = chatSnap.data().lastReadAt || {}
-          await updateDoc(chatRef, {
-            lastReadAt: {
-              ...currentLastReadAt,
-              [currentUser.uid]: serverTimestamp(),
-            },
-          })
-        }
+        // Use dot-path notation to only update this user's field
+        await updateDoc(chatRef, {
+          [`lastReadAt.${currentUser.uid}`]: serverTimestamp(),
+        })
+        console.log('[SCROLL] Updated lastReadAt')
       } catch (err) {
         console.error('Error updating lastReadAt:', err)
       }
-    }, 1000)
+    }, 1500)
     return () => {
       if (lastReadAtUpdateRef.current) {
         clearTimeout(lastReadAtUpdateRef.current)
       }
     }
-  }, [chatId, currentUser.uid, messages])
+  }, [chatId, currentUser.uid, messages, initialScrollDone])
 
   // Subscribe to pinned messages
   useEffect(() => {
@@ -552,20 +832,29 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     let fileInfo = null
 
     if (message.type === 'file' && message.file) {
-      previewText = `📎 ${message.file.fileName}`
-      if (['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'].includes(message.file.contentType)) {
+      const isImage = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/avif'].includes(message.file.contentType)
+      if (isImage) {
+        previewText = '📷 Photo'
         fileInfo = {
           storagePath: message.file.storagePath,
           contentType: message.file.contentType,
           type: 'image'
         }
+      } else {
+        previewText = `📎 ${message.file.fileName}`
       }
     } else if (message.type === 'video' && message.file) {
-      previewText = `🎬 ${message.file.fileName}`
+      previewText = '🎬 Video'
       fileInfo = {
         storagePath: message.file.storagePath,
         contentType: message.file.contentType,
         type: 'video'
+      }
+    } else if (message.type === 'attachment_bundle') {
+      const count = message.attachmentCount || 0
+      previewText = count > 1 ? `📎 ${count} attachments` : '📎 Attachment'
+      if (message.firstPreviewStoragePath) {
+        fileInfo = { storagePath: message.firstPreviewStoragePath, contentType: 'image/*', type: 'image' }
       }
     } else if (message.type === 'voice' && message.voice) {
       previewText = `🎤 Voice note (${formatVoiceDuration(message.voice.durationSeconds)})`
@@ -1327,10 +1616,74 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     return <div className="message-text">{linkifyText(message.text)}</div>
   }
 
-  // Filter messages by search query (includes text, links, file names, and voice transcripts)
+  const REVEAL_KIND_ICONS = {
+    puzzle: '🧩',
+    surprise: '🎉',
+    spoiler: '🤐',
+    secret: '🤫',
+    question: '❓',
+  }
+
+  const REVEAL_KIND_LABELS = {
+    puzzle: 'Puzzle',
+    surprise: 'Surprise',
+    spoiler: 'Spoiler',
+    secret: 'Secret',
+    question: 'Question',
+  }
+
+  const renderRevealMessage = (message) => {
+    const revealed = isRevealed(message.id)
+    const kind = message.revealKind || 'secret'
+    const icon = REVEAL_KIND_ICONS[kind] || '🎁'
+    const kindLabel = REVEAL_KIND_LABELS[kind] || 'Reveal'
+
+    const handleRevealClick = () => {
+      revealMessage(message.id)
+    }
+
+    return (
+      <div className={`reveal-message reveal-message--${kind} ${revealed ? 'reveal-message--revealed' : ''}`}>
+        {message.revealTitle && (
+          <div className="reveal-message-title">{message.revealTitle}</div>
+        )}
+
+        <div className="reveal-message-prompt">
+          <span className="reveal-message-icon">{icon}</span>
+          <span className="reveal-message-prompt-text">{message.revealPrompt}</span>
+        </div>
+
+        {!revealed ? (
+          <button
+            className="reveal-message-btn"
+            onClick={handleRevealClick}
+            aria-label={`Tap to reveal ${kindLabel.toLowerCase()}`}
+          >
+            {kind === 'puzzle' || kind === 'question' ? 'Show answer' : 'Tap to reveal'}
+          </button>
+        ) : (
+          <div className="reveal-message-content">
+            <div className="reveal-message-divider">
+              <span className="reveal-message-divider-label">
+                {kind === 'puzzle' || kind === 'question' ? 'Answer' : 'Revealed'}
+              </span>
+            </div>
+            <div className="reveal-message-hidden-text">{linkifyText(message.hiddenContent)}</div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Filter messages: exclude cleared messages and apply search query
+  // First, filter out messages cleared by "Clear All"
+  const visibleMessages = filterVisibleMessages(messages)
+
+  // Then apply search query filter (includes text, links, file names, and voice transcripts)
   const filteredMessages = searchQuery.trim()
-    ? messages.filter((msg) => {
+    ? visibleMessages.filter((msg) => {
         if (isDeletedForMe(msg.id)) return false
+        if (isMessageCleared(msg)) return false
         const query = searchQuery.toLowerCase()
         // Text messages
         if (msg.text && msg.text.toLowerCase().includes(query)) {
@@ -1348,7 +1701,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
         }
         return false
       })
-    : messages
+    : visibleMessages.filter(msg => !isDeletedForMe(msg.id) && !isMessageCleared(msg))
 
   if (loading) {
     return <div className="message-list loading">Loading messages...</div>
@@ -1457,13 +1810,25 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           const isVideoMessage = message.type === 'video'
           const isVoiceMessage = message.type === 'voice'
           const isSpecialMessage = message.type === 'special'
+          const isRevealMessage = message.type === 'reveal'
           const hasHeartEmoji = message.text && /[\u2764\u2765\u2763\u{1F493}-\u{1F49F}\u{1FA75}-\u{1FA77}\u{1F90D}\u{1F90E}\u{1F9E1}\u{2764}\u{1FAC0}]/u.test(message.text)
-          const isLoveStyle = hasHeartEmoji && !isSpecialMessage
-          const isTextMessage = message.type === 'text' || (!isFileMessage && !isVideoMessage && !isVoiceMessage && !isSpecialMessage)
+          const isLoveIntent = message.messageIntent === 'love'
+          const isLoveStyle = (hasHeartEmoji || isLoveIntent) && !isSpecialMessage && !isRevealMessage
+          const isTextMessage = message.type === 'text' || (!isFileMessage && !isVideoMessage && !isVoiceMessage && !isSpecialMessage && !isRevealMessage)
           const emojiOnly = isTextMessage && isEmojiOnlyMessage(message.text)
 
           const isSelected = selectedMessages.has(message.id)
           const isFirstUnread = firstUnreadId === message.id
+
+          // Message intent classes for attention effects
+          const intent = message.messageIntent
+          const intentClass = intent && intent !== 'normal' && intent !== 'love'
+            ? `message--${intent.replace('_', '-')}`
+            : ''
+          // Check if message is unread (from other user, after my last read)
+          const isUnreadFromOther = !isOwn && myLastReadAtOnMount && message.createdAt &&
+            message.createdAt.toMillis?.() > (myLastReadAtOnMount.toMillis?.() || 0)
+          const unreadClass = isUnreadFromOther && intentClass ? 'message--unread' : ''
 
           return (
             <React.Fragment key={message.id}>
@@ -1474,7 +1839,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               )}
               <div
               ref={(el) => { if (el) messageRefs.current[message.id] = el }}
-              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVideoMessage ? 'video-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''} ${emojiOnly ? 'message--emoji-only' : ''} ${isSelected ? 'selected' : ''}`}
+              className={`message ${isOwn ? 'own' : 'other'} ${isFileMessage ? 'file-message' : ''} ${isVideoMessage ? 'video-message' : ''} ${isVoiceMessage ? 'voice-message' : ''} ${isSpecialMessage ? `special-message special-${message.specialType}` : ''} ${isRevealMessage ? `reveal-message-wrapper reveal-kind-${message.revealKind || 'secret'}` : ''} ${highlightedMessageId === message.id ? 'highlighted' : ''} ${intenseLoveAnimation === message.id ? 'intense-love-animation' : ''} ${isLoveStyle ? 'message--love' : ''} ${emojiOnly ? 'message--emoji-only' : ''} ${isSelected ? 'selected' : ''} ${intentClass} ${unreadClass}`}
               onClick={selectionMode ? () => toggleMessageSelection(message) : undefined}
             >
               {/* Selection checkbox */}
@@ -1725,6 +2090,8 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                 </div>
               ) : isSpecialMessage ? (
                 renderSpecialMessage(message)
+              ) : isRevealMessage ? (
+                renderRevealMessage(message)
               ) : (isFileMessage || isVideoMessage) ? (
                 <SecureFileContent
                   chatId={chatId}
