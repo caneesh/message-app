@@ -5,6 +5,7 @@ import { httpsCallable } from 'firebase/functions'
 import AiSettingsPanel from './AiSettingsPanel'
 import { createPinHash, verifyPin, isPinConfigured, clearPin, getPinCreatedAt } from '../utils/pinSecurity'
 import { listThoughtsForExport } from '../services/thoughtService'
+import { clearAllMessagesForUser, getAllMessagesForExport } from '../services/messageClearService'
 import {
   buildThoughtsMarkdownExport,
   buildThoughtsJsonExport,
@@ -183,57 +184,36 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
   }
 
   const handleDeleteAllMessages = async () => {
-    if (!chatId) return
+    if (!chatId || !currentUser?.uid) return
+
+    // Confirm with user - explain this is a soft delete
+    const confirmed = window.confirm(
+      'Clear all visible messages from this chat?\n\n' +
+      'This only affects your view - your partner can still see their messages.'
+    )
+
+    if (!confirmed) return
 
     setDeletingAllMessages(true)
-    setDeleteAllProgress('Fetching messages...')
+    setDeleteAllProgress('Clearing messages from view...')
 
     try {
-      const messagesRef = collection(db, 'chats', chatId, 'messages')
-      const snapshot = await getDocs(messagesRef)
+      const result = await clearAllMessagesForUser(chatId, currentUser.uid)
 
-      if (snapshot.empty) {
-        setDeleteAllProgress('')
-        alert('No messages to delete.')
-        setDeletingAllMessages(false)
-        return
-      }
-
-      const totalMessages = snapshot.docs.length
-      let deleted = 0
-
-      // Delete in batches of 500 (Firestore limit)
-      const batchSize = 500
-      const batches = []
-      let currentBatch = writeBatch(db)
-      let operationCount = 0
-
-      for (const docSnap of snapshot.docs) {
-        currentBatch.delete(docSnap.ref)
-        operationCount++
-
-        if (operationCount === batchSize) {
-          batches.push(currentBatch)
-          currentBatch = writeBatch(db)
-          operationCount = 0
-        }
-      }
-
-      if (operationCount > 0) {
-        batches.push(currentBatch)
-      }
-
-      for (let i = 0; i < batches.length; i++) {
-        setDeleteAllProgress(`Deleting batch ${i + 1} of ${batches.length}...`)
-        await batches[i].commit()
-        deleted += Math.min(batchSize, totalMessages - (i * batchSize))
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to clear messages')
       }
 
       setDeleteAllProgress('')
-      alert(`Successfully deleted ${totalMessages} messages.`)
+
+      if (result.clearedCount === 0) {
+        alert('No messages to clear.')
+      } else {
+        alert(`Cleared ${result.clearedCount} messages from chat view.`)
+      }
     } catch (err) {
-      console.error('Error deleting messages:', err)
-      alert('Failed to delete all messages. Some messages may remain.')
+      console.error('Error clearing messages:', err)
+      alert('Failed to clear messages. Please try again.')
     } finally {
       setDeletingAllMessages(false)
       setDeleteAllProgress('')
@@ -298,14 +278,22 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
         events: [],
       }
 
-      const messagesSnap = await getDocs(
-        query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt'))
-      )
-      data.messages = messagesSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-        createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null,
-      }))
+      // Get all messages including cleared/archived ones (with metadata)
+      const messagesResult = await getAllMessagesForExport(chatId, currentUser?.uid)
+      if (messagesResult.success) {
+        data.messages = messagesResult.messages
+      } else {
+        console.warn('Failed to get messages for export:', messagesResult.error)
+        // Fallback to direct query
+        const messagesSnap = await getDocs(
+          query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt'))
+        )
+        data.messages = messagesSnap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+          createdAt: d.data().createdAt?.toDate?.()?.toISOString() || null,
+        }))
+      }
 
       const remindersSnap = await getDocs(collection(db, 'chats', chatId, 'reminders'))
       data.reminders = remindersSnap.docs.map((d) => ({
@@ -773,21 +761,21 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
       </div>
 
       {chatId && (
-        <div className="settings-section danger-zone">
-          <h3>Delete All Messages</h3>
+        <div className="settings-section">
+          <h3>Clear Chat View</h3>
           <p className="settings-note">
-            Permanently delete all messages in this chat. This affects both you and your partner.
-            This action cannot be undone.
+            Remove all visible messages from your chat view. Messages are kept for export/download.
+            This only affects your view - your partner's view is not changed.
           </p>
           {deleteAllProgress && (
             <div className="delete-status processing">{deleteAllProgress}</div>
           )}
           <button
-            className="settings-btn danger"
+            className="settings-btn"
             onClick={handleDeleteAllMessages}
             disabled={deletingAllMessages}
           >
-            {deletingAllMessages ? 'Deleting...' : 'Delete All Messages'}
+            {deletingAllMessages ? 'Clearing...' : 'Clear All Messages'}
           </button>
         </div>
       )}
