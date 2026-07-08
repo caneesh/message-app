@@ -16453,3 +16453,27 @@ body.dark-mode .voice-call-btn:hover {
   gap: 12px;
   justify-content: center;
 }
+
+/* Archive code input */
+.archive-code-input {
+  width: 100%;
+  padding: 16px;
+  font-size: 24px;
+  text-align: center;
+  letter-spacing: 8px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-primary);
+  color: var(--content-primary);
+  margin: 16px 0;
+}
+
+.archive-code-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.archive-code-input::placeholder {
+  letter-spacing: 8px;
+  color: var(--content-tertiary);
+}

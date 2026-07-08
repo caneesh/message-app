@@ -41,6 +41,10 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
   const EXPORT_CODE = '335042249'
   const READ_ARCHIVE_CODE = '1715'
   const longPressTimer = useRef(null)
+  const archiveLongPressTimer = useRef(null)
+  const [showArchiveCodeModal, setShowArchiveCodeModal] = useState(false)
+  const [archiveCodeInput, setArchiveCodeInput] = useState('')
+  const [archiveCodeError, setArchiveCodeError] = useState('')
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -76,12 +80,37 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
     longPressTimer.current = setTimeout(() => {
       setExportUnlocked(true)
     }, 3000)
+    // Also start archive long press timer (shows code prompt)
+    archiveLongPressTimer.current = setTimeout(() => {
+      if (!readArchiveUnlocked) {
+        setShowArchiveCodeModal(true)
+        setArchiveCodeInput('')
+        setArchiveCodeError('')
+      }
+    }, 3000)
   }
 
   const handleLongPressEnd = () => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
+    }
+    if (archiveLongPressTimer.current) {
+      clearTimeout(archiveLongPressTimer.current)
+      archiveLongPressTimer.current = null
+    }
+  }
+
+  const handleArchiveCodeSubmit = () => {
+    if (archiveCodeInput === READ_ARCHIVE_CODE) {
+      setReadArchiveUnlocked(true)
+      sessionStorage.setItem('readArchiveUnlocked', 'true')
+      setShowArchiveCodeModal(false)
+      setArchiveCodeInput('')
+      setArchiveCodeError('')
+    } else {
+      setArchiveCodeError('Incorrect code')
+      setArchiveCodeInput('')
     }
   }
 
@@ -715,6 +744,54 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
                 onClick={handleCopyThoughtsExport}
               >
                 Copy to Clipboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive code entry modal (mobile long-press unlock) */}
+      {showArchiveCodeModal && (
+        <div className="settings-modal-overlay" onClick={() => setShowArchiveCodeModal(false)}>
+          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Enter Code</h3>
+            <p className="settings-note">
+              Enter the access code to continue.
+            </p>
+            {archiveCodeError && <div className="settings-error">{archiveCodeError}</div>}
+            <input
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              className="settings-input archive-code-input"
+              value={archiveCodeInput}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '')
+                setArchiveCodeInput(val)
+                setArchiveCodeError('')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleArchiveCodeSubmit()
+                }
+              }}
+              placeholder="••••"
+              autoFocus
+            />
+            <div className="settings-modal-actions">
+              <button
+                className="settings-btn secondary"
+                onClick={() => setShowArchiveCodeModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="settings-btn"
+                onClick={handleArchiveCodeSubmit}
+                disabled={archiveCodeInput.length !== 4}
+              >
+                Submit
               </button>
             </div>
           </div>
