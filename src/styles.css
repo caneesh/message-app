@@ -16477,3 +16477,24 @@ body.dark-mode .voice-call-btn:hover {
   letter-spacing: 8px;
   color: var(--content-tertiary);
 }
+
+/* Settings checkbox */
+.settings-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* Settings buttons row */
+.settings-buttons-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.settings-buttons-row .settings-btn {
+  flex: 1;
+  min-width: 140px;
+}

@@ -5,7 +5,8 @@ import { httpsCallable } from 'firebase/functions'
 import AiSettingsPanel from './AiSettingsPanel'
 import { createPinHash, verifyPin, isPinConfigured, clearPin, getPinCreatedAt } from '../utils/pinSecurity'
 import { listThoughtsForExport } from '../services/thoughtService'
-import { clearAllMessagesForUser, getAllMessagesForExport } from '../services/messageClearService'
+import { clearAllMessagesForUser, getAllMessagesForExport, getMessageClearState } from '../services/messageClearService'
+import { archiveAllRead } from '../services/readArchiveService'
 import {
   buildThoughtsMarkdownExport,
   buildThoughtsJsonExport,
@@ -116,6 +117,13 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
   const [redeemLoading, setRedeemLoading] = useState(false)
   const [redeemError, setRedeemError] = useState('')
   const [redeemSuccess, setRedeemSuccess] = useState('')
+
+  // Auto-archive read messages setting
+  const [autoArchiveEnabled, setAutoArchiveEnabled] = useState(
+    () => localStorage.getItem('autoArchiveReadMessages') === 'true'
+  )
+  const [archivingReadMessages, setArchivingReadMessages] = useState(false)
+  const [archiveReadResult, setArchiveReadResult] = useState('')
 
   const [deleteRequestStatus, setDeleteRequestStatus] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -255,6 +263,77 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
     } finally {
       setDeletingAllMessages(false)
       setDeleteAllProgress('')
+    }
+  }
+
+  const handleToggleAutoArchive = (enabled) => {
+    setAutoArchiveEnabled(enabled)
+    localStorage.setItem('autoArchiveReadMessages', enabled ? 'true' : 'false')
+  }
+
+  const handleArchiveReadMessages = async () => {
+    if (!chatId || !currentUser?.uid) return
+
+    setArchivingReadMessages(true)
+    setArchiveReadResult('')
+
+    try {
+      // Get the user's lastReadAt from the chat document
+      const chatRef = doc(db, 'chats', chatId)
+      const chatSnap = await getDoc(chatRef)
+      if (!chatSnap.exists()) {
+        throw new Error('Chat not found')
+      }
+
+      const lastReadAt = chatSnap.data().lastReadAt?.[currentUser.uid]
+      if (!lastReadAt) {
+        setArchiveReadResult('No read timestamp found.')
+        return
+      }
+
+      // Get clear state to know which messages are already cleared
+      const clearStateResult = await getMessageClearState(chatId, currentUser.uid)
+      const clearedAt = clearStateResult?.clearState?.clearedAt
+
+      // Get all messages
+      const messagesRef = collection(db, 'chats', chatId, 'messages')
+      const q = query(messagesRef, orderBy('createdAt', 'asc'))
+      const snapshot = await getDocs(q)
+
+      // Find read messages that should be archived
+      const lastReadAtMs = lastReadAt.toMillis?.() || lastReadAt
+      const clearedAtMs = clearedAt?.toMillis?.() || clearedAt || 0
+
+      const readMessageIds = []
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data()
+        const createdAtMs = data.createdAt?.toMillis?.() || data.createdAt || 0
+
+        // Skip own messages
+        if (data.senderId === currentUser.uid) return
+
+        // Skip already cleared messages
+        if (clearedAtMs && createdAtMs <= clearedAtMs) return
+
+        // Check if message is read (createdAt <= lastReadAt)
+        if (createdAtMs <= lastReadAtMs) {
+          readMessageIds.push(docSnap.id)
+        }
+      })
+
+      if (readMessageIds.length === 0) {
+        setArchiveReadResult('No read messages to archive.')
+        return
+      }
+
+      // Archive all read messages
+      const count = await archiveAllRead(chatId, currentUser.uid, readMessageIds, 'read')
+      setArchiveReadResult(`Archived ${count} read messages.`)
+    } catch (err) {
+      console.error('Error archiving read messages:', err)
+      setArchiveReadResult('Failed to archive messages.')
+    } finally {
+      setArchivingReadMessages(false)
     }
   }
 
@@ -881,12 +960,41 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
             View messages that have been removed from your normal chat view.
             This includes read messages and cleared messages.
           </p>
-          <button
-            className="settings-btn"
-            onClick={() => onNavigate('archive')}
-          >
-            Open Hidden Messages
-          </button>
+
+          <div className="settings-row">
+            <label htmlFor="auto-archive-toggle">Auto-hide read messages</label>
+            <input
+              type="checkbox"
+              id="auto-archive-toggle"
+              checked={autoArchiveEnabled}
+              onChange={(e) => handleToggleAutoArchive(e.target.checked)}
+              className="settings-checkbox"
+            />
+          </div>
+          <p className="settings-note" style={{ marginTop: 4 }}>
+            {autoArchiveEnabled
+              ? 'Read messages will be hidden when you leave the chat.'
+              : 'Read messages stay visible until manually archived.'}
+          </p>
+
+          <div className="settings-buttons-row">
+            <button
+              className="settings-btn"
+              onClick={handleArchiveReadMessages}
+              disabled={archivingReadMessages}
+            >
+              {archivingReadMessages ? 'Archiving...' : 'Archive Read Messages'}
+            </button>
+            <button
+              className="settings-btn"
+              onClick={() => onNavigate('archive')}
+            >
+              Open Hidden Messages
+            </button>
+          </div>
+          {archiveReadResult && (
+            <div className="settings-note" style={{ marginTop: 8 }}>{archiveReadResult}</div>
+          )}
         </div>
       )}
 

@@ -31,6 +31,7 @@ import { useMessageReminders, getReminderTime } from '../hooks/useMessageReminde
 import { useMessageClearState } from '../hooks/useMessageClearState'
 import { useRevealState } from '../hooks/useRevealState'
 import { useReadArchiveState } from '../hooks/useReadArchiveState'
+import { archiveAllRead } from '../services/readArchiveService'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -772,6 +773,44 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
       }
     }
   }, [chatId, currentUser.uid, messages, initialScrollDone])
+
+  // Auto-archive read messages when leaving chat (if enabled)
+  useEffect(() => {
+    const autoArchiveEnabled = localStorage.getItem('autoArchiveReadMessages') === 'true'
+    if (!autoArchiveEnabled) return
+
+    // On unmount, archive all read messages
+    return () => {
+      const archiveOnLeave = async () => {
+        if (!chatId || !currentUser?.uid || !myLastReadAtOnMount) return
+
+        try {
+          const lastReadAtMs = myLastReadAtOnMount?.toMillis?.() || myLastReadAtOnMount
+          if (!lastReadAtMs) return
+
+          // Find read messages from others that aren't already archived
+          const readMessageIds = messages
+            .filter(msg => {
+              if (msg.senderId === currentUser.uid) return false
+              const createdAtMs = msg.createdAt?.toMillis?.() || msg.createdAt || 0
+              if (createdAtMs > lastReadAtMs) return false
+              if (isMessageHiddenFromMain(msg.id)) return false
+              return true
+            })
+            .map(msg => msg.id)
+
+          if (readMessageIds.length > 0) {
+            await archiveAllRead(chatId, currentUser.uid, readMessageIds, 'read')
+            console.log('[AUTO-ARCHIVE] Archived', readMessageIds.length, 'read messages')
+          }
+        } catch (err) {
+          console.error('[AUTO-ARCHIVE] Error:', err)
+        }
+      }
+
+      archiveOnLeave()
+    }
+  }, [chatId, currentUser?.uid, messages, myLastReadAtOnMount, isMessageHiddenFromMain])
 
   // Subscribe to pinned messages
   useEffect(() => {
