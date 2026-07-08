@@ -278,16 +278,23 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
     setArchiveReadResult('')
 
     try {
-      // Get the user's lastReadAt from the chat document
+      // Get both users' lastReadAt from the chat document
       const chatRef = doc(db, 'chats', chatId)
       const chatSnap = await getDoc(chatRef)
       if (!chatSnap.exists()) {
         throw new Error('Chat not found')
       }
 
-      const lastReadAt = chatSnap.data().lastReadAt?.[currentUser.uid]
-      if (!lastReadAt) {
-        setArchiveReadResult('No read timestamp found.')
+      const chatData = chatSnap.data()
+      const lastReadAtMap = chatData.lastReadAt || {}
+      const myLastReadAt = lastReadAtMap[currentUser.uid]
+
+      // Find the other user's lastReadAt
+      const otherUid = Object.keys(lastReadAtMap).find(uid => uid !== currentUser.uid)
+      const otherLastReadAt = otherUid ? lastReadAtMap[otherUid] : null
+
+      if (!myLastReadAt && !otherLastReadAt) {
+        setArchiveReadResult('No read timestamps found.')
         return
       }
 
@@ -301,7 +308,8 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
       const snapshot = await getDocs(q)
 
       // Find read messages that should be archived
-      const lastReadAtMs = lastReadAt.toMillis?.() || lastReadAt
+      const myLastReadAtMs = myLastReadAt?.toMillis?.() || myLastReadAt || 0
+      const otherLastReadAtMs = otherLastReadAt?.toMillis?.() || otherLastReadAt || 0
       const clearedAtMs = clearedAt?.toMillis?.() || clearedAt || 0
 
       const readMessageIds = []
@@ -312,10 +320,18 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
         // Skip already cleared messages
         if (clearedAtMs && createdAtMs <= clearedAtMs) return
 
-        // Check if message is read (createdAt <= lastReadAt)
-        // Archive both own messages and messages from others
-        if (createdAtMs <= lastReadAtMs) {
-          readMessageIds.push(docSnap.id)
+        const isOwnMessage = data.senderId === currentUser.uid
+
+        if (isOwnMessage) {
+          // My sent messages: archive only after OTHER person has read them
+          if (otherLastReadAtMs && createdAtMs <= otherLastReadAtMs) {
+            readMessageIds.push(docSnap.id)
+          }
+        } else {
+          // Received messages: archive after I have read them
+          if (myLastReadAtMs && createdAtMs <= myLastReadAtMs) {
+            readMessageIds.push(docSnap.id)
+          }
         }
       })
 

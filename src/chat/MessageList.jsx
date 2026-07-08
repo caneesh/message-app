@@ -779,22 +779,32 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     const autoArchiveEnabled = localStorage.getItem('autoArchiveReadMessages') === 'true'
     if (!autoArchiveEnabled) return
 
-    // On unmount, archive all read messages
+    // On unmount, archive read messages
     return () => {
       const archiveOnLeave = async () => {
-        if (!chatId || !currentUser?.uid || !myLastReadAtOnMount) return
+        if (!chatId || !currentUser?.uid) return
 
         try {
-          const lastReadAtMs = myLastReadAtOnMount?.toMillis?.() || myLastReadAtOnMount
-          if (!lastReadAtMs) return
+          const myLastReadAtMs = myLastReadAtOnMount?.toMillis?.() || myLastReadAtOnMount || 0
+          const friendLastReadAtMs = friendLastReadAt?.toMillis?.() || friendLastReadAt || 0
 
-          // Find read messages (both own and from others) that aren't already archived
+          if (!myLastReadAtMs && !friendLastReadAtMs) return
+
+          // Find messages that should be archived based on read status
           const readMessageIds = messages
             .filter(msg => {
               const createdAtMs = msg.createdAt?.toMillis?.() || msg.createdAt || 0
-              if (createdAtMs > lastReadAtMs) return false
               if (isMessageHiddenFromMain(msg.id)) return false
-              return true
+
+              const isOwnMessage = msg.senderId === currentUser.uid
+
+              if (isOwnMessage) {
+                // My sent messages: archive only after OTHER person has read them
+                return friendLastReadAtMs && createdAtMs <= friendLastReadAtMs
+              } else {
+                // Received messages: archive after I have read them
+                return myLastReadAtMs && createdAtMs <= myLastReadAtMs
+              }
             })
             .map(msg => msg.id)
 
@@ -809,7 +819,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
 
       archiveOnLeave()
     }
-  }, [chatId, currentUser?.uid, messages, myLastReadAtOnMount, isMessageHiddenFromMain])
+  }, [chatId, currentUser?.uid, messages, myLastReadAtOnMount, friendLastReadAt, isMessageHiddenFromMain])
 
   // Subscribe to pinned messages
   useEffect(() => {
