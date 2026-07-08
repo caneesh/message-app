@@ -309,13 +309,11 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
         const data = docSnap.data()
         const createdAtMs = data.createdAt?.toMillis?.() || data.createdAt || 0
 
-        // Skip own messages
-        if (data.senderId === currentUser.uid) return
-
         // Skip already cleared messages
         if (clearedAtMs && createdAtMs <= clearedAtMs) return
 
         // Check if message is read (createdAt <= lastReadAt)
+        // Archive both own messages and messages from others
         if (createdAtMs <= lastReadAtMs) {
           readMessageIds.push(docSnap.id)
         }

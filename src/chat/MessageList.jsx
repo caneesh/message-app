@@ -788,10 +788,9 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
           const lastReadAtMs = myLastReadAtOnMount?.toMillis?.() || myLastReadAtOnMount
           if (!lastReadAtMs) return
 
-          // Find read messages from others that aren't already archived
+          // Find read messages (both own and from others) that aren't already archived
           const readMessageIds = messages
             .filter(msg => {
-              if (msg.senderId === currentUser.uid) return false
               const createdAtMs = msg.createdAt?.toMillis?.() || msg.createdAt || 0
               if (createdAtMs > lastReadAtMs) return false
               if (isMessageHiddenFromMain(msg.id)) return false
