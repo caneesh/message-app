@@ -944,7 +944,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
           type="file"
           ref={fileInputRef}
           onChange={handleFileSelect}
-          accept="image/*,video/*,.pdf,.txt"
+          accept="image/*,video/*,audio/*,.pdf,.txt"
           multiple
           style={{
             position: 'absolute',
