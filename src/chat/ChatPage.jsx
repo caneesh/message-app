@@ -28,6 +28,7 @@ import LoveHeatMap from './LoveHeatMap'
 import MessageCalendar from './MessageCalendar'
 import SharedMedia from './SharedMedia'
 import ThoughtsPage from './ThoughtsPage'
+import ReadArchivePage from './ReadArchivePage'
 import PanicLogoutButton from '../components/PanicLogoutButton'
 import { useUnreadThoughts } from '../hooks/useUnreadThoughts'
 import { useUnreadComments } from '../hooks/useUnreadComments'
@@ -486,6 +487,15 @@ function ChatPage() {
             autoLogoutTimeout={timeoutMinutes}
             onAutoLogoutTimeoutChange={setTimeoutMinutes}
             onLogoutNow={logout}
+            onNavigate={setActiveTab}
+          />
+        )
+      case 'archive':
+        return (
+          <ReadArchivePage
+            currentUser={currentUser}
+            chatId={PRIVATE_CHAT_ID}
+            onClose={() => setActiveTab('settings')}
           />
         )
       default:

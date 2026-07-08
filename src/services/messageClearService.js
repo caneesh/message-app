@@ -181,6 +181,20 @@ export async function getAllMessagesForExport(chatId, userId) {
     // Get user's clear state
     const clearState = userId ? await getMessageClearState(chatId, userId) : null
 
+    // Get user's read archive state (per-message archive state)
+    let archiveStateMap = {}
+    if (userId) {
+      try {
+        const archiveItemsRef = collection(db, 'chats', chatId, 'messageUserState', userId, 'items')
+        const archiveSnapshot = await getDocs(archiveItemsRef)
+        archiveSnapshot.docs.forEach(docSnap => {
+          archiveStateMap[docSnap.id] = docSnap.data()
+        })
+      } catch (err) {
+        console.warn('Could not fetch archive state for export:', err)
+      }
+    }
+
     // Get ALL messages
     const messagesRef = collection(db, 'chats', chatId, 'messages')
     const q = query(messagesRef, orderBy('createdAt', 'asc'))
@@ -194,11 +208,25 @@ export async function getAllMessagesForExport(chatId, userId) {
         createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
       }
 
-      // Add archive metadata if message was cleared
+      // Add clear state metadata if message was cleared via Clear All
       if (clearState?.success && clearState.clearState) {
         if (isMessageCleared(data, clearState.clearState)) {
           message.clearedFromChatView = true
           message.clearedAt = clearState.clearState.clearedAt?.toDate?.()?.toISOString() || null
+        }
+      }
+
+      // Add read archive state metadata
+      const archiveState = archiveStateMap[docSnap.id]
+      if (archiveState) {
+        if (archiveState.hiddenFromMainView) {
+          message.hiddenFromMainView = true
+          message.hiddenReason = archiveState.hiddenReason || 'read'
+          message.hiddenAt = archiveState.hiddenAt?.toDate?.()?.toISOString() || null
+        }
+        if (archiveState.hiddenFromArchiveView) {
+          message.hiddenFromArchiveView = true
+          message.archiveClearedAt = archiveState.archiveClearedAt?.toDate?.()?.toISOString() || null
         }
       }
 

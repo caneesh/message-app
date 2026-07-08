@@ -4,6 +4,7 @@ import { collection, query, orderBy, limit, getDocs, startAfter, where, onSnapsh
 import { useSecureFileUrl } from '../hooks/useSecureFileUrl'
 import { useDeletedMediaForMe } from '../hooks/useDeletedMediaForMe'
 import { useMessageClearState } from '../hooks/useMessageClearState'
+import { useReadArchiveState } from '../hooks/useReadArchiveState'
 import ZoomableImagePreview from './ZoomableImagePreview'
 import VoiceNoteTranscript from './VoiceNoteTranscript'
 import { requestTranscription } from '../services/transcriptionService'
@@ -403,13 +404,14 @@ function SharedMedia({ currentUser, chatId, onClose, onViewInChat }) {
 
   const { isDeletedForMe, deleteForMe } = useDeletedMediaForMe(chatId, currentUser?.uid)
   const { isCleared: isMessageCleared } = useMessageClearState(chatId, currentUser?.uid)
+  const { isMessageHiddenFromMain } = useReadArchiveState(chatId, currentUser?.uid)
 
-  // Combined check for hidden messages (deleted for me OR cleared by Clear All)
+  // Combined check for hidden messages (deleted for me OR cleared by Clear All OR archived)
   // Handles both regular messages (msg.id) and bundled attachments (msg.messageId)
   const isHidden = useCallback((message) => {
     const id = message.id || message.messageId
-    return isDeletedForMe(id) || isMessageCleared(message)
-  }, [isDeletedForMe, isMessageCleared])
+    return isDeletedForMe(id) || isMessageCleared(message) || isMessageHiddenFromMain(id)
+  }, [isDeletedForMe, isMessageCleared, isMessageHiddenFromMain])
 
   const handleDeleteForMe = useCallback(async (message) => {
     if (!window.confirm('Delete this from your view? It will still be visible to the other person.')) {

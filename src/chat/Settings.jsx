@@ -21,7 +21,7 @@ const AUTO_LOGOUT_OPTIONS = [
   { value: 'never', label: 'Never' },
 ]
 
-function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAutoLogoutTimeoutChange, onLogoutNow }) {
+function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAutoLogoutTimeoutChange, onLogoutNow, onNavigate }) {
   const [pinEnabled, setPinEnabled] = useState(() => isPinConfigured())
   const [showPinSetup, setShowPinSetup] = useState(false)
   const [newPin, setNewPin] = useState('')
@@ -33,8 +33,13 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
   const [fullExporting, setFullExporting] = useState(false)
   const [exportUnlocked, setExportUnlocked] = useState(false)
   const [exportCodeBuffer, setExportCodeBuffer] = useState('')
+  const [readArchiveUnlocked, setReadArchiveUnlocked] = useState(
+    () => sessionStorage.getItem('readArchiveUnlocked') === 'true'
+  )
+  const [archiveCodeBuffer, setArchiveCodeBuffer] = useState('')
 
   const EXPORT_CODE = '335042249'
+  const READ_ARCHIVE_CODE = '1715'
   const longPressTimer = useRef(null)
 
   useEffect(() => {
@@ -43,10 +48,20 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
 
       const key = e.key
       if (/^\d$/.test(key)) {
+        // Check export code
         setExportCodeBuffer((prev) => {
           const newBuffer = (prev + key).slice(-EXPORT_CODE.length)
           if (newBuffer === EXPORT_CODE) {
             setExportUnlocked(true)
+          }
+          return newBuffer
+        })
+        // Check read archive code
+        setArchiveCodeBuffer((prev) => {
+          const newBuffer = (prev + key).slice(-READ_ARCHIVE_CODE.length)
+          if (newBuffer === READ_ARCHIVE_CODE) {
+            setReadArchiveUnlocked(true)
+            sessionStorage.setItem('readArchiveUnlocked', 'true')
           }
           return newBuffer
         })
@@ -776,6 +791,23 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
             disabled={deletingAllMessages}
           >
             {deletingAllMessages ? 'Clearing...' : 'Clear All Messages'}
+          </button>
+        </div>
+      )}
+
+      {/* Hidden Messages / Read Archive - visible after entering code 1715 */}
+      {readArchiveUnlocked && chatId && onNavigate && (
+        <div className="settings-section">
+          <h3>Hidden Messages</h3>
+          <p className="settings-note">
+            View messages that have been removed from your normal chat view.
+            This includes read messages and cleared messages.
+          </p>
+          <button
+            className="settings-btn"
+            onClick={() => onNavigate('archive')}
+          >
+            Open Hidden Messages
           </button>
         </div>
       )}

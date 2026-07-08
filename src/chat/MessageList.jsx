@@ -30,6 +30,7 @@ import { useSavedMessages } from '../hooks/useSavedMessages'
 import { useMessageReminders, getReminderTime } from '../hooks/useMessageReminders'
 import { useMessageClearState } from '../hooks/useMessageClearState'
 import { useRevealState } from '../hooks/useRevealState'
+import { useReadArchiveState } from '../hooks/useReadArchiveState'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -198,6 +199,10 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     isRevealed,
     revealMessage
   } = useRevealState(chatId, currentUser?.uid)
+  const {
+    isMessageHiddenFromMain,
+    filterVisibleInMain
+  } = useReadArchiveState(chatId, currentUser?.uid)
   const [showReminderPicker, setShowReminderPicker] = useState(null)
   const [showSavedMessages, setShowSavedMessages] = useState(false)
   const [showEditHistory, setShowEditHistory] = useState(null)
@@ -1675,15 +1680,18 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     )
   }
 
-  // Filter messages: exclude cleared messages and apply search query
+  // Filter messages: exclude cleared messages, archived messages, and apply search query
   // First, filter out messages cleared by "Clear All"
-  const visibleMessages = filterVisibleMessages(messages)
+  const clearedVisible = filterVisibleMessages(messages)
+  // Then, filter out messages hidden from main view via read archive
+  const visibleMessages = filterVisibleInMain(clearedVisible)
 
   // Then apply search query filter (includes text, links, file names, and voice transcripts)
   const filteredMessages = searchQuery.trim()
     ? visibleMessages.filter((msg) => {
         if (isDeletedForMe(msg.id)) return false
         if (isMessageCleared(msg)) return false
+        if (isMessageHiddenFromMain(msg.id)) return false
         const query = searchQuery.toLowerCase()
         // Text messages
         if (msg.text && msg.text.toLowerCase().includes(query)) {
@@ -1701,7 +1709,7 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
         }
         return false
       })
-    : visibleMessages.filter(msg => !isDeletedForMe(msg.id) && !isMessageCleared(msg))
+    : visibleMessages.filter(msg => !isDeletedForMe(msg.id) && !isMessageCleared(msg) && !isMessageHiddenFromMain(msg.id))
 
   if (loading) {
     return <div className="message-list loading">Loading messages...</div>

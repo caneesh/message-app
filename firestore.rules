@@ -344,6 +344,21 @@ service cloud.firestore {
                       && uid == request.auth.uid;
       }
 
+      // Per-user message archive state (read archive / hidden messages)
+      match /messageUserState/{uid}/items/{messageId} {
+        allow read: if isAuthenticated()
+                    && isChatMember(chatId)
+                    && uid == request.auth.uid;
+        allow create, update: if isAuthenticated()
+                              && isChatMember(chatId)
+                              && uid == request.auth.uid
+                              && request.resource.data.keys().hasOnly(['messageId', 'hiddenFromMainView', 'hiddenFromArchiveView', 'hiddenReason', 'hiddenAt', 'archiveClearedAt', 'archiveClearBatchId', 'updatedAt'])
+                              && request.resource.data.hiddenReason in ['read', 'clear_all', 'delete_for_me', 'manual_archive'];
+        allow delete: if isAuthenticated()
+                      && isChatMember(chatId)
+                      && uid == request.auth.uid;
+      }
+
       // Message reminders (Reply Later feature)
       match /messageReminders/{uid}/items/{reminderId} {
         allow read: if isAuthenticated()
