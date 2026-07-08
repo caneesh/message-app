@@ -40,7 +40,6 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
 
   const EXPORT_CODE = '335042249'
   const READ_ARCHIVE_CODE = '1715'
-  const longPressTimer = useRef(null)
   const archiveLongPressTimer = useRef(null)
   const [showArchiveCodeModal, setShowArchiveCodeModal] = useState(false)
   const [archiveCodeInput, setArchiveCodeInput] = useState('')
@@ -81,10 +80,7 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
     if (e.type === 'touchstart') {
       e.preventDefault()
     }
-    longPressTimer.current = setTimeout(() => {
-      setExportUnlocked(true)
-    }, 3000)
-    // Also start archive long press timer (shows code prompt)
+    // Long press shows archive code modal only (not export)
     archiveLongPressTimer.current = setTimeout(() => {
       setShowArchiveCodeModal(true)
       setArchiveCodeInput('')
@@ -93,10 +89,6 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
   }
 
   const handleLongPressEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current)
-      longPressTimer.current = null
-    }
     if (archiveLongPressTimer.current) {
       clearTimeout(archiveLongPressTimer.current)
       archiveLongPressTimer.current = null
