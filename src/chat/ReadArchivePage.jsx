@@ -70,13 +70,20 @@ function ArchiveMessageItem({ message, chatId, currentUserId }) {
 
   return (
     <div className={`archive-message ${isOwn ? 'own' : 'other'}`}>
-      {hasMedia && <ArchiveMessageThumbnail chatId={chatId} message={message} />}
-      <div className="archive-message-content">
-        {message.text && <p className="archive-message-text">{message.text}</p>}
-        {message.type === 'file' && message.file && !message.file.contentType?.startsWith('image/') && (
-          <p className="archive-message-file">📎 {message.file.fileName}</p>
-        )}
+      <div className="archive-message-header">
+        <span className={`archive-message-sender ${isOwn ? 'own' : 'other'}`}>
+          {isOwn ? 'You' : 'Friend'}
+        </span>
         <span className="archive-message-time">{formatTime(message.createdAt)}</span>
+      </div>
+      <div className="archive-message-body">
+        {hasMedia && <ArchiveMessageThumbnail chatId={chatId} message={message} />}
+        <div className="archive-message-content">
+          {message.text && <p className="archive-message-text">{message.text}</p>}
+          {message.type === 'file' && message.file && !message.file.contentType?.startsWith('image/') && (
+            <p className="archive-message-file">📎 {message.file.fileName}</p>
+          )}
+        </div>
       </div>
     </div>
   )

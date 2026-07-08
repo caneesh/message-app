@@ -16498,3 +16498,49 @@ body.dark-mode .voice-call-btn:hover {
   flex: 1;
   min-width: 140px;
 }
+
+/* Archive message header with sender label */
+.archive-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.archive-message-sender {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.archive-message-sender.own {
+  background: var(--accent);
+  color: white;
+}
+
+.archive-message-sender.other {
+  background: var(--surface-tertiary);
+  color: var(--content-secondary);
+}
+
+.archive-message-body {
+  display: flex;
+  gap: 12px;
+}
+
+/* Update archive message styling for better distinction */
+.archive-message.own {
+  background: linear-gradient(135deg, var(--surface-primary) 0%, rgba(111, 78, 55, 0.05) 100%);
+  border-left: 3px solid var(--accent);
+}
+
+.archive-message.other {
+  background: var(--surface-primary);
+  border-left: 3px solid var(--content-tertiary);
+}
+
+.archive-message .archive-message-time {
+  font-size: 11px;
+  color: var(--content-tertiary);
+}
