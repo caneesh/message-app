@@ -76,17 +76,19 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
     return () => window.removeEventListener('keypress', handleKeyPress)
   }, [])
 
-  const handleLongPressStart = () => {
+  const handleLongPressStart = (e) => {
+    // Prevent default to avoid context menu on mobile
+    if (e.type === 'touchstart') {
+      e.preventDefault()
+    }
     longPressTimer.current = setTimeout(() => {
       setExportUnlocked(true)
     }, 3000)
     // Also start archive long press timer (shows code prompt)
     archiveLongPressTimer.current = setTimeout(() => {
-      if (!readArchiveUnlocked) {
-        setShowArchiveCodeModal(true)
-        setArchiveCodeInput('')
-        setArchiveCodeError('')
-      }
+      setShowArchiveCodeModal(true)
+      setArchiveCodeInput('')
+      setArchiveCodeError('')
     }, 3000)
   }
 
@@ -507,7 +509,14 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
         onMouseDown={handleLongPressStart}
         onMouseUp={handleLongPressEnd}
         onMouseLeave={handleLongPressEnd}
-        style={{ userSelect: 'none' }}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none',
+          touchAction: 'manipulation',
+          cursor: 'default'
+        }}
       >
         Settings
       </h2>
