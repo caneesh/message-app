@@ -32,6 +32,8 @@ import { useMessageClearState } from '../hooks/useMessageClearState'
 import { useRevealState } from '../hooks/useRevealState'
 import { useReadArchiveState } from '../hooks/useReadArchiveState'
 import { archiveAllRead } from '../services/readArchiveService'
+import { extractTextFromAttachment, isTextExtractionSupported, isImageType } from '../services/attachmentTextExtractor'
+import { createThoughtDraftFromAttachment } from '../services/thoughtService'
 
 function ReplyQuoteThumbnail({ chatId, fileInfo }) {
   const { url, loading } = useSecureFileUrl(
@@ -126,7 +128,7 @@ function linkifyText(text) {
   })
 }
 
-function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilter = null, scrollToMessageId = null, onScrollComplete = null, onViewThought = null }) {
+function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilter = null, scrollToMessageId = null, onScrollComplete = null, onViewThought = null, onCreateThoughtFromAttachment = null }) {
   const [messages, setMessages] = useState([])
   const [reactions, setReactions] = useState({})
   const [pinnedMessages, setPinnedMessages] = useState([])
@@ -210,6 +212,8 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
   const [editHistory, setEditHistory] = useState([])
   const [loadingEditHistory, setLoadingEditHistory] = useState(false)
   const [showHurtModal, setShowHurtModal] = useState(null)
+  const [creatingThoughtFromAttachment, setCreatingThoughtFromAttachment] = useState(false)
+  const [thoughtFromAttachmentError, setThoughtFromAttachmentError] = useState(null)
   const messagesEndRef = useRef(null)
   const messagesStartRef = useRef(null)
   const messageListRef = useRef(null)
@@ -1209,6 +1213,78 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
     }
   }
 
+  const handleCreateThoughtFromAttachment = async (message) => {
+    setShowMoreMenu(null)
+    setMobileActionSheet(null)
+    setThoughtFromAttachmentError(null)
+
+    // Validate message has file attachment
+    if (!message.file || !message.file.storagePath) {
+      setThoughtFromAttachmentError('No file attachment found.')
+      return
+    }
+
+    const { storagePath, contentType, fileName, size } = message.file
+
+    // Check if extraction is supported
+    if (!isTextExtractionSupported(contentType, fileName)) {
+      if (isImageType(contentType)) {
+        setThoughtFromAttachmentError('Image files cannot be converted to Thoughts yet.')
+      } else {
+        setThoughtFromAttachmentError("This file type can't be converted to a Thought yet.")
+      }
+      return
+    }
+
+    setCreatingThoughtFromAttachment(true)
+
+    try {
+      // Extract text from file
+      const extractResult = await extractTextFromAttachment(chatId, {
+        storagePath,
+        contentType,
+        fileName,
+        size
+      })
+
+      if (!extractResult.success) {
+        setThoughtFromAttachmentError(extractResult.error || 'Could not read file content.')
+        setCreatingThoughtFromAttachment(false)
+        return
+      }
+
+      // Create the draft
+      const draftResult = await createThoughtDraftFromAttachment(chatId, currentUser.uid, {
+        messageId: message.id,
+        fileName,
+        contentType,
+        storagePath,
+        extractedText: extractResult.text
+      })
+
+      if (!draftResult.success) {
+        setThoughtFromAttachmentError(draftResult.error || 'Could not create Thought draft.')
+        setCreatingThoughtFromAttachment(false)
+        return
+      }
+
+      // Show warning if content was truncated
+      if (extractResult.warning || draftResult.wasLengthTruncated) {
+        alert(extractResult.warning || 'This file is long. Please review before publishing.')
+      }
+
+      // Navigate to thoughts page with the draft
+      if (onCreateThoughtFromAttachment) {
+        onCreateThoughtFromAttachment(draftResult.draftId, draftResult.draft)
+      }
+    } catch (err) {
+      console.error('Error creating thought from attachment:', err)
+      setThoughtFromAttachmentError('Could not create Thought from this file. Try again.')
+    } finally {
+      setCreatingThoughtFromAttachment(false)
+    }
+  }
+
   const handleCopyMessage = async (message) => {
     let textContent = message.text || ''
     if (message.type === 'file' && message.file) {
@@ -2049,6 +2125,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
                   }}>
                     ✨ AI Extract Tasks
                   </button>
+                  {isFileMessage && message.file && (
+                    <button
+                      role="menuitem"
+                      onClick={() => handleCreateThoughtFromAttachment(message)}
+                      disabled={creatingThoughtFromAttachment}
+                    >
+                      💭 Create Thought
+                    </button>
+                  )}
                   <div className="more-menu-divider" />
                   <button role="menuitem" onClick={() => enterSelectionMode(message)}>
                     ☑ Select
@@ -2389,6 +2474,15 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); setShowAiTaskExtract(mobileActionSheet.message.id) }}>
                 ✨ AI Extract Tasks
               </button>
+              {mobileActionSheet.isFileMessage && mobileActionSheet.message.file && (
+                <button
+                  className="action-sheet-btn"
+                  onClick={() => handleCreateThoughtFromAttachment(mobileActionSheet.message)}
+                  disabled={creatingThoughtFromAttachment}
+                >
+                  💭 Create Thought
+                </button>
+              )}
               <div className="action-sheet-divider" />
               <button className="action-sheet-btn" onClick={() => { closeMobileActionSheet(); enterSelectionMode(mobileActionSheet.message) }}>
                 ☑ Select
@@ -2602,6 +2696,24 @@ function MessageList({ currentUser, chatId, onReply, searchQuery = '', dateFilte
               Close
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Creating Thought from Attachment loading/error */}
+      {creatingThoughtFromAttachment && (
+        <div className="thought-attachment-loading">
+          <div className="thought-attachment-loading-content">
+            <span className="thought-attachment-spinner" />
+            <span>Preparing Thought...</span>
+          </div>
+        </div>
+      )}
+
+      {thoughtFromAttachmentError && (
+        <div className="thought-attachment-error" onClick={() => setThoughtFromAttachmentError(null)}>
+          <span className="thought-attachment-error-icon">⚠️</span>
+          <span>{thoughtFromAttachmentError}</span>
+          <button className="thought-attachment-error-close">×</button>
         </div>
       )}
     </div>

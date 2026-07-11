@@ -30,23 +30,31 @@ export function createPeerConnection(onIceCandidate, onTrack, onConnectionStateC
     iceCandidatePoolSize: 10,
   }
 
+  console.log('[WebRTC] Creating peer connection with config:', config)
   const pc = new RTCPeerConnection(config)
 
   pc.onicecandidate = (event) => {
     if (event.candidate) {
+      console.log('[WebRTC] ICE candidate generated')
       onIceCandidate(event.candidate)
     }
   }
 
   pc.ontrack = (event) => {
+    console.log('[WebRTC] Remote track received:', event.track.kind, 'streams:', event.streams.length)
+    if (event.streams[0]) {
+      console.log('[WebRTC] Remote stream tracks:', event.streams[0].getTracks().map(t => t.kind))
+    }
     onTrack(event.streams[0])
   }
 
   pc.onconnectionstatechange = () => {
+    console.log('[WebRTC] Connection state:', pc.connectionState)
     onConnectionStateChange(pc.connectionState)
   }
 
   pc.oniceconnectionstatechange = () => {
+    console.log('[WebRTC] ICE connection state:', pc.iceConnectionState)
     if (pc.iceConnectionState === 'failed') {
       onConnectionStateChange('failed')
     }
@@ -120,14 +128,30 @@ export async function setRemoteAnswer(pc, answer) {
   await pc.setRemoteDescription(new RTCSessionDescription(answer))
 }
 
-export async function addRemoteIceCandidate(pc, candidateData) {
-  if (pc.remoteDescription) {
-    const candidate = new RTCIceCandidate({
-      candidate: candidateData.candidate,
-      sdpMid: candidateData.sdpMid,
-      sdpMLineIndex: candidateData.sdpMLineIndex,
-    })
+export async function addRemoteIceCandidate(pc, candidateData, pendingCandidatesQueue) {
+  const candidate = new RTCIceCandidate({
+    candidate: candidateData.candidate,
+    sdpMid: candidateData.sdpMid,
+    sdpMLineIndex: candidateData.sdpMLineIndex,
+  })
+
+  if (pc.remoteDescription && pc.remoteDescription.type) {
     await pc.addIceCandidate(candidate)
+  } else if (pendingCandidatesQueue) {
+    pendingCandidatesQueue.push(candidate)
+  }
+}
+
+export async function flushPendingCandidates(pc, pendingCandidatesQueue) {
+  if (!pc || !pendingCandidatesQueue || pendingCandidatesQueue.length === 0) return
+
+  while (pendingCandidatesQueue.length > 0) {
+    const candidate = pendingCandidatesQueue.shift()
+    try {
+      await pc.addIceCandidate(candidate)
+    } catch (err) {
+      console.error('Error adding queued ICE candidate:', err)
+    }
   }
 }
 

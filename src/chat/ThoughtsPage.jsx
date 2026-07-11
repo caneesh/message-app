@@ -25,7 +25,7 @@ const FILTERS = [
   { key: 'drafts', label: 'Drafts' }
 ]
 
-function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialThoughtId, initialBlockId, onTalkInChat }) {
+function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialThoughtId, initialBlockId, onTalkInChat, initialDraftId, initialDraft }) {
   const [activeFilter, setActiveFilter] = useState('all')
   const [thoughts, setThoughts] = useState([])
   const [hiddenIds, setHiddenIds] = useState(new Set())
@@ -248,6 +248,15 @@ function ThoughtsPage({ currentUser, chatId, onClose, onReplyToThought, initialT
       loadInitialThought()
     }
   }, [initialThoughtId, initialBlockId, chatId])
+
+  // Handle initial draft from attachment conversion
+  useEffect(() => {
+    if (initialDraftId && initialDraft) {
+      setActiveFilter('drafts')
+      setEditingDraft({ id: initialDraftId, ...initialDraft })
+      setShowComposer(true)
+    }
+  }, [initialDraftId, initialDraft])
 
 
   const handleNewThought = () => {

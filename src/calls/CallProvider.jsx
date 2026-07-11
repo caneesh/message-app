@@ -22,6 +22,7 @@ import {
   createAnswer,
   setRemoteAnswer,
   addRemoteIceCandidate,
+  flushPendingCandidates,
   stopMediaTracks,
   closePeerConnection,
   toggleAudio,
@@ -69,9 +70,13 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
   const incomingUnsubRef = useRef(null)
   const timeoutRef = useRef(null)
   const pendingCandidatesRef = useRef([])
+  const pendingRemoteCandidatesRef = useRef([])
   const isCallerRef = useRef(false)
+  const isHandlingCallRef = useRef(false)
+  const hasAcceptedRef = useRef(false)
 
   const cleanup = useCallback(() => {
+    console.log('[Call] cleanup called')
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
@@ -89,6 +94,9 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
     closePeerConnection(pcRef.current)
     pcRef.current = null
     pendingCandidatesRef.current = []
+    pendingRemoteCandidatesRef.current = []
+    isHandlingCallRef.current = false
+    hasAcceptedRef.current = false
     setLocalStream(null)
     setRemoteStream(null)
     setCallId(null)
@@ -104,6 +112,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
 
   const endCall = useCallback(
     async (status = CALL_STATUS.ENDED) => {
+      console.log('[Call] endCall called, status:', status, 'callId:', callId)
       if (callId && chatId) {
         try {
           await updateCallStatus(chatId, callId, status, currentUser?.uid)
@@ -166,8 +175,10 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
       return
     }
 
-    setCallState(CALL_STATE.OUTGOING)
+    console.log('[Call] startCall - type:', type, 'isVideo:', type === CALL_TYPE.VIDEO)
+    isHandlingCallRef.current = true
     setCallType(type)
+    setCallState(CALL_STATE.OUTGOING)
     setError(null)
     isCallerRef.current = true
 
@@ -196,10 +207,18 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
       await updateCallOffer(chatId, newCallId, offer)
 
       callUnsubRef.current = subscribeToCall(chatId, newCallId, async (data) => {
+        console.log('[Call] Caller received call update, callId:', newCallId, 'status:', data?.status, 'hasAnswer:', !!data?.answer)
         setCallData(data)
         if (data?.status === CALL_STATUS.ACCEPTED && data.answer && pcRef.current) {
+          console.log('[Call] Caller received answer, setting remote description')
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = null
+          }
           try {
             await setRemoteAnswer(pcRef.current, data.answer)
+            console.log('[Call] Caller set remote answer, flushing candidates')
+            await flushPendingCandidates(pcRef.current, pendingRemoteCandidatesRef.current)
             setCallState(CALL_STATE.CONNECTING)
           } catch (err) {
             console.error('Error setting remote answer:', err)
@@ -218,7 +237,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
       candidatesUnsubRef.current = subscribeToIceCandidates(chatId, newCallId, true, async (candidateData) => {
         if (pcRef.current) {
           try {
-            await addRemoteIceCandidate(pcRef.current, candidateData)
+            await addRemoteIceCandidate(pcRef.current, candidateData, pendingRemoteCandidatesRef.current)
           } catch (err) {
             console.error('Error adding remote ICE candidate:', err)
           }
@@ -242,30 +261,53 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
   }, [chatId, currentUser?.uid, otherUserId, setupPeerConnection, cleanup, callState])
 
   const acceptCall = useCallback(async () => {
-    if (!callData || !chatId) return
+    console.log('[Call] acceptCall called, callId:', callData?.id, 'hasAccepted:', hasAcceptedRef.current, 'pcRef:', !!pcRef.current)
+
+    if (!callData || !chatId) {
+      console.log('[Call] acceptCall - no callData or chatId')
+      return
+    }
+
+    if (!callData.offer) {
+      console.log('[Call] acceptCall - waiting for offer')
+      return
+    }
+
+    if (hasAcceptedRef.current || pcRef.current) {
+      console.log('[Call] acceptCall - already accepted or pc exists, ignoring')
+      return
+    }
+    hasAcceptedRef.current = true
 
     const type = callData.type || CALL_TYPE.VIDEO
-    setCallState(CALL_STATE.CONNECTING)
+    console.log('[Call] acceptCall - type:', type)
     setCallType(type)
+    setCallState(CALL_STATE.CONNECTING)
     setError(null)
     isCallerRef.current = false
 
     const isVideo = type === CALL_TYPE.VIDEO
+    console.log('[Call] acceptCall - getting media, isVideo:', isVideo)
     const { stream, error: mediaError } = await getLocalMedia(isVideo, true)
     if (mediaError) {
+      console.log('[Call] acceptCall - media error:', mediaError)
       setError(mediaError)
       await updateCallStatus(chatId, callData.id, CALL_STATUS.FAILED)
       cleanup()
       setCallState(CALL_STATE.IDLE)
       return
     }
+    console.log('[Call] acceptCall - got stream with tracks:', stream.getTracks().map(t => t.kind))
     setLocalStream(stream)
 
     try {
       const pc = setupPeerConnection(stream)
+      console.log('[Call] acceptCall - peer connection created')
 
       const answer = await createAnswer(pc, callData.offer)
+      console.log('[Call] acceptCall - answer created')
       await updateCallAnswer(chatId, callData.id, answer)
+      console.log('[Call] acceptCall - answer sent to Firestore')
 
       for (const candidate of pendingCandidatesRef.current) {
         addIceCandidate(chatId, callData.id, candidate, false, currentUser?.uid)
@@ -275,7 +317,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
       candidatesUnsubRef.current = subscribeToIceCandidates(chatId, callData.id, false, async (candidateData) => {
         if (pcRef.current) {
           try {
-            await addRemoteIceCandidate(pcRef.current, candidateData)
+            await addRemoteIceCandidate(pcRef.current, candidateData, pendingRemoteCandidatesRef.current)
           } catch (err) {
             console.error('Error adding remote ICE candidate:', err)
           }
@@ -291,6 +333,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
   }, [callData, chatId, currentUser?.uid, setupPeerConnection, cleanup])
 
   const rejectCall = useCallback(async () => {
+    console.log('[Call] rejectCall called, callData:', callData?.id)
     if (!callData || !chatId) return
     await updateCallStatus(chatId, callData.id, CALL_STATUS.REJECTED, currentUser?.uid)
     cleanup()
@@ -324,7 +367,9 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
     if (!chatId || !currentUser?.uid) return
 
     incomingUnsubRef.current = subscribeToIncomingCalls(chatId, currentUser.uid, (incomingCall) => {
-      if (incomingCall && callState === CALL_STATE.IDLE) {
+      if (incomingCall && callState === CALL_STATE.IDLE && incomingCall.offer && !isHandlingCallRef.current) {
+        isHandlingCallRef.current = true
+        console.log('[Call] Incoming call - callId:', incomingCall.id, 'type:', incomingCall.type, 'hasOffer:', !!incomingCall.offer)
         setCallId(incomingCall.id)
         setCallData(incomingCall)
         setCallType(incomingCall.type || CALL_TYPE.VIDEO)
@@ -366,14 +411,19 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
     }
   }, [callState, callId, chatId, localStream])
 
+  const cleanupRef = useRef(cleanup)
+  useEffect(() => {
+    cleanupRef.current = cleanup
+  }, [cleanup])
+
   useEffect(() => {
     return () => {
-      cleanup()
+      cleanupRef.current()
       if (incomingUnsubRef.current) {
         incomingUnsubRef.current()
       }
     }
-  }, [cleanup])
+  }, [])
 
   const startVideoCall = useCallback(() => startCall(CALL_TYPE.VIDEO), [startCall])
   const startVoiceCall = useCallback(() => startCall(CALL_TYPE.VOICE), [startCall])

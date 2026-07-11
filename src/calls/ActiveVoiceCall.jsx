@@ -20,12 +20,42 @@ function ActiveVoiceCall() {
 
   const remoteAudioRef = useRef(null)
   const [duration, setDuration] = useState(0)
+  const [audioBlocked, setAudioBlocked] = useState(false)
 
   useEffect(() => {
+    console.log('[VoiceCall] remoteStream:', remoteStream ? 'exists' : 'null')
+    if (remoteStream) {
+      console.log('[VoiceCall] Remote stream tracks:', remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, muted: t.muted })))
+    }
     if (remoteAudioRef.current && remoteStream) {
       remoteAudioRef.current.srcObject = remoteStream
+      console.log('[VoiceCall] Set srcObject on audio element')
+      const playAudio = async () => {
+        try {
+          await remoteAudioRef.current.play()
+          console.log('[VoiceCall] Audio playing successfully')
+          setAudioBlocked(false)
+        } catch (err) {
+          console.log('[VoiceCall] Audio play error:', err.name, err.message)
+          if (err.name === 'NotAllowedError') {
+            setAudioBlocked(true)
+          }
+        }
+      }
+      playAudio()
     }
   }, [remoteStream])
+
+  const handleTapToHear = async () => {
+    if (remoteAudioRef.current) {
+      try {
+        await remoteAudioRef.current.play()
+        setAudioBlocked(false)
+      } catch (err) {
+        console.error('Failed to play audio:', err)
+      }
+    }
+  }
 
   useEffect(() => {
     if (!callStartTime) return
@@ -42,6 +72,12 @@ function ActiveVoiceCall() {
       <audio ref={remoteAudioRef} autoPlay playsInline />
 
       {error && <div className="call-error-banner">{error}</div>}
+
+      {audioBlocked && (
+        <button className="tap-to-hear-btn" onClick={handleTapToHear}>
+          Tap to hear call
+        </button>
+      )}
 
       <div className="voice-call-content">
         <div className="voice-call-avatar">

@@ -92,6 +92,8 @@ function ChatPage() {
   const [activeThoughtReply, setActiveThoughtReply] = useState(null)
   const [viewThoughtId, setViewThoughtId] = useState(null)
   const [viewThoughtBlockId, setViewThoughtBlockId] = useState(null)
+  const [initialDraftId, setInitialDraftId] = useState(null)
+  const [initialDraft, setInitialDraft] = useState(null)
   const [scrollToMessageId, setScrollToMessageId] = useState(null)
   const [showSecretToolbar, setShowSecretToolbar] = useState(false)
   const [secretCodeBuffer, setSecretCodeBuffer] = useState('')
@@ -397,6 +399,11 @@ function ChatPage() {
                 setViewThoughtBlockId(blockId || null)
                 setShowThoughts(true)
               }}
+              onCreateThoughtFromAttachment={(draftId, draft) => {
+                setInitialDraftId(draftId)
+                setInitialDraft(draft)
+                setShowThoughts(true)
+              }}
             />
             {friendTyping && (
               <div className="typing-indicator">Friend is typing...</div>
@@ -438,6 +445,8 @@ function ChatPage() {
                   setShowThoughts(false)
                   setViewThoughtId(null)
                   setViewThoughtBlockId(null)
+                  setInitialDraftId(null)
+                  setInitialDraft(null)
                 }}
                 onReplyToThought={(replyData) => {
                   setActiveThoughtReply(replyData)
@@ -445,6 +454,8 @@ function ChatPage() {
                 }}
                 initialThoughtId={viewThoughtId}
                 initialBlockId={viewThoughtBlockId}
+                initialDraftId={initialDraftId}
+                initialDraft={initialDraft}
               />
             )}
           </>

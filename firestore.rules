@@ -1320,7 +1320,7 @@ service cloud.firestore {
       match /thoughtDrafts/{uid}/items/{draftId} {
         // Helper: Validate draft has only allowed fields
         function hasOnlyAllowedDraftFields() {
-          return request.resource.data.keys().hasOnly(['chatId', 'authorId', 'title', 'body', 'blocks', 'mood', 'createdAt', 'updatedAt']);
+          return request.resource.data.keys().hasOnly(['chatId', 'authorId', 'title', 'body', 'blocks', 'mood', 'createdAt', 'updatedAt', 'source', 'sourceMessageId', 'sourceFileName', 'sourceContentType', 'sourceStoragePath']);
         }
 
         // Helper: Validate mood value for drafts

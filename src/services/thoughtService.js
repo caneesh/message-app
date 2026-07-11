@@ -502,6 +502,85 @@ export async function saveThoughtDraft(chatId, userId, { title, body, mood = 'no
 }
 
 /**
+ * Create a thought draft from an attachment
+ * @param {string} chatId - The chat ID
+ * @param {string} userId - The user's ID
+ * @param {Object} options - Attachment info
+ * @param {string} options.messageId - Source message ID
+ * @param {string} options.fileName - Original file name
+ * @param {string} options.contentType - File MIME type
+ * @param {string} options.storagePath - Firebase Storage path
+ * @param {string} options.extractedText - Text extracted from the file
+ * @param {string} [options.mood='normal'] - Thought mood
+ * @returns {Object} - { success, draftId, draft, error }
+ */
+export async function createThoughtDraftFromAttachment(chatId, userId, options) {
+  const { messageId, fileName, contentType, storagePath, extractedText, mood = 'normal' } = options
+
+  if (!chatId || !userId) {
+    return { success: false, error: 'Missing chatId or userId' }
+  }
+
+  if (!messageId || !fileName) {
+    return { success: false, error: 'Missing attachment info' }
+  }
+
+  if (!extractedText?.trim()) {
+    return { success: false, error: 'No text content to create thought from' }
+  }
+
+  if (!isValidMood(mood)) {
+    return { success: false, error: 'Invalid mood value' }
+  }
+
+  // Generate title from filename (remove extension)
+  const title = fileName.replace(/\.[^/.]+$/, '').trim() || 'Thought from attachment'
+
+  // Trim body to max length
+  let body = extractedText.trim()
+  let wasLengthTruncated = false
+  if (body.length > MAX_BODY_LENGTH) {
+    body = body.slice(0, MAX_BODY_LENGTH)
+    wasLengthTruncated = true
+  }
+
+  const blocks = splitThoughtIntoBlocks(body)
+  if (blocks.length > MAX_BLOCKS) {
+    return { success: false, error: `Too many paragraphs. Maximum is ${MAX_BLOCKS}` }
+  }
+
+  try {
+    const draftsRef = collection(db, 'chats', chatId, 'thoughtDrafts', userId, 'items')
+    const draftData = {
+      chatId,
+      authorId: userId,
+      title,
+      body,
+      blocks,
+      mood,
+      source: 'attachment',
+      sourceMessageId: messageId,
+      sourceFileName: fileName,
+      sourceContentType: contentType || 'unknown',
+      sourceStoragePath: storagePath || '',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }
+
+    const docRef = await addDoc(draftsRef, draftData)
+    return {
+      success: true,
+      draftId: docRef.id,
+      draft: { id: docRef.id, ...draftData },
+      wasLengthTruncated
+    }
+  } catch (error) {
+    console.error('Error creating thought draft from attachment:', error)
+    return { success: false, error: error.message || 'Failed to create draft' }
+  }
+}
+
+/**
  * List all drafts for a user in a chat
  * @param {string} chatId - The chat ID
  * @param {string} userId - The user's ID

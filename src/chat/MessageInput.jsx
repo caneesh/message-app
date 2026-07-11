@@ -33,6 +33,7 @@ function ReplyThumbnail({ chatId, fileInfo }) {
 const MAX_MESSAGE_LENGTH = 2000
 const MAX_FILES_PER_MESSAGE = 10
 const MAX_TOTAL_BUNDLE_SIZE = 100 * 1024 * 1024 // 100 MB
+const LONG_MESSAGE_TEXT_FILE_THRESHOLD = 1200
 
 const HARSH_PATTERNS = [
   { pattern: /why didn't you/gi, softer: "Just checking — were you able to" },
@@ -168,6 +169,8 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
   const [pendingFiles, setPendingFiles] = useState([]) // Multi-file attachment queue
   const [uploadingBundle, setUploadingBundle] = useState(false)
   const [bundleUploadProgress, setBundleUploadProgress] = useState({}) // { fileId: progress }
+  const [showLongMessageModal, setShowLongMessageModal] = useState(false)
+  const [sendingTextFile, setSendingTextFile] = useState(false)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -242,6 +245,21 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
     e.preventDefault()
     setError('')
 
+    if (!trimmedText || sending) return
+
+    // Check if message is long enough to prompt for text file option
+    // Also show modal if over max limit, but in that case Send as Message is disabled
+    console.log('[MessageInput] handleSubmit - text length:', trimmedText.length, 'threshold:', LONG_MESSAGE_TEXT_FILE_THRESHOLD)
+    if (trimmedText.length > LONG_MESSAGE_TEXT_FILE_THRESHOLD) {
+      console.log('[MessageInput] Showing long message modal')
+      setShowLongMessageModal(true)
+      return
+    }
+
+    await sendAsMessage()
+  }
+
+  const sendAsMessage = async () => {
     if (!trimmedText || sending || isOverLimit) return
 
     setSending(true)
@@ -300,6 +318,123 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
     } finally {
       setSending(false)
     }
+  }
+
+  const sendAsTextFile = async () => {
+    if (!trimmedText || sendingTextFile) return
+
+    setSendingTextFile(true)
+    setShowLongMessageModal(false)
+    setError('')
+
+    try {
+      // Generate filename: message-YYYYMMDD-HHMMSS.txt
+      const now = new Date()
+      const pad = (n) => String(n).padStart(2, '0')
+      const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+      const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+      const fileName = `message-${dateStr}-${timeStr}.txt`
+
+      // Create text file blob (use 'text/plain' without charset to match storage rules)
+      const blob = new Blob([trimmedText], { type: 'text/plain' })
+
+      // Check file size (should be well under 25MB for text, but check anyway)
+      if (blob.size > MAX_FILE_SIZE) {
+        setError('Message is too long to send as a text file.')
+        setSendingTextFile(false)
+        return
+      }
+
+      // Upload to Firebase Storage
+      const fileId = generateId()
+      const storagePath = `chatFiles/${chatId}/${fileId}/${fileName}`
+      const storageRef = ref(storage, storagePath)
+
+      setUploadProgress(0)
+      const uploadTask = uploadBytesResumable(storageRef, blob)
+
+      await new Promise((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
+            setUploadProgress(progress)
+          },
+          (uploadError) => {
+            console.error('Text file upload error:', uploadError)
+            reject(uploadError)
+          },
+          resolve
+        )
+      })
+
+      // Create message document
+      const messageData = {
+        type: 'file',
+        text: '',
+        senderId: currentUser.uid,
+        senderPhone: currentUser.phoneNumber,
+        createdAt: serverTimestamp(),
+        file: {
+          storagePath,
+          fileName,
+          contentType: 'text/plain',
+          size: blob.size,
+        },
+      }
+
+      if (activeReplyTo) {
+        messageData.replyTo = {
+          messageId: activeReplyTo.messageId,
+          senderId: activeReplyTo.senderId,
+          textPreview: activeReplyTo.textPreview,
+        }
+        if (activeReplyTo.fileInfo) {
+          messageData.replyTo.fileInfo = activeReplyTo.fileInfo
+        }
+      }
+
+      if (activeThoughtReply) {
+        messageData.thoughtRef = {
+          thoughtId: activeThoughtReply.thoughtId,
+          authorId: activeThoughtReply.authorId,
+          quote: activeThoughtReply.quote.slice(0, 300),
+        }
+        if (activeThoughtReply.blockId) {
+          messageData.thoughtRef.blockId = activeThoughtReply.blockId
+        }
+      }
+
+      await addDoc(collection(db, 'chats', chatId, 'messages'), messageData)
+
+      // Clear composer on success
+      setText('')
+      setMessageIntent('normal')
+      clearReply()
+      if (clearThoughtReply) clearThoughtReply()
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+      setTypingStatus(false)
+      textareaRef.current?.focus()
+    } catch (err) {
+      console.error('Failed to send text file:', err)
+      setError('Could not send text file. Try again.')
+      // Keep composer text so user doesn't lose it
+    } finally {
+      setSendingTextFile(false)
+      setUploadProgress(null)
+    }
+  }
+
+  const handleLongMessageSendAsMessage = async () => {
+    setShowLongMessageModal(false)
+    await sendAsMessage()
+  }
+
+  const handleLongMessageCancel = () => {
+    setShowLongMessageModal(false)
+    // Keep composer text
   }
 
   const handleChange = (e) => {
@@ -773,6 +908,47 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
           Message too long ({trimmedText.length}/{MAX_MESSAGE_LENGTH})
         </div>
       )}
+      {/* Long Message Modal */}
+      {showLongMessageModal && (
+        <div className="long-message-modal-overlay">
+          <div className="long-message-modal">
+            <h3 className="long-message-modal-title">Long message</h3>
+            <p className="long-message-modal-body">
+              {isOverLimit
+                ? `This message is too long to send as text (${trimmedText.length.toLocaleString()} characters). Send it as a text file instead.`
+                : 'This message is a little long. Do you want to send it as a regular message or as a text file?'}
+            </p>
+            <div className="long-message-modal-actions">
+              {!isOverLimit && (
+                <button
+                  type="button"
+                  className="long-message-btn primary"
+                  onClick={handleLongMessageSendAsMessage}
+                  disabled={sending}
+                >
+                  Send as Message
+                </button>
+              )}
+              <button
+                type="button"
+                className={`long-message-btn ${isOverLimit ? 'primary' : 'secondary'}`}
+                onClick={sendAsTextFile}
+                disabled={sendingTextFile}
+              >
+                {sendingTextFile ? 'Sending...' : 'Send as Text File'}
+              </button>
+              <button
+                type="button"
+                className="long-message-btn cancel"
+                onClick={handleLongMessageCancel}
+                disabled={sending || sendingTextFile}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Attachment Tray */}
       {pendingFiles.length > 0 && (
         <div className="attachment-tray">
@@ -964,7 +1140,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
               type="button"
               className="attach-btn"
               onClick={openFilePicker}
-              disabled={sending}
+              disabled={sending || sendingTextFile}
               title="Attach file"
               aria-label="Attach file"
             >
@@ -974,7 +1150,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
               type="button"
               className="special-msg-btn"
               onClick={() => setShowSpecialComposer(true)}
-              disabled={sending}
+              disabled={sending || sendingTextFile}
               title="Special message"
               aria-label="Send special message"
             >
@@ -984,7 +1160,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
               type="button"
               className="emoji-btn"
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              disabled={sending}
+              disabled={sending || sendingTextFile}
               title="Add emoji"
               aria-label="Add emoji"
             >
@@ -995,7 +1171,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
                 type="button"
                 className={`intent-btn ${messageIntent !== 'normal' ? 'intent-active' : ''}`}
                 onClick={() => setShowIntentPicker(!showIntentPicker)}
-                disabled={sending}
+                disabled={sending || sendingTextFile}
                 title="Message type"
                 aria-label="Set message type"
               >
@@ -1026,7 +1202,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
                   type="button"
                   className="tone-btn-subtle"
                   onClick={() => setShowToneOptions(!showToneOptions)}
-                  disabled={sending}
+                  disabled={sending || sendingTextFile}
                   title="Soften tone"
                   aria-label="Soften message tone"
                 >
@@ -1037,7 +1213,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
                   chatId={chatId}
                   text={text}
                   onSuggestion={(suggestion) => setToneSuggestion(suggestion)}
-                  disabled={sending}
+                  disabled={sending || sendingTextFile}
                 />
               </>
             )}
@@ -1049,12 +1225,12 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
-                  if (trimmedText && !sending && !isOverLimit) {
+                  if (trimmedText && !sending && !sendingTextFile) {
                     handleSubmit(e)
                   }
                 }
               }}
-              disabled={sending}
+              disabled={sending || sendingTextFile}
               aria-label="Message input"
               rows={1}
             />
@@ -1063,10 +1239,10 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
         {trimmedText && !isVoiceRecording ? (
           <button
             type="submit"
-            disabled={sending || !trimmedText || isOverLimit}
-            aria-label={sending ? 'Sending message' : 'Send message'}
+            disabled={sending || sendingTextFile || !trimmedText}
+            aria-label={sending || sendingTextFile ? 'Sending message' : 'Send message'}
           >
-            {sending ? 'Sending...' : 'Send'}
+            {sending || sendingTextFile ? 'Sending...' : 'Send'}
           </button>
         ) : (
           <VoiceRecorder
@@ -1074,7 +1250,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
             chatId={chatId}
             activeReplyTo={activeReplyTo}
             clearReply={clearReply}
-            disabled={sending}
+            disabled={sending || sendingTextFile}
             onStateChange={setIsVoiceRecording}
           />
         )}

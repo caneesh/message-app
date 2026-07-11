@@ -14,6 +14,7 @@ import {
   generateExportFilename,
   supportsDownload
 } from '../utils/thoughtExportUtils'
+import PhotoArchive from './PhotoArchive'
 
 const AUTO_LOGOUT_OPTIONS = [
   { value: 2, label: '2 minutes' },
@@ -41,10 +42,15 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
 
   const EXPORT_CODE = '335042249'
   const READ_ARCHIVE_CODE = '1715'
+  const PHOTO_ARCHIVE_CODE = '674209727'
   const archiveLongPressTimer = useRef(null)
   const [showArchiveCodeModal, setShowArchiveCodeModal] = useState(false)
   const [archiveCodeInput, setArchiveCodeInput] = useState('')
   const [archiveCodeError, setArchiveCodeError] = useState('')
+  const [photoArchiveUnlocked, setPhotoArchiveUnlocked] = useState(false)
+  const [photoArchiveCodeBuffer, setPhotoArchiveCodeBuffer] = useState('')
+  const [showPhotoArchive, setShowPhotoArchive] = useState(false)
+  const [isDesktopViewport, setIsDesktopViewport] = useState(window.innerWidth >= 768)
 
   useEffect(() => {
     const handleKeyPress = (e) => {
@@ -69,11 +75,28 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
           }
           return newBuffer
         })
+        // Check photo archive code
+        setPhotoArchiveCodeBuffer((prev) => {
+          const newBuffer = (prev + key).slice(-PHOTO_ARCHIVE_CODE.length)
+          if (newBuffer === PHOTO_ARCHIVE_CODE) {
+            setPhotoArchiveUnlocked(true)
+          }
+          return newBuffer
+        })
       }
     }
 
     window.addEventListener('keypress', handleKeyPress)
     return () => window.removeEventListener('keypress', handleKeyPress)
+  }, [])
+
+  // Desktop viewport detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktopViewport(window.innerWidth >= 768)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   const handleLongPressStart = (e) => {
@@ -785,6 +808,31 @@ function Settings({ currentUser, chatId, onChatJoined, autoLogoutTimeout, onAuto
             </div>
           )}
         </div>
+      )}
+
+      {/* Hidden Photo Archive - unlocked with code 674209727, desktop only */}
+      {photoArchiveUnlocked && isDesktopViewport && (
+        <div className="settings-section">
+          <h3>Photo Archive</h3>
+          <p className="settings-note">
+            View photos from cleared chats.
+          </p>
+          <button
+            className="settings-btn"
+            onClick={() => setShowPhotoArchive(true)}
+          >
+            Open Photo Archive
+          </button>
+        </div>
+      )}
+
+      {/* Photo Archive Page */}
+      {showPhotoArchive && (
+        <PhotoArchive
+          currentUser={currentUser}
+          chatId={chatId}
+          onClose={() => setShowPhotoArchive(false)}
+        />
       )}
 
       {/* Thoughts export modals - render outside conditional so they show when triggered */}
