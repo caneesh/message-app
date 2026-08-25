@@ -36,7 +36,7 @@ service firebase.storage {
       return isImageContentType() || isVideoContentType() || isDocumentContentType();
     }
 
-    // Helper: Allowed voice content types
+    // Helper: Allowed audio/voice content types
     function isAllowedVoiceContentType() {
       return request.resource.contentType in [
         'audio/webm',
@@ -44,7 +44,10 @@ service firebase.storage {
         'audio/mpeg',
         'audio/aac',
         'audio/x-m4a',
-        'audio/mp4a-latm'
+        'audio/mp4a-latm',
+        'audio/wav',
+        'audio/ogg',
+        'audio/flac'
       ];
     }
 
@@ -64,7 +67,7 @@ service firebase.storage {
 
       // Write: authenticated users with valid file type and size
       allow write: if isAuthenticated()
-                   && (((isImageContentType() || isDocumentContentType()) && isWithinSizeLimit())
+                   && (((isImageContentType() || isDocumentContentType() || isAllowedVoiceContentType()) && isWithinSizeLimit())
                        || (isVideoContentType() && isWithinVideoSizeLimit()));
 
       // Delete: any authenticated user

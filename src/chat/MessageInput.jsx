@@ -33,7 +33,7 @@ function ReplyThumbnail({ chatId, fileInfo }) {
 const MAX_MESSAGE_LENGTH = 2000
 const MAX_FILES_PER_MESSAGE = 10
 const MAX_TOTAL_BUNDLE_SIZE = 100 * 1024 * 1024 // 100 MB
-const LONG_MESSAGE_TEXT_FILE_THRESHOLD = 1200
+const LONG_MESSAGE_TEXT_FILE_THRESHOLD = 400
 
 const HARSH_PATTERNS = [
   { pattern: /why didn't you/gi, softer: "Just checking — were you able to" },
@@ -115,6 +115,31 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+// Get content type from extension when browser doesn't provide MIME type
+function getContentTypeFromExtension(fileName) {
+  const ext = fileName.toLowerCase().split('.').pop()
+  const mimeTypes = {
+    // Images
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', avif: 'image/avif',
+    bmp: 'image/bmp', tiff: 'image/tiff', tif: 'image/tiff',
+    // Videos
+    mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', m4v: 'video/x-m4v',
+    avi: 'video/x-msvideo', mkv: 'video/x-matroska', '3gp': 'video/3gpp',
+    // Audio
+    mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac',
+    ogg: 'audio/ogg', flac: 'audio/flac',
+    // Documents
+    pdf: 'application/pdf', txt: 'text/plain',
+  }
+  return mimeTypes[ext] || 'application/octet-stream'
+}
+
+// Get effective content type - use file.type if available, otherwise infer from extension
+function getEffectiveContentType(file) {
+  return file.type || getContentTypeFromExtension(file.name)
+}
+
 const TYPING_TIMEOUT = 2000
 
 const QUICK_ACTIONS = [
@@ -165,12 +190,13 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
   const [showSpecialComposer, setShowSpecialComposer] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [messageIntent, setMessageIntent] = useState('normal')
-  const [showIntentPicker, setShowIntentPicker] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [pendingFiles, setPendingFiles] = useState([]) // Multi-file attachment queue
   const [uploadingBundle, setUploadingBundle] = useState(false)
   const [bundleUploadProgress, setBundleUploadProgress] = useState({}) // { fileId: progress }
   const [showLongMessageModal, setShowLongMessageModal] = useState(false)
   const [sendingTextFile, setSendingTextFile] = useState(false)
+  const [secretMode, setSecretMode] = useState(false)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
   const typingTimeoutRef = useRef(null)
@@ -245,13 +271,17 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
     e.preventDefault()
     setError('')
 
-    if (!trimmedText || sending) return
+    if (!trimmedText || sending || sendingTextFile) return
+
+    // Secret messages always send as a text file, regardless of length
+    if (secretMode) {
+      await sendAsTextFile({ secret: true })
+      return
+    }
 
     // Check if message is long enough to prompt for text file option
     // Also show modal if over max limit, but in that case Send as Message is disabled
-    console.log('[MessageInput] handleSubmit - text length:', trimmedText.length, 'threshold:', LONG_MESSAGE_TEXT_FILE_THRESHOLD)
     if (trimmedText.length > LONG_MESSAGE_TEXT_FILE_THRESHOLD) {
-      console.log('[MessageInput] Showing long message modal')
       setShowLongMessageModal(true)
       return
     }
@@ -320,7 +350,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
     }
   }
 
-  const sendAsTextFile = async () => {
+  const sendAsTextFile = async ({ secret = false } = {}) => {
     if (!trimmedText || sendingTextFile) return
 
     setSendingTextFile(true)
@@ -328,12 +358,14 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
     setError('')
 
     try {
-      // Generate filename: message-YYYYMMDD-HHMMSS.txt
+      // Generate filename: secret/message-YYYYMMDD-HHMMSS.txt
       const now = new Date()
       const pad = (n) => String(n).padStart(2, '0')
       const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
       const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-      const fileName = `message-${dateStr}-${timeStr}.txt`
+      const fileName = secret
+        ? `secret-${dateStr}-${timeStr}.txt`
+        : `message-${dateStr}-${timeStr}.txt`
 
       // Create text file blob (use 'text/plain' without charset to match storage rules)
       const blob = new Blob([trimmedText], { type: 'text/plain' })
@@ -383,6 +415,10 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
         },
       }
 
+      if (secret) {
+        messageData.isSecret = true
+      }
+
       if (activeReplyTo) {
         messageData.replyTo = {
           messageId: activeReplyTo.messageId,
@@ -410,6 +446,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
       // Clear composer on success
       setText('')
       setMessageIntent('normal')
+      setSecretMode(false)
       clearReply()
       if (clearThoughtReply) clearThoughtReply()
       if (typingTimeoutRef.current) {
@@ -548,13 +585,23 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
 
     for (const file of files) {
       const fileType = file.type || ''
-      const isImage = fileType.startsWith('image/')
-      const isVideo = fileType.startsWith('video/')
-      const isDocument = ['application/pdf', 'text/plain'].includes(fileType)
+      const fileName = file.name.toLowerCase()
+      const ext = fileName.split('.').pop()
+
+      // Check by MIME type first, then fall back to extension for better device compatibility
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp', 'tiff', 'tif']
+      const videoExtensions = ['mp4', 'mov', 'webm', 'm4v', 'avi', 'mkv', '3gp']
+      const audioExtensions = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'webm', 'flac']
+      const documentExtensions = ['pdf', 'txt']
+
+      const isImage = fileType.startsWith('image/') || imageExtensions.includes(ext)
+      const isVideo = fileType.startsWith('video/') || videoExtensions.includes(ext)
+      const isAudio = fileType.startsWith('audio/') || audioExtensions.includes(ext)
+      const isDocument = ['application/pdf', 'text/plain'].includes(fileType) || documentExtensions.includes(ext)
 
       // Validate file type
-      if (!isImage && !isVideo && !isDocument) {
-        setError(`${file.name}: Unsupported file type. Allowed: Images, Videos, PDF, TXT`)
+      if (!isImage && !isVideo && !isAudio && !isDocument) {
+        setError(`${file.name}: Unsupported file type. Allowed: Images, Videos, Audio, PDF, TXT`)
         continue
       }
 
@@ -572,10 +619,12 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
       }
 
       newTotalSize += file.size
+      // Determine kind using our fallback logic when MIME type is empty
+      const kind = isImage ? 'image' : isVideo ? 'video' : isAudio ? 'audio' : 'document'
       validFiles.push({
         id: generateId(),
         file,
-        kind: getFileKind(fileType),
+        kind,
         preview: isImage ? URL.createObjectURL(file) : null,
         status: 'pending', // pending, uploading, uploaded, failed
         progress: 0,
@@ -621,10 +670,12 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
         const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
         const storagePath = `chatFiles/${chatId}/${fileId}/${safeFileName}`
         const storageRef = ref(storage, storagePath)
+        const effectiveContentType = getEffectiveContentType(file)
 
         setBundleUploadProgress({ [fileId]: 0 })
 
-        const uploadTask = uploadBytesResumable(storageRef, file)
+        // Explicitly set content type in metadata for devices that don't report MIME type
+        const uploadTask = uploadBytesResumable(storageRef, file, { contentType: effectiveContentType })
 
         await new Promise((resolve, reject) => {
           uploadTask.on(
@@ -638,7 +689,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
           )
         })
 
-        const isVideo = file.type.startsWith('video/')
+        const isVideo = pf.kind === 'video'
         const messageData = {
           type: isVideo ? 'video' : 'file',
           text: '',
@@ -648,7 +699,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
           file: {
             storagePath,
             fileName: file.name,
-            contentType: file.type,
+            contentType: effectiveContentType,
             size: file.size,
           },
         }
@@ -709,10 +760,12 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
         const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
         const storagePath = `chatAttachments/${chatId}/${messageId}/${attachmentId}/${safeFileName}`
         const storageRef = ref(storage, storagePath)
+        const effectiveContentType = getEffectiveContentType(file)
 
         setBundleUploadProgress(prev => ({ ...prev, [attachmentId]: 0 }))
 
-        const uploadTask = uploadBytesResumable(storageRef, file)
+        // Explicitly set content type in metadata for devices that don't report MIME type
+        const uploadTask = uploadBytesResumable(storageRef, file, { contentType: effectiveContentType })
 
         await new Promise((resolve, reject) => {
           uploadTask.on(
@@ -734,7 +787,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
           uploadedBy: currentUser.uid,
           storagePath,
           fileName: file.name,
-          contentType: file.type,
+          contentType: effectiveContentType,
           size: file.size,
           kind: pf.kind,
           order,
@@ -779,12 +832,22 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
   // Legacy single file upload for backward compatibility (called when no pending files)
   const handleLegacySingleFileUpload = async (file) => {
     const fileType = file.type || ''
-    const isImage = fileType.startsWith('image/')
-    const isVideo = fileType.startsWith('video/')
-    const isDocument = ['application/pdf', 'text/plain'].includes(fileType)
+    const fileName = file.name.toLowerCase()
+    const ext = fileName.split('.').pop()
 
-    if (!isImage && !isVideo && !isDocument) {
-      setError('Unsupported file type. Allowed: Images, Videos, PDF, TXT')
+    // Check by MIME type first, then fall back to extension
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp', 'tiff', 'tif']
+    const videoExtensions = ['mp4', 'mov', 'webm', 'm4v', 'avi', 'mkv', '3gp']
+    const audioExtensions = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'webm', 'flac']
+    const documentExtensions = ['pdf', 'txt']
+
+    const isImage = fileType.startsWith('image/') || imageExtensions.includes(ext)
+    const isVideo = fileType.startsWith('video/') || videoExtensions.includes(ext)
+    const isAudio = fileType.startsWith('audio/') || audioExtensions.includes(ext)
+    const isDocument = ['application/pdf', 'text/plain'].includes(fileType) || documentExtensions.includes(ext)
+
+    if (!isImage && !isVideo && !isAudio && !isDocument) {
+      setError('Unsupported file type. Allowed: Images, Videos, Audio, PDF, TXT')
       return
     }
 
@@ -803,8 +866,10 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
       const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const storagePath = `chatFiles/${chatId}/${fileId}/${safeFileName}`
       const storageRef = ref(storage, storagePath)
+      const effectiveContentType = getEffectiveContentType(file)
 
-      const uploadTask = uploadBytesResumable(storageRef, file)
+      // Explicitly set content type in metadata for devices that don't report MIME type
+      const uploadTask = uploadBytesResumable(storageRef, file, { contentType: effectiveContentType })
 
       uploadTask.on(
         'state_changed',
@@ -831,7 +896,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
               file: {
                 storagePath,
                 fileName: file.name,
-                contentType: file.type,
+                contentType: effectiveContentType,
                 size: file.size,
               },
             }
@@ -932,7 +997,7 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
               <button
                 type="button"
                 className={`long-message-btn ${isOverLimit ? 'primary' : 'secondary'}`}
-                onClick={sendAsTextFile}
+                onClick={() => sendAsTextFile()}
                 disabled={sendingTextFile}
               >
                 {sendingTextFile ? 'Sending...' : 'Send as Text File'}
@@ -1148,16 +1213,6 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
             </button>
             <button
               type="button"
-              className="special-msg-btn"
-              onClick={() => setShowSpecialComposer(true)}
-              disabled={sending || sendingTextFile}
-              title="Special message"
-              aria-label="Send special message"
-            >
-              💝
-            </button>
-            <button
-              type="button"
               className="emoji-btn"
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
               disabled={sending || sendingTextFile}
@@ -1166,60 +1221,95 @@ function MessageInput({ currentUser, chatId, activeReplyTo, clearReply, activeTh
             >
               😊
             </button>
-            <div className="intent-picker-container">
+            <div className="more-menu-container">
               <button
                 type="button"
-                className={`intent-btn ${messageIntent !== 'normal' ? 'intent-active' : ''}`}
-                onClick={() => setShowIntentPicker(!showIntentPicker)}
+                className={`composer-more-btn ${showMoreMenu ? 'more-active' : ''} ${(secretMode || messageIntent !== 'normal') ? 'more-has-selection' : ''}`}
+                onClick={() => setShowMoreMenu((v) => !v)}
                 disabled={sending || sendingTextFile}
-                title="Message type"
-                aria-label="Set message type"
+                title="More options"
+                aria-label="More message options"
+                aria-expanded={showMoreMenu}
               >
-                {MESSAGE_INTENTS.find(i => i.value === messageIntent)?.icon || '🏷️'}
+                +
               </button>
-              {showIntentPicker && (
-                <div className="intent-picker">
-                  {MESSAGE_INTENTS.map((intent) => (
+              {showMoreMenu && (
+                <>
+                  <div className="composer-more-backdrop" onClick={() => setShowMoreMenu(false)} />
+                  <div className="composer-more-menu" role="menu">
                     <button
-                      key={intent.value}
                       type="button"
-                      className={`intent-option ${messageIntent === intent.value ? 'active' : ''}`}
+                      className="more-menu-item"
+                      role="menuitem"
                       onClick={() => {
-                        setMessageIntent(intent.value)
-                        setShowIntentPicker(false)
+                        setShowMoreMenu(false)
+                        setShowSpecialComposer(true)
                       }}
                     >
-                      {intent.icon && <span className="intent-icon">{intent.icon}</span>}
-                      {intent.label}
+                      <span className="more-menu-icon">💝</span>
+                      <span className="more-menu-label">Special message</span>
                     </button>
-                  ))}
-                </div>
+                    <button
+                      type="button"
+                      className={`more-menu-item ${secretMode ? 'more-menu-item-active' : ''}`}
+                      role="menuitemcheckbox"
+                      aria-checked={secretMode}
+                      onClick={() => setSecretMode((v) => !v)}
+                    >
+                      <span className="more-menu-icon">🔒</span>
+                      <span className="more-menu-label">Secret message</span>
+                      <span className="more-menu-toggle">{secretMode ? 'On' : 'Off'}</span>
+                    </button>
+
+                    {trimmedText.length > 5 && (
+                      <button
+                        type="button"
+                        className="more-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setShowMoreMenu(false)
+                          setShowToneOptions(true)
+                        }}
+                      >
+                        <span className="more-menu-icon">♡</span>
+                        <span className="more-menu-label">Soften tone</span>
+                      </button>
+                    )}
+
+                    <div className="more-menu-divider" />
+                    <div className="more-menu-heading">Message type</div>
+                    {MESSAGE_INTENTS.map((intent) => (
+                      <button
+                        key={intent.value}
+                        type="button"
+                        className={`more-menu-item ${messageIntent === intent.value ? 'more-menu-item-active' : ''}`}
+                        role="menuitemradio"
+                        aria-checked={messageIntent === intent.value}
+                        onClick={() => {
+                          setMessageIntent(intent.value)
+                          setShowMoreMenu(false)
+                        }}
+                      >
+                        <span className="more-menu-icon">{intent.icon || '🏷️'}</span>
+                        <span className="more-menu-label">{intent.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
             {trimmedText.length > 5 && (
-              <>
-                <button
-                  type="button"
-                  className="tone-btn-subtle"
-                  onClick={() => setShowToneOptions(!showToneOptions)}
-                  disabled={sending || sendingTextFile}
-                  title="Soften tone"
-                  aria-label="Soften message tone"
-                >
-                  ♡
-                </button>
-                <ToneRepairAiButton
-                  currentUser={currentUser}
-                  chatId={chatId}
-                  text={text}
-                  onSuggestion={(suggestion) => setToneSuggestion(suggestion)}
-                  disabled={sending || sendingTextFile}
-                />
-              </>
+              <ToneRepairAiButton
+                currentUser={currentUser}
+                chatId={chatId}
+                text={text}
+                onSuggestion={(suggestion) => setToneSuggestion(suggestion)}
+                disabled={sending || sendingTextFile}
+              />
             )}
             <textarea
               ref={textareaRef}
-              placeholder="Type a message..."
+              placeholder={secretMode ? '🔒 Secret message — sends as code-locked text file' : 'Type a message...'}
               value={text}
               onChange={handleChange}
               onKeyDown={(e) => {
