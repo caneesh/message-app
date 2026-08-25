@@ -3,7 +3,8 @@ import { db, storage } from '../firebase/firebaseConfig'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytesResumable } from 'firebase/storage'
 
-const MAX_DURATION_SECONDS = 60
+const MAX_DURATION_SECONDS = 180 // 3 minutes
+const WARNING_THRESHOLD_SECONDS = 15 // Show warning in last 15 seconds
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 
 const isDev = import.meta.env.DEV
@@ -392,11 +393,14 @@ function VoiceRecorder({ currentUser, chatId, activeReplyTo, clearReply, disable
   }
 
   if (state === 'recording') {
+    const timeRemaining = MAX_DURATION_SECONDS - duration
+    const isNearLimit = timeRemaining <= WARNING_THRESHOLD_SECONDS
+
     return (
-      <div className="voice-recorder recording">
+      <div className={`voice-recorder recording ${isNearLimit ? 'near-limit' : ''}`}>
         <div className="voice-recording-indicator">
           <span className="voice-recording-dot" aria-hidden="true" />
-          <span className="voice-recording-text">Recording</span>
+          <span className="voice-recording-text">{isNearLimit ? `${timeRemaining}s left` : 'Recording'}</span>
           <span className="voice-duration">{formatDuration(duration)}</span>
           <span className="voice-max-hint">/ {formatDuration(MAX_DURATION_SECONDS)}</span>
         </div>

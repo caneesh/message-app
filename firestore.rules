@@ -14,7 +14,7 @@ service cloud.firestore {
 
     // Helper: Validate message has only allowed fields
     function hasOnlyAllowedFields() {
-      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef', 'transcriptionStatus', 'transcriptText', 'transcriptCreatedAt', 'transcriptUpdatedAt', 'transcriptRequestedBy', 'transcriptErrorCode', 'messageIntent', 'attachmentCount', 'firstPreviewStoragePath', 'status', 'updatedAt', 'revealTitle', 'revealPrompt', 'hiddenContent', 'revealKind']);
+      return request.resource.data.keys().hasOnly(['senderId', 'senderPhone', 'type', 'text', 'createdAt', 'replyTo', 'file', 'voice', 'edited', 'editedAt', 'specialType', 'title', 'style', 'unlockAt', 'expiresAt', 'isLocked', 'requiresReveal', 'expiresOnView', 'thoughtRef', 'transcriptionStatus', 'transcriptText', 'transcriptCreatedAt', 'transcriptUpdatedAt', 'transcriptRequestedBy', 'transcriptErrorCode', 'messageIntent', 'attachmentCount', 'firstPreviewStoragePath', 'status', 'updatedAt', 'revealTitle', 'revealPrompt', 'hiddenContent', 'revealKind', 'isSecret']);
     }
 
     // Helper: Validate optional messageIntent field (priority labels)
@@ -193,7 +193,7 @@ service cloud.firestore {
           && data.voice.size is number
           && data.voice.size <= 5 * 1024 * 1024
           && data.voice.durationSeconds is number
-          && data.voice.durationSeconds <= 60;
+          && data.voice.durationSeconds <= 180;
     }
 
     // Helper: Validate optional replyTo field
