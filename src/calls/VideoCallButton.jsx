@@ -1,14 +1,14 @@
 import { useCall, CALL_STATE } from './CallProvider'
 
 function VideoCallButton() {
-  const { callState, startCall } = useCall()
+  const { callState, startVideoCall } = useCall()
 
   const isDisabled = callState !== CALL_STATE.IDLE
 
   return (
     <button
       className="video-call-btn"
-      onClick={startCall}
+      onClick={startVideoCall}
       disabled={isDisabled}
       title="Video call"
       aria-label="Start video call"
