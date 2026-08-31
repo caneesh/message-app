@@ -200,6 +200,8 @@ const { defineSecret } = require('firebase-functions/params');
 
 const aiApiKey = defineSecret('AI_API_KEY');
 const openaiApiKey = defineSecret('OPENAI_API_KEY');
+const twilioAccountSid = defineSecret('TWILIO_ACCOUNT_SID');
+const twilioAuthToken = defineSecret('TWILIO_AUTH_TOKEN');
 const chatBackupEnabled = defineSecret('CHAT_BACKUP_ENABLED');
 const chatBackupBucket = defineSecret('CHAT_BACKUP_BUCKET');
 
@@ -2172,13 +2174,13 @@ exports.transcribeVoiceNote = onCall({ secrets: [openaiApiKey] }, async (request
 });
 
 // Get TURN credentials from Twilio for WebRTC video calls
-exports.getTurnCredentials = onCall({ cors: true }, async (request) => {
+exports.getTurnCredentials = onCall({ secrets: [twilioAccountSid, twilioAuthToken] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be authenticated');
   }
 
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const accountSid = twilioAccountSid.value();
+  const authToken = twilioAuthToken.value();
 
   if (!accountSid || !authToken) {
     logger.error('Twilio credentials not configured');
