@@ -1,6 +1,32 @@
+import { getFunctions, httpsCallable } from 'firebase/functions'
+
 const DEFAULT_STUN_URLS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']
 
-function getIceServers() {
+// Cache for TURN credentials (they're valid for ~24 hours)
+let cachedIceServers = null
+let cacheExpiry = 0
+
+async function fetchTurnCredentials() {
+  try {
+    const functions = getFunctions()
+    const getTurnCredentials = httpsCallable(functions, 'getTurnCredentials')
+    const result = await getTurnCredentials()
+
+    if (result.data?.iceServers) {
+      console.log('[WebRTC] Got TURN credentials from server')
+      // Cache for slightly less than TTL (default 24 hours)
+      const ttl = (result.data.ttl || 86400) * 1000
+      cacheExpiry = Date.now() + ttl - 60000 // 1 minute buffer
+      cachedIceServers = result.data.iceServers
+      return cachedIceServers
+    }
+  } catch (err) {
+    console.warn('[WebRTC] Failed to get TURN credentials:', err.message)
+  }
+  return null
+}
+
+function getDefaultIceServers() {
   const servers = []
 
   const stunUrls = import.meta.env.VITE_WEBRTC_STUN_URLS
@@ -24,13 +50,30 @@ function getIceServers() {
   return servers
 }
 
-export function createPeerConnection(onIceCandidate, onTrack, onConnectionStateChange) {
+export async function getIceServers() {
+  // Use cached credentials if still valid
+  if (cachedIceServers && Date.now() < cacheExpiry) {
+    return cachedIceServers
+  }
+
+  // Try to fetch fresh TURN credentials
+  const turnServers = await fetchTurnCredentials()
+  if (turnServers && turnServers.length > 0) {
+    return turnServers
+  }
+
+  // Fall back to default (STUN only or env-configured)
+  return getDefaultIceServers()
+}
+
+export async function createPeerConnection(onIceCandidate, onTrack, onConnectionStateChange) {
+  const iceServers = await getIceServers()
   const config = {
-    iceServers: getIceServers(),
+    iceServers,
     iceCandidatePoolSize: 10,
   }
 
-  console.log('[WebRTC] Creating peer connection with config:', config)
+  console.log('[WebRTC] Creating peer connection with', iceServers.length, 'ICE servers')
   const pc = new RTCPeerConnection(config)
 
   pc.onicecandidate = (event) => {

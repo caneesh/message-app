@@ -74,6 +74,19 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
   const isCallerRef = useRef(false)
   const isHandlingCallRef = useRef(false)
   const hasAcceptedRef = useRef(false)
+  const callStateRef = useRef(callState)
+
+  const localStreamRef = useRef(localStream)
+  const remoteStreamRef = useRef(remoteStream)
+
+  // Keep stream refs in sync
+  useEffect(() => {
+    localStreamRef.current = localStream
+  }, [localStream])
+
+  useEffect(() => {
+    remoteStreamRef.current = remoteStream
+  }, [remoteStream])
 
   const cleanup = useCallback(() => {
     console.log('[Call] cleanup called')
@@ -89,8 +102,9 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
       candidatesUnsubRef.current()
       candidatesUnsubRef.current = null
     }
-    stopMediaTracks(localStream)
-    stopMediaTracks(remoteStream)
+    // Use refs to avoid dependency on state
+    stopMediaTracks(localStreamRef.current)
+    stopMediaTracks(remoteStreamRef.current)
     closePeerConnection(pcRef.current)
     pcRef.current = null
     pendingCandidatesRef.current = []
@@ -108,7 +122,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
     setConnectionState(null)
     setCallStartTime(null)
     isCallerRef.current = false
-  }, [localStream, remoteStream])
+  }, []) // No dependencies - uses refs
 
   const endCall = useCallback(
     async (status = CALL_STATUS.ENDED) => {
@@ -142,8 +156,8 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
   )
 
   const setupPeerConnection = useCallback(
-    (stream) => {
-      const pc = createPeerConnection(
+    async (stream) => {
+      const pc = await createPeerConnection(
         (candidate) => {
           if (callId && chatId) {
             addIceCandidate(chatId, callId, candidate, isCallerRef.current, currentUser?.uid)
@@ -196,7 +210,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
       const newCallId = await createCall(chatId, currentUser.uid, otherUserId, type)
       setCallId(newCallId)
 
-      const pc = setupPeerConnection(stream)
+      const pc = await setupPeerConnection(stream)
 
       for (const candidate of pendingCandidatesRef.current) {
         addIceCandidate(chatId, newCallId, candidate, true, currentUser.uid)
@@ -245,7 +259,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
       })
 
       timeoutRef.current = setTimeout(async () => {
-        if (callState === CALL_STATE.OUTGOING) {
+        if (callStateRef.current === CALL_STATE.OUTGOING) {
           await updateCallStatus(chatId, newCallId, CALL_STATUS.MISSED, currentUser.uid)
           cleanup()
           setCallState(CALL_STATE.ENDED)
@@ -258,7 +272,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
       cleanup()
       setCallState(CALL_STATE.IDLE)
     }
-  }, [chatId, currentUser?.uid, otherUserId, setupPeerConnection, cleanup, callState])
+  }, [chatId, currentUser?.uid, otherUserId, setupPeerConnection, cleanup])
 
   const acceptCall = useCallback(async () => {
     console.log('[Call] acceptCall called, callId:', callData?.id, 'hasAccepted:', hasAcceptedRef.current, 'pcRef:', !!pcRef.current)
@@ -301,7 +315,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
     setLocalStream(stream)
 
     try {
-      const pc = setupPeerConnection(stream)
+      const pc = await setupPeerConnection(stream)
       console.log('[Call] acceptCall - peer connection created')
 
       const answer = await createAnswer(pc, callData.offer)
@@ -363,11 +377,17 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
     }
   }, [localStream])
 
+  // Keep callStateRef in sync with callState
+  useEffect(() => {
+    callStateRef.current = callState
+  }, [callState])
+
   useEffect(() => {
     if (!chatId || !currentUser?.uid) return
 
     incomingUnsubRef.current = subscribeToIncomingCalls(chatId, currentUser.uid, (incomingCall) => {
-      if (incomingCall && callState === CALL_STATE.IDLE && incomingCall.offer && !isHandlingCallRef.current) {
+      // Use ref to check current state without causing effect to re-run
+      if (incomingCall && callStateRef.current === CALL_STATE.IDLE && incomingCall.offer && !isHandlingCallRef.current) {
         isHandlingCallRef.current = true
         console.log('[Call] Incoming call - callId:', incomingCall.id, 'type:', incomingCall.type, 'hasOffer:', !!incomingCall.offer)
         setCallId(incomingCall.id)
@@ -376,8 +396,10 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
         setCallState(CALL_STATE.INCOMING)
 
         callUnsubRef.current = subscribeToCall(chatId, incomingCall.id, (data) => {
+          console.log('[Call] Receiver got call update:', data?.status, 'callStateRef:', callStateRef.current)
           setCallData(data)
           if (data?.status === CALL_STATUS.ENDED || data?.status === CALL_STATUS.MISSED) {
+            console.log('[Call] Call ended/missed, cleaning up')
             cleanup()
             setCallState(CALL_STATE.IDLE)
           }
@@ -390,7 +412,7 @@ export function CallProvider({ children, chatId, currentUser, otherUserId }) {
         incomingUnsubRef.current()
       }
     }
-  }, [chatId, currentUser?.uid, callState, cleanup])
+  }, [chatId, currentUser?.uid, cleanup])
 
   useEffect(() => {
     const handleBeforeUnload = () => {

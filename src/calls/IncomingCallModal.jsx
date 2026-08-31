@@ -1,17 +1,25 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { useCall } from './CallProvider'
 
 function IncomingCallModal() {
   const { acceptCall, rejectCall, isVoiceCall } = useCall()
   const audioRef = useRef(null)
 
+  const stopRingtone = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+  }, [])
+
   useEffect(() => {
+    const audio = audioRef.current
     const playRingtone = async () => {
       try {
-        if (audioRef.current) {
-          audioRef.current.loop = true
-          audioRef.current.volume = 0.5
-          await audioRef.current.play()
+        if (audio) {
+          audio.loop = true
+          audio.volume = 0.5
+          await audio.play()
         }
       } catch (err) {
         // Browser blocked autoplay or file missing, visual alert only
@@ -20,12 +28,22 @@ function IncomingCallModal() {
     playRingtone()
 
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current.currentTime = 0
+      if (audio) {
+        audio.pause()
+        audio.currentTime = 0
       }
     }
   }, [])
+
+  const handleAccept = useCallback(() => {
+    stopRingtone()
+    acceptCall()
+  }, [stopRingtone, acceptCall])
+
+  const handleReject = useCallback(() => {
+    stopRingtone()
+    rejectCall()
+  }, [stopRingtone, rejectCall])
 
   const VideoIcon = () => (
     <svg
@@ -105,7 +123,7 @@ function IncomingCallModal() {
           <div className="call-actions">
             <button
               className="call-action-btn reject"
-              onClick={rejectCall}
+              onClick={handleReject}
               aria-label="Decline call"
             >
               <svg
@@ -126,7 +144,7 @@ function IncomingCallModal() {
 
             <button
               className="call-action-btn accept"
-              onClick={acceptCall}
+              onClick={handleAccept}
               aria-label="Accept call"
             >
               <AcceptIcon />

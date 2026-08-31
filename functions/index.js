@@ -4,6 +4,7 @@ const { getMessaging } = require('firebase-admin/messaging');
 const { getStorage } = require('firebase-admin/storage');
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { logger } = require('firebase-functions');
 
 initializeApp();
@@ -195,7 +196,6 @@ exports.cleanupOldMessages = onSchedule('every 6 hours', async () => {
 });
 */
 
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 
 const aiApiKey = defineSecret('AI_API_KEY');
@@ -2168,5 +2168,56 @@ exports.transcribeVoiceNote = onCall({ secrets: [openaiApiKey] }, async (request
     }
 
     throw new HttpsError('internal', 'Transcription failed: ' + err.message);
+  }
+});
+
+// Get TURN credentials from Twilio for WebRTC video calls
+exports.getTurnCredentials = onCall({ cors: true }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Must be authenticated');
+  }
+
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+  if (!accountSid || !authToken) {
+    logger.error('Twilio credentials not configured');
+    throw new HttpsError('failed-precondition', 'TURN service not configured');
+  }
+
+  try {
+    // Twilio Network Traversal Service API
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Tokens.json`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Twilio API error', { status: response.status, error: errorText });
+      throw new HttpsError('internal', 'Failed to get TURN credentials');
+    }
+
+    const data = await response.json();
+
+    // Return ICE servers array
+    return {
+      iceServers: data.ice_servers.map(server => ({
+        urls: server.urls || server.url,
+        username: server.username,
+        credential: server.credential,
+      })),
+      ttl: data.ttl,
+    };
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    logger.error('TURN credentials error', { error: err.message });
+    throw new HttpsError('internal', 'Failed to get TURN credentials');
   }
 });
